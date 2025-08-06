@@ -1,0 +1,38 @@
+---
+// Astro layout component for site structure
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title><slot name="title">MyFriendRoze</slot></title>
+    <meta name="description" content="<slot name='description' />" />
+    <link rel="stylesheet" href="../styles/global.css" />
+    <!-- Add favicon and other meta as needed -->
+    <!-- Add custom scripts/components here -->
+  </head>
+  <body class="gradient">
+    <a class="skip-to-content-link button visually-hidden" href="#MainContent">
+      Skip to content
+    </a>
+    <!-- Header Section -->
+    <header>
+      <slot name="header" />
+    </header>
+    <!-- Main Content -->
+    <main id="MainContent" class="content-for-layout focus-none" role="main" tabindex="-1">
+      <slot />
+    </main>
+    <!-- Footer Section -->
+    <footer>
+      <slot name="footer" />
+    </footer>
+    <!-- Accessibility messages -->
+    <ul hidden>
+      <li id="a11y-refresh-page-message">Refresh page</li>
+      <li id="a11y-new-window-message">Opens in new window</li>
+    </ul>
+    <!-- Add custom scripts/components here -->
+  </body>
+</html>

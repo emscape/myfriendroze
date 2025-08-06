@@ -1,0 +1,127 @@
+
+
+---
+import Layout from '../layouts/Layout.astro';
+// Page content for homepage
+---
+
+
+<Layout>
+  <slot name="header">
+	<div class="utility-bar color-accent-1 gradient utility-bar--bottom-border w-full">
+	  <div class="announcement-bar page-width flex items-center justify-center py-2">
+		<p class="announcement-bar__message h5 text-center text-base font-semibold">death's door store</p>
+	  </div>
+	</div>
+	<header class="header bg-white shadow flex items-center justify-between px-6 py-4">
+	  <div class="flex items-center gap-2">
+		<span class="font-bold text-xl tracking-wide">death's door store</span>
+	  </div>
+	  <div class="flex gap-4">
+		<a href="/login" class="text-gray-700 hover:text-black">Log in</a>
+		<a href="/cart" class="text-gray-700 hover:text-black">Cart</a>
+	  </div>
+	</header>
+  </slot>
+  <main class="flex flex-col items-center w-full">
+	<!-- 1. Banner / Hero -->
+	<section class="banner banner--medium grid grid--1-col w-full max-w-4xl mx-auto mb-8">
+	  <div class="banner__media media">
+		<img src="/banner1.png" alt="DD Succulents Banner" class="w-full h-auto object-cover rounded shadow-lg" />
+	  </div>
+	</section>
+	<!-- 2. Featured Products Grid -->
+	<section class="color-background-1 isolate gradient collection section-featured-products-padding w-full max-w-5xl mx-auto mb-8">
+	  <div class="collection__title title-wrapper page-width mb-4">
+		<h2 class="title h2 font-bold text-2xl mb-2">Featured products</h2>
+	  </div>
+	  <ul class="grid product-grid contains-card contains-card--product grid--4-col-desktop grid--2-col-tablet-down gap-6" role="list">
+		<li class="grid__item">
+		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
+			<img src="/logovector.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
+			<h3 class="font-bold">Sample Product</h3>
+			<p class="text-sm text-gray-600">Description of product.</p>
+		  </div>
+		</li>
+		<li class="grid__item">
+		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
+			<img src="/storybanner.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
+			<h3 class="font-bold">Sample Product</h3>
+			<p class="text-sm text-gray-600">Description of product.</p>
+		  </div>
+		</li>
+		<li class="grid__item">
+		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
+			<img src="/banner1.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
+			<h3 class="font-bold">Sample Product</h3>
+			<p class="text-sm text-gray-600">Description of product.</p>
+		  </div>
+		</li>
+		<li class="grid__item">
+		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
+			<img src="/logovector.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
+			<h3 class="font-bold">Sample Product</h3>
+			<p class="text-sm text-gray-600">Description of product.</p>
+		  </div>
+		</li>
+	  </ul>
+	</section>
+	<!-- 3. Headline + Story (Rich Text) -->
+	<section class="isolate page-width rich-text content-container color-accent-1 gradient section-story-padding mb-8">
+	  <div class="rich-text__wrapper rich-text__wrapper--center">
+		<div class="rich-text__blocks text-center">
+		  <h1 class="rich-text__heading rte inline-richtext text-4xl font-bold mb-2">myfriendroze ceramics & death's door succulents</h1>
+		  <div class="banner__text rte mb-4">
+			<p class="text-lg text-gray-700">Hello there, I'm Roze. I'm the owner and operator of DD Succulents, and myfriendroze. My name is not DD, but I answer to that now too. D.D stands for death's door- and as I like to say "buy them before I can kill them"! You see, I love succulents and cacti (to death sometimes). I started hoarding (buying) succulents eons ago, but when the pandemic hit- my addiction kicked into full gear. Rather than go to rehab, I decided, this was my calling. At the same time, I left my career in the music industry, and also decided to finally dust off my art degree and start making things that would go with the plants. So now if you buy a planter you can say myfriendroze made it!</p>
+		  </div>
+		</div>
+	  </div>
+	</section>
+	<!-- 4. Events Section (Rich Text) -->
+	<section class="isolate page-width rich-text content-container color-accent-1 gradient section-events-padding mb-8">
+	  <div class="rich-text__wrapper rich-text__wrapper--center">
+		<div class="rich-text__blocks text-center">
+		  <h2 class="rich-text__heading rte inline-richtext text-2xl font-semibold mb-4">myfriendroze & d.d. succulents in the wild</h2>
+		  <ul class="text-center text-gray-700 space-y-2">
+			<li><strong>Every Sunday 11am Sale in Plant Killers Purge on Facebook</strong> <a href="https://www.facebook.com/events/1074161793501349" class="text-blue-600 underline">Join us there to participate!</a></li>
+			<li><strong>Pasadena Artwalk / Jackalope</strong> 9/20-21/2025 11a - 6p Green St Pasadena CA</li>
+		  </ul>
+		</div>
+	  </div>
+	</section>
+	<!-- 5. Newsletter Signup -->
+	<section class="footer-block--newsletter w-full max-w-3xl px-4 py-8 text-center">
+	  <h2 class="footer-block__heading inline-richtext text-2xl font-semibold mb-4">sign up to be annoyed by us</h2>
+	  <form class="footer__newsletter newsletter-form flex flex-col items-center gap-2 max-w-sm mx-auto">
+		<input type="email" placeholder="Email" class="field__input border rounded px-4 py-2 w-full" />
+		<button type="submit" class="bg-black text-white px-6 py-2 rounded">Sign Up</button>
+		<span class="text-xs text-gray-500">we promise we’re too lazy for lots of emails</span>
+	  </form>
+	</section>
+	<!-- 6. Social Links / Footer Social Block -->
+	<section class="footer-block--social w-full max-w-3xl px-4 py-8 text-center">
+	  <div class="footer-block__details-content flex justify-center gap-6 mb-2">
+		<a href="https://www.facebook.com/ddssucculents/" target="_blank" rel="noopener" class="list-menu__item list-menu__item--link text-blue-600 hover:underline">Facebook</a>
+		<a href="https://www.instagram.com/ddssucculents/" target="_blank" rel="noopener" class="list-menu__item list-menu__item--link text-pink-600 hover:underline">Instagram</a>
+	  </div>
+	  <div class="footer-block__details-content flex justify-center gap-2 mt-2 text-gray-500 text-xs">
+		<span>Payment methods:</span>
+		<span>American Express</span>
+		<span>Apple Pay</span>
+		<span>Diners Club</span>
+		<span>Discover</span>
+		<span>Google Pay</span>
+		<span>Mastercard</span>
+		<span>PayPal</span>
+		<span>Shop Pay</span>
+		<span>Venmo</span>
+		<span>Visa</span>
+	  </div>
+	</section>
+  </main>
+  <slot name="footer">
+	<footer class="w-full py-6 text-center text-gray-500 text-sm border-t mt-8">
+	  &copy; {new Date().getFullYear()} death's door store. Powered by <a href="https://www.shopify.com/?utm_campaign=poweredby&utm_medium=shopify&utm_source=onlinestore" class="underline">Shopify</a>
+	</footer>
+  </slot>
+</Layout>
