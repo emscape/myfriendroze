@@ -1,0 +1,21 @@
+{
+  "name": "myfriendroze",
+  "short_name": "myfriendroze",
+  "description": "Handcrafted ceramic planters and carefully curated succulents",
+  "icons": [
+    {
+      "src": "/logovector.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logovector.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#f2efdd",
+  "background_color": "#f2efdd",
+  "display": "standalone",
+  "start_url": "/"
+}

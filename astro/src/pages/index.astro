@@ -1,127 +1,382 @@
 
-
 ---
 import Layout from '../layouts/Layout.astro';
-// Page content for homepage
+import Header from '../components/Header.astro';
 ---
 
+<Layout
+  title="myfriendroze | Handcrafted Ceramics & Succulents"
+  description="Handcrafted ceramic planters and carefully curated succulents from myfriendroze ceramics and death's door succulents."
+>
 
-<Layout>
-  <slot name="header">
-	<div class="utility-bar color-accent-1 gradient utility-bar--bottom-border w-full">
-	  <div class="announcement-bar page-width flex items-center justify-center py-2">
-		<p class="announcement-bar__message h5 text-center text-base font-semibold">death's door store</p>
-	  </div>
-	</div>
-	<header class="header bg-white shadow flex items-center justify-between px-6 py-4">
-	  <div class="flex items-center gap-2">
-		<span class="font-bold text-xl tracking-wide">death's door store</span>
-	  </div>
-	  <div class="flex gap-4">
-		<a href="/login" class="text-gray-700 hover:text-black">Log in</a>
-		<a href="/cart" class="text-gray-700 hover:text-black">Cart</a>
-	  </div>
-	</header>
-  </slot>
-  <main class="flex flex-col items-center w-full">
-	<!-- 1. Banner / Hero -->
-	<section class="banner banner--medium grid grid--1-col w-full max-w-4xl mx-auto mb-8">
-	  <div class="banner__media media">
-		<img src="/banner1.png" alt="DD Succulents Banner" class="w-full h-auto object-cover rounded shadow-lg" />
-	  </div>
-	</section>
-	<!-- 2. Featured Products Grid -->
-	<section class="color-background-1 isolate gradient collection section-featured-products-padding w-full max-w-5xl mx-auto mb-8">
-	  <div class="collection__title title-wrapper page-width mb-4">
-		<h2 class="title h2 font-bold text-2xl mb-2">Featured products</h2>
-	  </div>
-	  <ul class="grid product-grid contains-card contains-card--product grid--4-col-desktop grid--2-col-tablet-down gap-6" role="list">
-		<li class="grid__item">
-		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
-			<img src="/logovector.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
-			<h3 class="font-bold">Sample Product</h3>
-			<p class="text-sm text-gray-600">Description of product.</p>
-		  </div>
-		</li>
-		<li class="grid__item">
-		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
-			<img src="/storybanner.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
-			<h3 class="font-bold">Sample Product</h3>
-			<p class="text-sm text-gray-600">Description of product.</p>
-		  </div>
-		</li>
-		<li class="grid__item">
-		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
-			<img src="/banner1.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
-			<h3 class="font-bold">Sample Product</h3>
-			<p class="text-sm text-gray-600">Description of product.</p>
-		  </div>
-		</li>
-		<li class="grid__item">
-		  <div class="card-product bg-white rounded shadow p-4 flex flex-col items-center">
-			<img src="/logovector.png" alt="Product" class="w-32 h-32 object-contain mb-2" />
-			<h3 class="font-bold">Sample Product</h3>
-			<p class="text-sm text-gray-600">Description of product.</p>
-		  </div>
-		</li>
-	  </ul>
-	</section>
-	<!-- 3. Headline + Story (Rich Text) -->
-	<section class="isolate page-width rich-text content-container color-accent-1 gradient section-story-padding mb-8">
-	  <div class="rich-text__wrapper rich-text__wrapper--center">
-		<div class="rich-text__blocks text-center">
-		  <h1 class="rich-text__heading rte inline-richtext text-4xl font-bold mb-2">myfriendroze ceramics & death's door succulents</h1>
-		  <div class="banner__text rte mb-4">
-			<p class="text-lg text-gray-700">Hello there, I'm Roze. I'm the owner and operator of DD Succulents, and myfriendroze. My name is not DD, but I answer to that now too. D.D stands for death's door- and as I like to say "buy them before I can kill them"! You see, I love succulents and cacti (to death sometimes). I started hoarding (buying) succulents eons ago, but when the pandemic hit- my addiction kicked into full gear. Rather than go to rehab, I decided, this was my calling. At the same time, I left my career in the music industry, and also decided to finally dust off my art degree and start making things that would go with the plants. So now if you buy a planter you can say myfriendroze made it!</p>
-		  </div>
-		</div>
-	  </div>
-	</section>
-	<!-- 4. Events Section (Rich Text) -->
-	<section class="isolate page-width rich-text content-container color-accent-1 gradient section-events-padding mb-8">
-	  <div class="rich-text__wrapper rich-text__wrapper--center">
-		<div class="rich-text__blocks text-center">
-		  <h2 class="rich-text__heading rte inline-richtext text-2xl font-semibold mb-4">myfriendroze & d.d. succulents in the wild</h2>
-		  <ul class="text-center text-gray-700 space-y-2">
-			<li><strong>Every Sunday 11am Sale in Plant Killers Purge on Facebook</strong> <a href="https://www.facebook.com/events/1074161793501349" class="text-blue-600 underline">Join us there to participate!</a></li>
-			<li><strong>Pasadena Artwalk / Jackalope</strong> 9/20-21/2025 11a - 6p Green St Pasadena CA</li>
-		  </ul>
-		</div>
-	  </div>
-	</section>
-	<!-- 5. Newsletter Signup -->
-	<section class="footer-block--newsletter w-full max-w-3xl px-4 py-8 text-center">
-	  <h2 class="footer-block__heading inline-richtext text-2xl font-semibold mb-4">sign up to be annoyed by us</h2>
-	  <form class="footer__newsletter newsletter-form flex flex-col items-center gap-2 max-w-sm mx-auto">
-		<input type="email" placeholder="Email" class="field__input border rounded px-4 py-2 w-full" />
-		<button type="submit" class="bg-black text-white px-6 py-2 rounded">Sign Up</button>
-		<span class="text-xs text-gray-500">we promise we’re too lazy for lots of emails</span>
-	  </form>
-	</section>
-	<!-- 6. Social Links / Footer Social Block -->
-	<section class="footer-block--social w-full max-w-3xl px-4 py-8 text-center">
-	  <div class="footer-block__details-content flex justify-center gap-6 mb-2">
-		<a href="https://www.facebook.com/ddssucculents/" target="_blank" rel="noopener" class="list-menu__item list-menu__item--link text-blue-600 hover:underline">Facebook</a>
-		<a href="https://www.instagram.com/ddssucculents/" target="_blank" rel="noopener" class="list-menu__item list-menu__item--link text-pink-600 hover:underline">Instagram</a>
-	  </div>
-	  <div class="footer-block__details-content flex justify-center gap-2 mt-2 text-gray-500 text-xs">
-		<span>Payment methods:</span>
-		<span>American Express</span>
-		<span>Apple Pay</span>
-		<span>Diners Club</span>
-		<span>Discover</span>
-		<span>Google Pay</span>
-		<span>Mastercard</span>
-		<span>PayPal</span>
-		<span>Shop Pay</span>
-		<span>Venmo</span>
-		<span>Visa</span>
-	  </div>
-	</section>
-  </main>
-  <slot name="footer">
-	<footer class="w-full py-6 text-center text-gray-500 text-sm border-t mt-8">
-	  &copy; {new Date().getFullYear()} death's door store. Powered by <a href="https://www.shopify.com/?utm_campaign=poweredby&utm_medium=shopify&utm_source=onlinestore" class="underline">Shopify</a>
-	</footer>
-  </slot>
+  <!-- Custom header -->
+  <Header slot="header" currentPath="/" />
+
+  <!-- Hero Banner Section -->
+  <section class="banner banner--content-align-middle-center banner--medium">
+    <div class="banner__media media">
+      <img
+        src="/banner1.png"
+        alt="myfriendroze ceramics & death's door succulents"
+        width="3840"
+        height="auto"
+        loading="eager"
+        class="banner__image"
+      />
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="rich-text rich-text--full-width color-background-1 gradient section-padding">
+    <div class="rich-text__wrapper rich-text__wrapper--center page-width">
+      <div class="rich-text__blocks">
+        <h1 class="rich-text__heading rte inline-richtext h1">myfriendroze ceramics & death's door succulents</h1>
+        <div class="rich-text__text rte">
+          <p>Hello there, I'm Roze. I'm the owner and operator of DD Succulents, and myfriendroze. My name is not DD, but I answer to that now too. D.D stands for death's door- and as I like to say "buy them before I can kill them"!</p>
+          <p>You see, I love succulents and cacti (to death sometimes). I started hoarding (buying) succulents eons ago, but when the pandemic hit- my addiction kicked into full gear. Rather than go to rehab, I decided, this was my calling. At the same time, I "left" my career in the music industry, and also decided to finally dust off my art degree and start making things that would go with the plants. So now if you buy a planter you can say myfriendroze made it!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Events Section -->
+  <section class="rich-text rich-text--full-width color-background-1 gradient section-padding">
+    <div class="rich-text__wrapper rich-text__wrapper--center page-width">
+      <div class="rich-text__blocks">
+        <h2 class="rich-text__heading rte inline-richtext h1">myfriendroze & d.d. succulents in the wild</h2>
+        <div class="rich-text__text rte">
+          <ul>
+            <li><strong>Every Sunday 11am Sale in Plant Killers Purge on Facebook</strong><br>
+            <a href="https://www.facebook.com/events/1074161793501349" title="https://www.facebook.com/groups/plantkillers/">Join us there to participate!</a></li>
+            <li><strong>Pasadena Artwalk / Jackalope</strong><br>
+            9/20-21/2025 11a - 6p<br>
+            Green St<br>
+            Pasadena CA</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section class="newsletter newsletter--full-width color-background-1 gradient section-padding">
+    <div class="newsletter__wrapper page-width">
+      <div class="newsletter__content">
+        <h2 class="newsletter__heading rte inline-richtext h1">sign up to be annoyed by us</h2>
+        <p class="newsletter__subheading rte">we promise we're too lazy for lots of emails</p>
+        <form class="newsletter__form" id="newsletter-form">
+          <div class="newsletter__field-wrapper">
+            <input
+              type="email"
+              name="email"
+              id="newsletter-email"
+              class="field__input newsletter__input"
+              placeholder="Email"
+              required
+              aria-label="Email address"
+            >
+            <button type="submit" class="button newsletter__button">
+              Subscribe
+            </button>
+          </div>
+          <div class="newsletter__message" id="newsletter-message" hidden></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
 </Layout>
+
+<style>
+  /* Banner Section */
+  .banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .banner--medium {
+    min-height: 40rem;
+  }
+
+  .banner__media {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .banner__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  @media screen and (min-width: 750px) {
+    .banner--medium {
+      min-height: 50rem;
+    }
+  }
+
+  /* Rich Text Sections */
+  .rich-text {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .rich-text--full-width {
+    width: 100%;
+  }
+
+  .rich-text__wrapper--center {
+    display: flex;
+    justify-content: center;
+  }
+
+  .rich-text__blocks {
+    text-align: center;
+    max-width: 80rem;
+  }
+
+  .rich-text__heading {
+    margin: 0 0 2rem;
+    font-family: var(--font-heading-family);
+    font-size: clamp(1.8rem, 4vw, 3.2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  .rich-text__text {
+    font-size: calc(1.6rem * var(--font-body-scale));
+    line-height: calc(1 + 0.6 / var(--font-body-scale));
+  }
+
+  .rich-text__text p {
+    margin: 0 0 1.5rem;
+  }
+
+  .rich-text__text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .rich-text__text ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .rich-text__text li {
+    margin-bottom: 1.5rem;
+  }
+
+  .rich-text__text a {
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .rich-text__text a:hover {
+    opacity: 0.7;
+  }
+
+  @media screen and (min-width: 750px) {
+    .rich-text__text {
+      font-size: calc(1.8rem * var(--font-body-scale));
+    }
+  }
+
+  /* Newsletter Section */
+  .newsletter {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .newsletter__wrapper {
+    display: flex;
+    justify-content: center;
+  }
+
+  .newsletter__content {
+    text-align: center;
+    max-width: 50rem;
+  }
+
+  .newsletter__heading {
+    margin: 0 0 1rem;
+    font-family: var(--font-heading-family);
+    font-size: clamp(1.6rem, 3.5vw, 2.8rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  .newsletter__subheading {
+    margin: 0 0 2rem;
+    font-size: calc(1.4rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.8;
+  }
+
+  .newsletter__field-wrapper {
+    display: flex;
+    gap: 1rem;
+    max-width: 40rem;
+    margin: 0 auto;
+  }
+
+  .newsletter__input {
+    flex: 1;
+  }
+
+  .newsletter__button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  @media screen and (max-width: 749px) {
+    .newsletter__field-wrapper {
+      flex-direction: column;
+    }
+
+    .newsletter__button {
+      width: 100%;
+    }
+  }
+
+
+
+  /* Section spacing */
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  /* Color schemes */
+  .color-background-1 {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  .gradient {
+    /* Add gradient effects if needed */
+  }
+
+  /* Newsletter message */
+  .newsletter__message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--inputs-radius);
+    font-size: 1.4rem;
+    text-align: center;
+  }
+
+  .newsletter__message--success {
+    background-color: rgba(var(--color-button), 0.1);
+    color: var(--color-foreground);
+    border: 0.1rem solid var(--color-button);
+  }
+
+  .newsletter__message--error {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 0.1rem solid #dc3545;
+  }
+</style>
+
+<script>
+  // Newsletter form functionality
+  const newsletterForm = document.getElementById('newsletter-form');
+  const newsletterMessage = document.getElementById('newsletter-message');
+
+  if (newsletterForm && newsletterMessage) {
+    newsletterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(newsletterForm);
+      const email = formData.get('email');
+
+      // Show loading state
+      const submitButton = newsletterForm.querySelector('button[type="submit"]');
+      const originalText = submitButton.textContent;
+      submitButton.textContent = 'Subscribing...';
+      submitButton.disabled = true;
+
+      try {
+        // Simulate API call (replace with actual newsletter service)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Show success message
+        newsletterMessage.textContent = 'Thanks for subscribing! We promise we\'re too lazy for lots of emails.';
+        newsletterMessage.className = 'newsletter__message newsletter__message--success';
+        newsletterMessage.hidden = false;
+
+        // Reset form
+        newsletterForm.reset();
+
+      } catch (error) {
+        // Show error message
+        newsletterMessage.textContent = 'Oops! Something went wrong. Please try again.';
+        newsletterMessage.className = 'newsletter__message newsletter__message--error';
+        newsletterMessage.hidden = false;
+      } finally {
+        // Reset button
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
+      }
+    });
+  }
+
+  // Smooth scrolling for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    });
+  });
+
+  // Add loading states for external links
+  document.querySelectorAll('a[href^="http"]').forEach(link => {
+    link.addEventListener('click', function() {
+      // Add a small delay to show the link was clicked
+      this.style.opacity = '0.7';
+      setTimeout(() => {
+        this.style.opacity = '1';
+      }, 200);
+    });
+  });
+
+  // Simple fade-in animation for sections on scroll
+  const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+  };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+      }
+    });
+  }, observerOptions);
+
+  // Observe all sections for animation
+  document.querySelectorAll('section').forEach(section => {
+    section.style.opacity = '0';
+    section.style.transform = 'translateY(20px)';
+    section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    observer.observe(section);
+  });
+
+  // Make the first section (banner) immediately visible
+  const banner = document.querySelector('.banner');
+  if (banner) {
+    banner.style.opacity = '1';
+    banner.style.transform = 'translateY(0)';
+  }
+</script>

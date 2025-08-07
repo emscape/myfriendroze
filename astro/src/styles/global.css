@@ -1,1 +1,69 @@
 @import "tailwindcss";
+
+/* Base styles for Shopify theme compatibility */
+:root {
+  --color-accent-1: #f3f3f3;
+  --color-accent-2: #e8e8e8;
+  --gradient-base-background: linear-gradient(180deg, rgba(240, 240, 240, 1), rgba(255, 255, 255, 1) 100%);
+}
+
+/* Utility classes */
+.gradient {
+  background: var(--gradient-base-background);
+}
+
+.page-width {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+@media screen and (min-width: 750px) {
+  .page-width {
+    padding: 0 5rem;
+  }
+}
+
+/* Visually hidden but accessible to screen readers */
+.visually-hidden {
+  position: absolute !important;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  word-wrap: normal !important;
+}
+
+/* Skip to content link */
+.skip-to-content-link:focus {
+  z-index: 9999;
+  position: fixed;
+  top: 0;
+  left: 0;
+  padding: 1rem;
+  background-color: white;
+  color: black;
+  width: auto;
+  height: auto;
+  margin: 1rem;
+  clip: auto;
+}
+
+/* User is tabbing - show focus outlines */
+body.user-is-tabbing *:focus {
+  outline: 2px solid #4d90fe;
+  outline-offset: 2px;
+}
+
+/* Header styles */
+.header--hidden {
+  transform: translateY(-100%);
+}
+
+/* Announcement bar */
+.utility-bar {
+  border-bottom: 1px solid rgba(var(--color-foreground), 0.08);
+}

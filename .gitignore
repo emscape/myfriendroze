@@ -2,3 +2,10 @@ node_modules
 .firebase
 dist
 docs
+.env
+.env.local
+.env.production
+.memory-bank
+*.log
+.DS_Store
+Thumbs.db

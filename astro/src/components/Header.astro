@@ -1,0 +1,141 @@
+---
+// Header component for DD Succulents - Simple horizontal layout
+export interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = '/' } = Astro.props;
+
+const navigation = [
+  { href: '/', label: 'home' },
+  { href: '/shop', label: 'shop' },
+  { href: '/gallery', label: 'gallery' },
+  { href: '/story', label: 'd.d. story' },
+  { href: '/contact', label: 'contact us' },
+  { href: '/small-print', label: 'the small print' },
+];
+---
+
+<header class="header">
+  <div class="header__content page-width">
+    <!-- Logo -->
+    <a href="/" class="header__logo">
+      <img src="/logovector.png" alt="myfriendroze" loading="lazy">
+    </a>
+
+    <!-- Navigation -->
+    <nav class="header__nav">
+      <ul class="header__nav-list">
+        {navigation.map((item) => (
+          <li>
+            <a href={item.href} class={currentPath === item.href ? 'active' : ''}>
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <!-- Actions -->
+    <div class="header__actions">
+      <button class="header__search" type="button">Search</button>
+      <a href="/account" class="header__account">Log in</a>
+      <a href="/cart" class="header__cart">Cart</a>
+    </div>
+  </div>
+</header>
+
+<style>
+  .header {
+    background-color: var(--color-background);
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+    padding: 1rem 0;
+  }
+
+  .header__content {
+    display: flex;
+    align-items: center;
+    gap: 3rem;
+  }
+
+  .header__logo img {
+    height: 3.5rem;
+    width: auto;
+  }
+
+  .header__nav {
+    flex: 1;
+  }
+
+  .header__nav-list {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 2rem;
+  }
+
+  .header__nav-list a {
+    color: var(--color-foreground);
+    text-decoration: none;
+    font-size: 1.4rem;
+    padding: 0.5rem 0;
+  }
+
+  .header__nav-list a:hover,
+  .header__nav-list a.active {
+    text-decoration: underline;
+  }
+
+  .header__actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .header__search,
+  .header__account,
+  .header__cart {
+    background: none;
+    border: none;
+    color: var(--color-foreground);
+    text-decoration: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0.5rem;
+  }
+
+  .header__search:hover,
+  .header__account:hover,
+  .header__cart:hover {
+    opacity: 0.7;
+  }
+
+  @media screen and (max-width: 989px) {
+    .header__content {
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .header__nav-list {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem 2rem;
+    }
+
+    .header__logo img {
+      height: 3rem;
+    }
+  }
+</style>
+
+<script>
+  // Search functionality
+  const searchButton = document.querySelector('.header__search');
+  if (searchButton) {
+    searchButton.addEventListener('click', () => {
+      // Search functionality to be implemented
+      console.log('Search clicked');
+    });
+  }
+</script>
