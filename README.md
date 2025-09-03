@@ -79,6 +79,25 @@ node deploy.js
 
 For detailed deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
+## 📧 Newsletter Setup
+
+The newsletter signup uses ConvertKit for professional email management:
+
+1. **Create ConvertKit account** at [convertkit.com](https://convertkit.com)
+2. **Get your API key:**
+   - Go to Account Settings → API Keys
+   - Copy your API Key
+3. **Create a form:**
+   - Go to Grow → Landing Pages & Forms
+   - Create a new form and copy the Form ID
+4. **Set up environment variables:**
+   ```bash
+   cp astro/.env.example astro/.env
+   # Edit astro/.env with your ConvertKit credentials:
+   CONVERTKIT_API_KEY=your_api_key_here
+   CONVERTKIT_FORM_ID=your_form_id_here
+   ```
+
 ## 🎨 Design Features
 
 - **Responsive Design:** Mobile-first approach with breakpoints for tablet and desktop

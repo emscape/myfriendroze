@@ -41,25 +41,39 @@ try {
 
   // Step 3: Deploy to Firebase
   console.log('🔥 Deploying to Firebase...');
-  
-  // Check if FIREBASE_TOKEN environment variable exists
-  const firebaseToken = process.env.FIREBASE_TOKEN;
-  
-  if (firebaseToken) {
-    console.log('Using CI token for deployment...');
-    execSync(`firebase deploy --only hosting --token "${firebaseToken}"`, { stdio: 'inherit' });
+
+  // Clear any existing Firebase token to avoid conflicts
+  delete process.env.FIREBASE_TOKEN;
+
+  // Ensure we're logged out to avoid cached credential conflicts
+  try {
+    execSync('firebase logout', { stdio: 'pipe' });
+  } catch (error) {
+    // Ignore logout errors (user might already be logged out)
+  }
+
+  // Check for service account key file
+  const serviceAccountPath = 'firebase-service-account.json';
+
+  if (fs.existsSync(serviceAccountPath)) {
+    console.log('Using service account for deployment...');
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = path.resolve(serviceAccountPath);
+    execSync('firebase deploy --only hosting', { stdio: 'inherit' });
   } else {
-    console.log('No CI token found. Attempting regular deployment...');
-    console.log('If authentication fails, run: firebase login:ci');
-    console.log('Then set FIREBASE_TOKEN environment variable\n');
-    
+    console.log('No service account found. Attempting regular deployment...');
+    console.log('If authentication fails, please:');
+    console.log('1. Download service account key from Firebase Console');
+    console.log('2. Save as firebase-service-account.json in project root');
+    console.log('3. Run this script again\n');
+
     try {
       execSync('firebase deploy --only hosting', { stdio: 'inherit' });
     } catch (error) {
-      console.log('\n❌ Authentication failed. Please run:');
-      console.log('1. firebase login:ci');
-      console.log('2. Set FIREBASE_TOKEN environment variable');
-      console.log('3. Run this script again');
+      console.log('\n❌ Authentication failed. Please set up service account:');
+      console.log('1. Go to Firebase Console > Project Settings > Service Accounts');
+      console.log('2. Click "Generate new private key"');
+      console.log('3. Save as firebase-service-account.json');
+      console.log('4. Run this script again');
       process.exit(1);
     }
   }

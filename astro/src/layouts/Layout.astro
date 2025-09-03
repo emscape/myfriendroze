@@ -25,14 +25,17 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/logovector.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/logovector.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
     <link rel="manifest" href="/site.webmanifest">
 
     <!-- Preconnect to fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font preload for better performance -->
+    <link rel="preload" href="https://fonts.gstatic.com/s/notosansdisplay/v26/RLpbK4fMKhaknNNJp0WCHxWB_JOB8VeV-HtjGbQhbw.woff2" as="font" type="font/woff2" crossorigin>
 
     <!-- Base CSS -->
     <link rel="stylesheet" href="/styles/global.css" />
@@ -86,7 +89,14 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
       *::before,
       *::after {
         box-sizing: inherit;
+      }
+
+      /* Ensure Noto Sans Display loads properly on all devices */
+      body,
+      html {
         font-family: var(--font-body-family);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
 
       html {
@@ -340,6 +350,20 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
         border-color: var(--color-button);
         outline: none;
       }
+
+      /* Font loading states and iOS-specific fixes */
+      .fonts-loaded body,
+      .fonts-loaded * {
+        font-family: var(--font-body-family) !important;
+      }
+
+      /* Force Noto Sans Display on iOS Safari */
+      @supports (-webkit-touch-callout: none) {
+        body,
+        * {
+          font-family: 'Noto Sans Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
+      }
     </style>
   </head>
   <body class="gradient">
@@ -431,6 +455,16 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
       <li id="a11y-new-window-message">Opens in new window</li>
     </ul>
     
+    <!-- Font loading optimization -->
+    <script>
+      // Ensure font loads properly on iOS and other devices
+      if ('fonts' in document) {
+        document.fonts.load('400 16px "Noto Sans Display"').then(() => {
+          document.documentElement.classList.add('fonts-loaded');
+        });
+      }
+    </script>
+
     <!-- Site configuration -->
     <script>
       // Remove no-js class when JavaScript is available

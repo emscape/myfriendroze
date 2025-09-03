@@ -301,20 +301,32 @@ import Header from '../components/Header.astro';
       submitButton.disabled = true;
 
       try {
-        // Simulate API call (replace with actual newsletter service)
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Call our newsletter API
+        const response = await fetch('/api/newsletter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email })
+        });
 
-        // Show success message
-        newsletterMessage.textContent = 'Thanks for subscribing! We promise we\'re too lazy for lots of emails.';
-        newsletterMessage.className = 'newsletter__message newsletter__message--success';
-        newsletterMessage.hidden = false;
+        const result = await response.json();
 
-        // Reset form
-        newsletterForm.reset();
+        if (response.ok) {
+          // Show success message
+          newsletterMessage.textContent = 'Thanks for subscribing! We promise we\'re too lazy for lots of emails.';
+          newsletterMessage.className = 'newsletter__message newsletter__message--success';
+          newsletterMessage.hidden = false;
+
+          // Reset form
+          newsletterForm.reset();
+        } else {
+          throw new Error(result.error || 'Subscription failed');
+        }
 
       } catch (error) {
         // Show error message
-        newsletterMessage.textContent = 'Oops! Something went wrong. Please try again.';
+        newsletterMessage.textContent = error.message || 'Oops! Something went wrong. Please try again.';
         newsletterMessage.className = 'newsletter__message newsletter__message--error';
         newsletterMessage.hidden = false;
       } finally {

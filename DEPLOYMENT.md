@@ -2,32 +2,18 @@
 
 ## Quick Setup (One-time only)
 
-1. **Generate Firebase CI Token:**
-   ```bash
-   firebase login:ci
-   ```
-   This will output a token like: `1//0GWIOIkjhsdf...`
+1. **Create Firebase Service Account:**
+   - Go to [Firebase Console](https://console.firebase.google.com/project/myfriendroze-platform/settings/serviceaccounts/adminsdk)
+   - Click "Generate new private key"
+   - Download the JSON file
 
-2. **Set Environment Variable:**
-   
-   **Windows (Command Prompt):**
-   ```cmd
-   set FIREBASE_TOKEN=your_token_here
-   ```
-   
-   **Windows (PowerShell):**
-   ```powershell
-   $env:FIREBASE_TOKEN="your_token_here"
-   ```
-   
-   **Mac/Linux:**
-   ```bash
-   export FIREBASE_TOKEN=your_token_here
-   ```
+2. **Save Service Account Key:**
+   - Save the downloaded JSON file as `firebase-service-account.json` in your project root
+   - **Important:** This file is automatically excluded from git commits
 
-3. **Make it Permanent (Optional):**
-   - **Windows:** Add to System Environment Variables
-   - **Mac/Linux:** Add to `~/.bashrc` or `~/.zshrc`
+3. **Verify Setup:**
+   - The file should be in the same directory as `deploy.js`
+   - Never commit this file to version control (it's in .gitignore)
 
 ## Deployment Options
 
@@ -57,8 +43,11 @@ cd astro && npm run build && cd ..
 # Copy files
 cp -r astro/dist/* dist/
 
+# Set service account (if not using deploy script)
+export GOOGLE_APPLICATION_CREDENTIALS=firebase-service-account.json
+
 # Deploy
-firebase deploy --only hosting --token "$FIREBASE_TOKEN"
+firebase deploy --only hosting
 ```
 
 ## What the Automated Deployment Does
