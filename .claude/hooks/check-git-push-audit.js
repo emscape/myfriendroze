@@ -65,6 +65,19 @@ function run(cmd) {
   }
 }
 
+// Existence check by exit code only — git's "ambiguous argument" error for a
+// missing ref (e.g. HEAD~1 on a root commit) writes the ref name itself to
+// stdout as part of its usage hint, which made a truthy-stdout check above
+// misread failure as success. Exit code is the only reliable signal.
+function refExists(ref) {
+  try {
+    execSync(`git rev-parse --verify ${ref}`, { stdio: ['pipe', 'ignore', 'ignore'] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Parse unified diff into added lines ───────────────────────────────────────
 function parseAddedLines(diffText) {
   const lines = diffText.split('\n');
@@ -121,9 +134,17 @@ process.stdin.on('end', () => {
   let changedFiles = run('git diff --staged --name-only').trim();
 
   if (!changedFiles) {
-    diffText = run('git diff HEAD~1');
-    diffSource = 'HEAD~1';
-    changedFiles = run('git diff HEAD~1 --name-only').trim();
+    // HEAD~1 doesn't exist for a repo's root commit (first-ever push, or a
+    // force-push establishing new history) — diffing against it errors out
+    // and used to be misread as "nothing changed". Fall back to git's
+    // empty-tree object so root commits get audited for real instead of
+    // being waved through as an empty changeset.
+    const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+    const hasParent = refExists('HEAD~1');
+    const baseRef = hasParent ? 'HEAD~1' : EMPTY_TREE;
+    diffText = run(`git diff ${baseRef}`);
+    diffSource = hasParent ? 'HEAD~1' : 'root commit (vs. empty tree)';
+    changedFiles = run(`git diff ${baseRef} --name-only`).trim();
   }
 
   if (!changedFiles) {
