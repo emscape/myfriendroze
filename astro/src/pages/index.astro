@@ -1,0 +1,475 @@
+
+---
+export const prerender = true;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { getUpcomingEvents } from '../data/events.js';
+
+const upcomingEvents = getUpcomingEvents();
+---
+
+<Layout
+  title="myfriendroze | Handcrafted Ceramics & Succulents"
+  description="Handcrafted ceramic planters and carefully curated succulents from myfriendroze ceramics and death's door succulents."
+>
+
+  <!-- Custom header -->
+  <Header slot="header" currentPath="/" />
+
+  <!-- Hero Banner Section -->
+  <section class="banner banner--content-align-middle-center banner--medium">
+    <div class="banner__media media">
+      <img
+        src="/banner1.png"
+        alt="myfriendroze ceramics & death's door succulents"
+        width="3840"
+        height="auto"
+        loading="eager"
+        class="banner__image"
+      />
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section id="about" class="rich-text rich-text--full-width color-background-1 gradient section-padding">
+    <div class="rich-text__wrapper rich-text__wrapper--center page-width">
+      <div class="rich-text__blocks">
+        <h1 class="rich-text__heading rte inline-richtext h1">myfriendroze ceramics & death's door succulents</h1>
+        <div class="rich-text__text rte">
+          <p>Hello there, I'm Roze. I'm the owner and operator of DD Succulents, and myfriendroze. My name is not DD, but I answer to that now too. D.D stands for death's door- and as I like to say "buy them before I can kill them"!</p>
+          <p>You see, I love succulents and cacti (to death sometimes). I started hoarding (buying) succulents eons ago, but when the pandemic hit- my addiction kicked into full gear. Rather than go to rehab, I decided, this was my calling. At the same time, I "left" my career in the music industry, and also decided to finally dust off my art degree and start making things that would go with the plants. So now if you buy a planter you can say myfriendroze made it!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Events Section -->
+  {upcomingEvents.length > 0 && (
+    <section class="rich-text rich-text--full-width color-background-1 gradient section-padding">
+      <div class="rich-text__wrapper rich-text__wrapper--center page-width">
+        <div class="rich-text__blocks">
+          <h2 class="rich-text__heading rte inline-richtext h1">myfriendroze & d.d. succulents in the wild</h2>
+          <div class="rich-text__text rte">
+            <ul>
+              {upcomingEvents.map((event) => (
+                <li>
+                  <strong>{event.title}</strong>
+                  {event.startDate && (
+                    <><br />
+                    {event.startDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
+                    {event.endDate && event.endDate.getTime() !== event.startDate.getTime() && (
+                      <> – {event.endDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</>
+                    )}
+                    {event.description && <> {event.description}</>}
+                    </>
+                  )}
+                  {event.location && <><br />{event.location}</>}
+                  {event.link && (
+                    <><br /><a href={event.link}>{event.linkLabel ?? event.link}</a></>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <a href="/events" class="events-link">see all events →</a>
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- Newsletter Section -->
+  <section class="newsletter newsletter--full-width color-background-1 gradient section-padding">
+    <div class="newsletter__wrapper page-width">
+      <div class="newsletter__content">
+        <h2 class="newsletter__heading rte inline-richtext h1">sign up to be annoyed by us</h2>
+        <p class="newsletter__subheading rte">we promise we're too lazy for lots of emails</p>
+        <form class="newsletter__form" id="newsletter-form">
+          <div class="newsletter__fields">
+            <div class="newsletter__name-fields">
+              <input
+                type="text"
+                name="firstName"
+                id="newsletter-firstName"
+                class="field__input newsletter__input newsletter__input--name"
+                placeholder="First name (optional)"
+                aria-label="First name"
+              >
+              <input
+                type="text"
+                name="lastName"
+                id="newsletter-lastName"
+                class="field__input newsletter__input newsletter__input--name"
+                placeholder="Last name (optional)"
+                aria-label="Last name"
+              >
+            </div>
+            <div class="newsletter__email-field">
+              <input
+                type="email"
+                name="email"
+                id="newsletter-email"
+                class="field__input newsletter__input"
+                placeholder="Email address"
+                required
+                aria-label="Email address"
+              >
+              <button type="submit" class="button newsletter__button">
+                Subscribe
+              </button>
+            </div>
+          </div>
+          <div class="newsletter__message" id="newsletter-message" hidden></div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+</Layout>
+
+<style>
+  /* Banner Section */
+  .banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .banner--medium {
+    min-height: 40rem;
+  }
+
+  .banner__media {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .banner__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  @media screen and (min-width: 750px) {
+    .banner--medium {
+      min-height: 50rem;
+    }
+  }
+
+  /* Rich Text Sections */
+  .rich-text {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .rich-text--full-width {
+    width: 100%;
+  }
+
+  .rich-text__wrapper--center {
+    display: flex;
+    justify-content: center;
+  }
+
+  .rich-text__blocks {
+    text-align: center;
+    max-width: 80rem;
+  }
+
+  .rich-text__heading {
+    margin: 0 0 2rem;
+    font-family: var(--font-heading-family);
+    font-size: clamp(1.8rem, 4vw, 3.2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  .rich-text__text {
+    font-size: calc(1.6rem * var(--font-body-scale));
+    line-height: calc(1 + 0.6 / var(--font-body-scale));
+  }
+
+  .rich-text__text p {
+    margin: 0 0 1.5rem;
+  }
+
+  .rich-text__text p:last-child {
+    margin-bottom: 0;
+  }
+
+  .rich-text__text ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .rich-text__text li {
+    margin-bottom: 1.5rem;
+  }
+
+  .rich-text__text a {
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .rich-text__text a:hover {
+    opacity: 0.7;
+  }
+
+  .events-link {
+    display: inline-block;
+    margin-top: 1.5rem;
+    font-size: calc(1.4rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .events-link:hover {
+    opacity: 0.7;
+  }
+
+  @media screen and (min-width: 750px) {
+    .rich-text__text {
+      font-size: calc(1.8rem * var(--font-body-scale));
+    }
+  }
+
+  /* Newsletter Section */
+  .newsletter {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .newsletter__wrapper {
+    display: flex;
+    justify-content: center;
+  }
+
+  .newsletter__content {
+    text-align: center;
+    max-width: 50rem;
+  }
+
+  .newsletter__heading {
+    margin: 0 0 1rem;
+    font-family: var(--font-heading-family);
+    font-size: clamp(1.6rem, 3.5vw, 2.8rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  .newsletter__subheading {
+    margin: 0 0 2rem;
+    font-size: calc(1.4rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.8;
+  }
+
+  .newsletter__fields {
+    max-width: 50rem;
+    margin: 0 auto;
+  }
+
+  .newsletter__name-fields {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .newsletter__input--name {
+    flex: 1;
+  }
+
+  .newsletter__email-field {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .newsletter__input {
+    flex: 1;
+  }
+
+  .newsletter__button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  @media screen and (max-width: 749px) {
+    .newsletter__name-fields {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .newsletter__email-field {
+      flex-direction: column;
+    }
+
+    .newsletter__button {
+      width: 100%;
+    }
+  }
+
+
+
+  /* Section spacing */
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  /* Color schemes */
+  .color-background-1 {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  .gradient {
+    /* Add gradient effects if needed */
+  }
+
+  /* Newsletter message */
+  .newsletter__message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--inputs-radius);
+    font-size: 1.4rem;
+    text-align: center;
+  }
+
+  .newsletter__message--success {
+    background-color: rgba(var(--color-button), 0.1);
+    color: var(--color-foreground);
+    border: 0.1rem solid var(--color-button);
+  }
+
+  .newsletter__message--error {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 0.1rem solid #dc3545;
+  }
+</style>
+
+<script>
+  // Newsletter form functionality
+  const newsletterForm = document.getElementById('newsletter-form');
+  const newsletterMessage = document.getElementById('newsletter-message');
+
+  if (newsletterForm && newsletterMessage) {
+    newsletterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(newsletterForm);
+      const email = formData.get('email');
+      const firstName = formData.get('firstName');
+      const lastName = formData.get('lastName');
+
+      // Show loading state
+      const submitButton = newsletterForm.querySelector('button[type="submit"]');
+      const originalText = submitButton.textContent;
+      submitButton.textContent = 'Subscribing...';
+      submitButton.disabled = true;
+
+      try {
+        // Prepare subscription data
+        const subscriptionData = { email };
+        if (firstName && firstName.trim()) {
+          subscriptionData.firstName = firstName.trim();
+        }
+        if (lastName && lastName.trim()) {
+          subscriptionData.lastName = lastName.trim();
+        }
+
+        // Call our newsletter API
+        const response = await fetch('/api/newsletter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(subscriptionData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          // Show success message
+          newsletterMessage.textContent = 'Thanks for subscribing! We promise we\'re too lazy for lots of emails.';
+          newsletterMessage.className = 'newsletter__message newsletter__message--success';
+          newsletterMessage.hidden = false;
+
+          // Reset form
+          newsletterForm.reset();
+        } else {
+          throw new Error(result.error || 'Subscription failed');
+        }
+
+      } catch (error) {
+        // Show error message
+        newsletterMessage.textContent = error.message || 'Oops! Something went wrong. Please try again.';
+        newsletterMessage.className = 'newsletter__message newsletter__message--error';
+        newsletterMessage.hidden = false;
+      } finally {
+        // Reset button
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
+      }
+    });
+  }
+
+  // Smooth scrolling for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        target.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    });
+  });
+
+  // Add loading states for external links
+  document.querySelectorAll('a[href^="http"]').forEach(link => {
+    link.addEventListener('click', function() {
+      // Add a small delay to show the link was clicked
+      this.style.opacity = '0.7';
+      setTimeout(() => {
+        this.style.opacity = '1';
+      }, 200);
+    });
+  });
+
+  // Simple fade-in animation for sections on scroll
+  const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+  };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+      }
+    });
+  }, observerOptions);
+
+  // Observe all sections for animation
+  document.querySelectorAll('section').forEach(section => {
+    section.style.opacity = '0';
+    section.style.transform = 'translateY(20px)';
+    section.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    observer.observe(section);
+  });
+
+  // Make the first section (banner) immediately visible
+  const banner = document.querySelector('.banner');
+  if (banner) {
+    banner.style.opacity = '1';
+    banner.style.transform = 'translateY(0)';
+  }
+</script>

@@ -1,0 +1,164 @@
+---
+export const prerender = true;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+
+const CLAIMS_EMAIL = 'myfriendroze@gmail.com';
+---
+
+<Layout
+  title="The Small Print | myfriendroze"
+  description="Shipping, returns, and damage-claim policy for myfriendroze ceramics."
+>
+  <Header slot="header" currentPath="/small-print" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">the small print</h1>
+    </div>
+  </section>
+
+  <section class="small-print section-padding">
+    <div class="page-width small-print__wrapper">
+      <p>
+        Providing you with beautiful, handmade ceramics is the ultimate goal, and I want you to be
+        absolutely ecstatic when you open your package. I actually enjoy talking to humans as much
+        as clay—even if there's a problem with your order, so please reach out. I will do my
+        absolute best to help you, within the bounds of human capability and the laws of physics
+        (though I went to art school, so my grasp on physics is highly debatable).
+      </p>
+
+      <h2>Shipping</h2>
+      <p>I pack and ship your ceramics as fast as humanly possible.</p>
+      <ul>
+        <li>
+          <strong>Processing Time:</strong> 2–7 business days (it rarely takes the full 7, unless
+          the universe throws a tantrum).
+        </li>
+        <li>
+          <strong>Shipping Days:</strong> I aim to ship orders out on Mondays and Tuesdays. However,
+          package drops can and probably will bleed into any other day of the week if my schedule
+          spirals out of control.
+        </li>
+      </ul>
+
+      <h2>Returns &amp; Refunds</h2>
+      <p>
+        Because these are, fragile, handmade ceramics, I am unable to accept returns. Sending a
+        ceramic piece on a two-way round trip with the postal service is just asking for a box of
+        powder.
+      </p>
+
+      <h3>Damages &amp; Transit Issues</h3>
+      <p>
+        I pack every order as I'd like something I've ordered to be packed - with an almost absurd
+        amount of care. Unfortunately, I cannot control USPS (no matter how hard I manifest it). If
+        the postal workers decided to play an aggressive game of basketball with your box and your
+        piece arrives broken, here is the game plan:
+      </p>
+      <ol>
+        <li>Take a picture of the broken piece inside its original packaging.</li>
+        <li>Email me the horror photos immediately at <a href={`mailto:${CLAIMS_EMAIL}`}>{CLAIMS_EMAIL}</a>.</li>
+        <li>
+          <strong>The Reality Check:</strong> Everything at myfriendroze is one-of-a-kind. If we
+          file a claim and I replace your broken item instead of refunding it, the replacement will
+          be similar, but not an exact clone. Think of it as a sibling, but not a twin.
+        </li>
+      </ol>
+      <p>
+        Once the shipping claim is officially filed, we will jump right into the next steps to get
+        your refund issued or your unique replacement piece started.
+      </p>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-hero {
+    background-color: var(--color-background);
+    text-align: center;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+  }
+
+  .page-hero__title {
+    font-family: var(--font-heading-family);
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+    color: var(--color-foreground);
+  }
+
+  .small-print {
+    background-color: var(--color-background);
+  }
+
+  .small-print__wrapper {
+    max-width: 72rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.6rem;
+    color: var(--color-foreground);
+    line-height: 1.6;
+  }
+
+  .small-print__wrapper h2 {
+    font-family: var(--font-heading-family);
+    font-size: calc(2.2rem * var(--font-body-scale));
+    font-weight: 600;
+    margin: 1.6rem 0 0;
+  }
+
+  .small-print__wrapper h3 {
+    font-family: var(--font-heading-family);
+    font-size: calc(1.8rem * var(--font-body-scale));
+    font-weight: 600;
+    margin: 1.2rem 0 0;
+  }
+
+  .small-print__wrapper p,
+  .small-print__wrapper li {
+    font-size: calc(1.5rem * var(--font-body-scale));
+  }
+
+  .small-print__wrapper ul,
+  .small-print__wrapper ol {
+    padding-left: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .small-print__wrapper a {
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .small-print__wrapper a:hover {
+    opacity: 0.7;
+  }
+
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .page-width {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .page-width {
+      padding: 0 5rem;
+    }
+  }
+</style>

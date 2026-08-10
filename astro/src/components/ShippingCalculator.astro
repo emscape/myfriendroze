@@ -1,0 +1,455 @@
+---
+// Shipping Calculator Component
+// Calculates and displays shipping costs based on zip code and weight
+
+interface Props {
+  weight?: number; // Product weight in grams
+}
+
+const { weight = 0 } = Astro.props;
+
+// Convert grams to pounds and add 15% packaging margin
+const productWeightLbs = weight > 0 ? weight / 453.592 : 0;
+const weightWithPackaging = productWeightLbs > 0 ? (productWeightLbs * 1.15).toFixed(2) : '';
+---
+
+<div class="shipping-calculator">
+  <div class="shipping-calculator__header">
+    <h3 class="shipping-calculator__title">calculate shipping</h3>
+    <p class="shipping-calculator__subtitle">enter your zip code to see shipping costs</p>
+  </div>
+
+  <form class="shipping-calculator__form" id="shipping-form">
+    <div class="shipping-calculator__form-group">
+      <label for="shipping-zip" class="shipping-calculator__label">zip code</label>
+      <input
+        type="text"
+        id="shipping-zip"
+        name="zipCode"
+        class="shipping-calculator__input"
+        placeholder="e.g., 90210"
+        maxlength="5"
+        inputmode="numeric"
+        required
+      />
+      <span class="shipping-calculator__error" id="zip-error"></span>
+    </div>
+
+    <div class="shipping-calculator__form-group">
+      <label for="shipping-weight" class="shipping-calculator__label">weight (lbs)</label>
+      <input
+        type="number"
+        id="shipping-weight"
+        name="weight"
+        class="shipping-calculator__input"
+        placeholder="e.g., 2.5"
+        step="0.1"
+        min="0.1"
+        value={weightWithPackaging}
+        readonly
+        required
+      />
+      <span class="shipping-calculator__error" id="weight-error"></span>
+    </div>
+
+    <button type="submit" class="shipping-calculator__button">calculate</button>
+  </form>
+
+  <div class="shipping-calculator__result" id="shipping-result" hidden>
+    <div class="shipping-calculator__result-header">
+      <h4 class="shipping-calculator__result-title">shipping estimate</h4>
+      <button type="button" class="shipping-calculator__close" id="close-result">×</button>
+    </div>
+
+    <div class="shipping-calculator__result-content">
+      <div class="shipping-calculator__result-row">
+        <span class="shipping-calculator__result-label">carrier:</span>
+        <span class="shipping-calculator__result-value" id="result-carrier">—</span>
+      </div>
+
+      <div class="shipping-calculator__result-row">
+        <span class="shipping-calculator__result-label">estimated delivery:</span>
+        <span class="shipping-calculator__result-value" id="result-delivery">—</span>
+      </div>
+
+      <div class="shipping-calculator__result-row">
+        <span class="shipping-calculator__result-label">base rate:</span>
+        <span class="shipping-calculator__result-value" id="result-base">—</span>
+      </div>
+
+      <div class="shipping-calculator__result-row">
+        <span class="shipping-calculator__result-label">weight charge:</span>
+        <span class="shipping-calculator__result-value" id="result-weight">—</span>
+      </div>
+
+      <div class="shipping-calculator__result-row shipping-calculator__result-row--total">
+        <span class="shipping-calculator__result-label">total cost:</span>
+        <span class="shipping-calculator__result-value shipping-calculator__result-value--total" id="result-total">—</span>
+      </div>
+    </div>
+
+    <div class="shipping-calculator__result-message" id="result-message"></div>
+  </div>
+
+  <div class="shipping-calculator__loading" id="shipping-loading" hidden>
+    <div class="shipping-calculator__spinner"></div>
+    <p>calculating shipping...</p>
+  </div>
+</div>
+
+<style>
+  .shipping-calculator {
+    background: var(--color-background);
+    border: 1px solid rgba(var(--color-foreground), 0.1);
+    border-radius: var(--border-radius);
+    padding: 2rem;
+    margin: 2rem 0;
+  }
+
+  .shipping-calculator__header {
+    margin-bottom: 2rem;
+  }
+
+  .shipping-calculator__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    text-transform: lowercase;
+  }
+
+  .shipping-calculator__subtitle {
+    margin: 0;
+    font-size: 1.4rem;
+    color: rgba(var(--color-foreground), 0.7);
+  }
+
+  .shipping-calculator__form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    align-items: flex-end;
+    margin-bottom: 2rem;
+    justify-content: center;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .shipping-calculator__form-group {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    width: 15rem;
+  }
+
+  .shipping-calculator__label {
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--color-foreground);
+    text-transform: lowercase;
+  }
+
+  .shipping-calculator__input {
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--inputs-radius);
+    font-size: 1.4rem;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    transition: border-color 0.2s ease;
+  }
+
+  .shipping-calculator__input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .shipping-calculator__input:readonly {
+    background-color: rgba(var(--color-foreground), 0.08);
+    cursor: not-allowed;
+    color: rgba(var(--color-foreground), 0.6);
+    border-color: rgba(var(--color-foreground), 0.15);
+    border-style: dashed;
+  }
+
+  .shipping-calculator__input:invalid {
+    border-color: #dc3545;
+  }
+
+  .shipping-calculator__error {
+    font-size: 1.2rem;
+    color: #dc3545;
+    margin-top: 0.3rem;
+    display: none;
+  }
+
+  .shipping-calculator__error.show {
+    display: block;
+  }
+
+  .shipping-calculator__button {
+    padding: 0.8rem 2rem;
+    background: #7cb342;
+    color: white;
+    border: none;
+    border-radius: var(--inputs-radius);
+    font-size: 1.4rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+
+  .shipping-calculator__button:hover {
+    background: #558b2f;
+  }
+
+  .shipping-calculator__button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .shipping-calculator__loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  .shipping-calculator__loading[hidden] {
+    display: none;
+  }
+
+  .shipping-calculator__spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 2px solid rgba(var(--color-foreground), 0.1);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .shipping-calculator__result {
+    background: rgba(var(--color-accent), 0.05);
+    border: 1px solid rgba(var(--color-accent), 0.2);
+    border-radius: var(--border-radius);
+    padding: 1.5rem 1.5rem 35rem 1.5rem;
+    margin-top: 1.5rem;
+    margin-bottom: 10rem;
+  }
+
+  .shipping-calculator__result[hidden] {
+    display: none;
+  }
+
+  .shipping-calculator__result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(var(--color-accent), 0.2);
+  }
+
+  .shipping-calculator__result-title {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    text-transform: lowercase;
+  }
+
+  .shipping-calculator__close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: rgba(var(--color-foreground), 0.5);
+    cursor: pointer;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+  }
+
+  .shipping-calculator__close:hover {
+    color: var(--color-foreground);
+  }
+
+  .shipping-calculator__result-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .shipping-calculator__result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.4rem;
+  }
+
+  .shipping-calculator__result-row--total {
+    padding-top: 1rem;
+    border-top: 1px solid rgba(var(--color-accent), 0.2);
+    font-weight: 600;
+    font-size: 1.6rem;
+  }
+
+  .shipping-calculator__result-label {
+    color: rgba(var(--color-foreground), 0.7);
+    text-transform: lowercase;
+  }
+
+  .shipping-calculator__result-value {
+    color: var(--color-foreground);
+    font-weight: 500;
+  }
+
+  .shipping-calculator__result-value--total {
+    color: var(--color-accent);
+    font-size: 1.8rem;
+  }
+
+  .shipping-calculator__result-message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--inputs-radius);
+    font-size: 1.3rem;
+    text-align: center;
+    display: none;
+  }
+
+  .shipping-calculator__result-message.show {
+    display: block;
+  }
+
+  .shipping-calculator__result-message.success {
+    background: rgba(var(--color-button), 0.1);
+    color: var(--color-button);
+    border: 1px solid var(--color-button);
+  }
+
+  .shipping-calculator__result-message.error {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 1px solid #dc3545;
+  }
+
+  @media screen and (max-width: 749px) {
+    .shipping-calculator__form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .shipping-calculator__form-group {
+      width: 100%;
+    }
+
+    .shipping-calculator__button {
+      width: 100%;
+    }
+  }
+</style>
+
+<script>
+  const form = document.getElementById('shipping-form');
+  const zipInput = document.getElementById('shipping-zip');
+  const weightInput = document.getElementById('shipping-weight');
+  const loadingDiv = document.getElementById('shipping-loading');
+  const resultDiv = document.getElementById('shipping-result');
+  const closeBtn = document.getElementById('close-result');
+
+  // Format zip code input
+  zipInput?.addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
+  });
+
+  // Close result
+  closeBtn?.addEventListener('click', () => {
+    resultDiv?.setAttribute('hidden', '');
+  });
+
+  // Form submission
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const zipCode = zipInput?.value.trim();
+    const weight = weightInput?.value.trim();
+
+    // Clear previous errors
+    document.getElementById('zip-error')?.classList.remove('show');
+    document.getElementById('weight-error')?.classList.remove('show');
+
+    // Validate inputs
+    if (!zipCode || !/^\d{5}$/.test(zipCode)) {
+      const error = document.getElementById('zip-error');
+      if (error) {
+        error.textContent = 'Please enter a valid 5-digit zip code';
+        error.classList.add('show');
+      }
+      return;
+    }
+
+    if (!weight || parseFloat(weight) <= 0) {
+      const error = document.getElementById('weight-error');
+      if (error) {
+        error.textContent = 'Please enter a valid weight';
+        error.classList.add('show');
+      }
+      return;
+    }
+
+    // Show loading state
+    loadingDiv?.removeAttribute('hidden');
+    resultDiv?.setAttribute('hidden', '');
+
+    try {
+      const response = await fetch('/api/shipping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zipCode, weight }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to calculate shipping');
+      }
+
+      // Update result display
+      document.getElementById('result-carrier').textContent = data.data.carrier;
+      document.getElementById('result-delivery').textContent = data.data.estimatedDays;
+      document.getElementById('result-base').textContent = `$${data.data.baseRate.toFixed(2)}`;
+      document.getElementById('result-weight').textContent = `$${data.data.weightCharge.toFixed(2)}`;
+      document.getElementById('result-total').textContent = `$${data.data.totalCost.toFixed(2)}`;
+
+      // Show result
+      loadingDiv?.setAttribute('hidden', '');
+      resultDiv?.removeAttribute('hidden');
+    } catch (error) {
+      console.error('Shipping calculation error:', error);
+      const message = document.getElementById('result-message');
+      if (message) {
+        message.textContent = error.message || 'Failed to calculate shipping. Please try again.';
+        message.className = 'shipping-calculator__result-message show error';
+      }
+      loadingDiv?.setAttribute('hidden', '');
+      resultDiv?.removeAttribute('hidden');
+    }
+  });
+</script>
+

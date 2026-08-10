@@ -1,0 +1,149 @@
+---
+export const prerender = true;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { getUpcomingEvents } from '../data/events.js';
+
+const upcomingEvents = getUpcomingEvents();
+---
+
+<Layout
+  title="Events | myfriendroze & d.d. succulents"
+  description="Find myfriendroze ceramics and d.d. succulents at markets, art walks, and online sales near you."
+>
+  <Header slot="header" currentPath="/events" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">myfriendroze & d.d. succulents in the wild</h1>
+    </div>
+  </section>
+
+  <section class="events-list section-padding">
+    <div class="page-width">
+      {upcomingEvents.length === 0 ? (
+        <p class="events-empty">No upcoming events right now — check back soon!</p>
+      ) : (
+        <ul class="events">
+          {upcomingEvents.map((event) => (
+            <li class="event-item">
+              <strong class="event-item__title">{event.title}</strong>
+              {event.startDate && (
+                <span class="event-item__date">
+                  {event.startDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
+                  {event.endDate && event.endDate.getTime() !== event.startDate.getTime() && (
+                    <> – {event.endDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</>
+                  )}
+                </span>
+              )}
+              {event.description && <span class="event-item__desc">{event.description}</span>}
+              {event.location && <span class="event-item__location">{event.location}</span>}
+              {event.link && (
+                <a href={event.link} class="event-item__link">{event.linkLabel ?? event.link}</a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-hero {
+    background-color: var(--color-background);
+    text-align: center;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+  }
+
+  .page-hero__title {
+    font-family: var(--font-heading-family);
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+    color: var(--color-foreground);
+  }
+
+  .events-list {
+    background-color: var(--color-background);
+  }
+
+  .events {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-width: 72rem;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .event-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding-bottom: 3rem;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.1);
+  }
+
+  .event-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .event-item__title {
+    font-size: calc(1.8rem * var(--font-body-scale));
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .event-item__date,
+  .event-item__desc,
+  .event-item__location {
+    font-size: calc(1.5rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.8;
+  }
+
+  .event-item__link {
+    font-size: calc(1.5rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .event-item__link:hover {
+    opacity: 0.7;
+  }
+
+  .events-empty {
+    text-align: center;
+    font-size: calc(1.6rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.7;
+  }
+
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .page-width {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .page-width {
+      padding: 0 5rem;
+    }
+  }
+</style>

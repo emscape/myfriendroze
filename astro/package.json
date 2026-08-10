@@ -1,0 +1,25 @@
+{
+  "name": "astro",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "prebuild": "node scripts/fetch-gallery.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "test": "vitest run",
+    "deploy": "npm run build && cd .. && node deploy.js"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.4.4",
+    "@tailwindcss/vite": "^4.1.11",
+    "astro": "^5.12.8",
+    "firebase-admin": "^13.6.0",
+    "google-auth-library": "^10.5.0",
+    "tailwindcss": "^4.1.11"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

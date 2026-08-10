@@ -1,0 +1,1209 @@
+---
+export const prerender = true;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import ProductCard from '../components/ProductCard.astro';
+import ShippingCalculator from '../components/ShippingCalculator.astro';
+import { syncedProducts } from '../data/syncedProducts.js';
+
+// Use synced products instead of static products
+const products = syncedProducts;
+---
+
+<Layout
+  title="Shop | myfriendroze Ceramics"
+  description="Shop handcrafted ceramic planters and unique pottery pieces from myfriendroze ceramics. Each piece is lovingly made by hand."
+>
+  <!-- Custom header -->
+  <Header slot="header" currentPath="/shop" />
+
+  <!-- Banner Section -->
+  <section class="image-banner">
+    <div class="banner__media media">
+      <img
+        src="/shopbanner.png"
+        alt="buy stuff or the cactus gets it!"
+        width="1920"
+        height="600"
+        loading="eager"
+        class="banner__image"
+      />
+    </div>
+  </section>
+
+  <!-- Rich Text Section -->
+  <section class="rich-text color-background-1 gradient section-padding">
+    <div class="rich-text__wrapper rich-text__wrapper--center page-width">
+      <div class="rich-text__blocks">
+        <div class="rich-text__text rte">
+          <p>buy stuff or the cactus gets it!</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Separator Bar -->
+  <hr class="separator-bar">
+
+  <!-- Collection Banner -->
+  <section class="collection-hero color-background-1 gradient">
+    <div class="collection-hero__inner page-width">
+      <div class="collection-hero__text-wrapper">
+        <h1 class="collection-hero__title">you're kiln me</h1>
+      </div>
+    </div>
+  </section>
+
+  <!-- Product Grid -->
+  <section class="collection-product-grid">
+    <div class="page-width">
+      <!-- Filters and Sorting -->
+      <div class="facets-container">
+        <div class="facets-wrapper">
+          <!-- Filter Section -->
+          <div class="facets-filters">
+            <h3 class="facets-heading">filter:</h3>
+            <div class="facets-filter-group">
+              <details class="facets-disclosure">
+                <summary class="facets-summary">
+                  <span>availability</span>
+                  <svg class="icon icon-caret" viewBox="0 0 10 6">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="m9.354.646a.5.5 0 0 0-.708 0L5 4.293 1.354.646a.5.5 0 0 0-.708.708l4 4a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708Z" fill="currentColor"/>
+                  </svg>
+                </summary>
+                <div class="facets-display">
+                  <fieldset class="facets-fieldset">
+                    <legend class="visually-hidden">availability</legend>
+                    <label class="facets-label">
+                      <input type="checkbox" name="availability" value="in-stock" class="facets-checkbox">
+                      <span class="facets-label-text">in stock (3)</span>
+                    </label>
+                    <label class="facets-label">
+                      <input type="checkbox" name="availability" value="out-of-stock" class="facets-checkbox">
+                      <span class="facets-label-text">out of stock (0)</span>
+                    </label>
+                  </fieldset>
+                </div>
+              </details>
+            </div>
+
+            <div class="facets-filter-group">
+              <details class="facets-disclosure">
+                <summary class="facets-summary">
+                  <span>price</span>
+                  <svg class="icon icon-caret" viewBox="0 0 10 6">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="m9.354.646a.5.5 0 0 0-.708 0L5 4.293 1.354.646a.5.5 0 0 0-.708.708l4 4a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708Z" fill="currentColor"/>
+                  </svg>
+                </summary>
+                <div class="facets-display">
+                  <fieldset class="facets-fieldset">
+                    <legend class="visually-hidden">price</legend>
+                    <label class="facets-label">
+                      <input type="checkbox" name="price" value="0-50" class="facets-checkbox">
+                      <span class="facets-label-text">$0.00 - $50.00 (0)</span>
+                    </label>
+                    <label class="facets-label">
+                      <input type="checkbox" name="price" value="50-100" class="facets-checkbox">
+                      <span class="facets-label-text">$50.00 - $100.00 (3)</span>
+                    </label>
+                  </fieldset>
+                </div>
+              </details>
+            </div>
+          </div>
+
+          <!-- Sort Section -->
+          <div class="facets-sort">
+            <label for="sort-by" class="facets-sort-label">sort by:</label>
+            <div class="select-wrapper">
+              <select id="sort-by" name="sort_by" class="facets-sort-select">
+                <option value="best-selling">best selling</option>
+                <option value="featured">featured</option>
+                <option value="alphabetically-a-z">alphabetically, a-z</option>
+                <option value="alphabetically-z-a">alphabetically, z-a</option>
+                <option value="price-low-to-high">price, low to high</option>
+                <option value="price-high-to-low">price, high to low</option>
+                <option value="date-old-to-new">date, old to new</option>
+                <option value="date-new-to-old">date, new to old</option>
+              </select>
+              <svg class="icon icon-caret select-caret" viewBox="0 0 10 6">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="m9.354.646a.5.5 0 0 0-.708 0L5 4.293 1.354.646a.5.5 0 0 0-.708.708l4 4a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708Z" fill="currentColor"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Product Count -->
+          <div class="facets-results">
+            <span class="facets-results-count">{products.length} products</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="collection-product-grid__wrapper">
+        <div class="product-grid product-grid--4-col-desktop product-grid--2-col-tablet-down" id="product-grid">
+          {products.map((product) => (
+            <ProductCard product={product} showQuickOrder={true} />
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Order Modal -->
+  <div class="modal" id="quick-order-modal" hidden>
+    <div class="modal__backdrop"></div>
+    <div class="modal__content">
+      <div class="modal__header">
+        <h2 class="modal__title">quick order</h2>
+        <button class="modal__close" type="button">
+          <span class="visually-hidden">close</span>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      
+      <form class="quick-order-form" id="quick-order-form">
+        <div class="quick-order-form__product">
+          <img id="modal-product-image" src="" alt="" class="quick-order-form__image">
+          <div class="quick-order-form__details">
+            <h3 id="modal-product-title"></h3>
+            <p id="modal-product-price"></p>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="customer-name">your name</label>
+          <input type="text" id="customer-name" name="customerName" required>
+        </div>
+
+        <div class="form-group">
+          <label for="customer-email">email address</label>
+          <input type="email" id="customer-email" name="customerEmail" required>
+        </div>
+
+        <div class="form-group">
+          <label for="customer-phone">phone number (optional)</label>
+          <input type="tel" id="customer-phone" name="customerPhone">
+        </div>
+
+        <div class="form-group">
+          <label for="order-notes">special requests (optional)</label>
+          <textarea id="order-notes" name="orderNotes" rows="3" placeholder="any special requests or notes..."></textarea>
+        </div>
+
+        <div class="quick-order-form__actions">
+          <button type="button" class="button button--secondary" id="cancel-order">
+            cancel
+          </button>
+          <button type="submit" class="button" id="submit-order">
+            place order
+          </button>
+        </div>
+        
+        <div class="quick-order-form__message" id="order-message" hidden></div>
+      </form>
+
+      <!-- Shipping Calculator -->
+      <div class="modal__shipping-section">
+        <ShippingCalculator />
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  /* Page Layout */
+  .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .page-width {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .page-width {
+      padding: 0 5rem;
+    }
+  }
+
+  /* Banner Section - Full Screen */
+  .image-banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 2rem;
+    width: 100vw;
+    margin-left: calc(-50vw + 50%);
+  }
+
+  .banner__media {
+    position: relative;
+    width: 100%;
+    height: 40rem;
+  }
+
+  .banner__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .banner__content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  .banner__content--middle-center {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .banner__box {
+    padding: 4rem;
+    border-radius: var(--media-radius);
+    text-align: center;
+    max-width: 68rem;
+    margin: 0 2rem;
+  }
+
+  .banner__heading {
+    margin: 0;
+    font-family: var(--font-heading-family);
+    font-size: clamp(2.4rem, 5vw, 4.8rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  @media screen and (min-width: 750px) {
+    .banner__media {
+      height: 50rem;
+    }
+  }
+
+  /* Separator Bar */
+  .separator-bar {
+    border: none;
+    height: 0.1rem;
+    background-color: rgba(var(--color-foreground), 0.2);
+    margin: 0;
+    width: 100%;
+  }
+
+  /* Rich Text Section */
+  .rich-text {
+    padding: 4rem 0;
+  }
+
+  .rich-text__wrapper--center {
+    display: flex;
+    justify-content: center;
+    padding: 0 2rem;
+  }
+
+  .rich-text__blocks {
+    text-align: center;
+    max-width: 80rem;
+    width: 100%;
+  }
+
+  @media screen and (min-width: 750px) {
+    .rich-text__wrapper--center {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .rich-text__wrapper--center {
+      padding: 0 5rem;
+    }
+  }
+
+  .rich-text__text {
+    font-size: calc(1.6rem * var(--font-body-scale));
+    line-height: calc(1 + 0.6 / var(--font-body-scale));
+  }
+
+  .rich-text__text p {
+    margin: 0;
+  }
+
+  @media screen and (min-width: 750px) {
+    .rich-text__text {
+      font-size: calc(1.8rem * var(--font-body-scale));
+    }
+  }
+
+  /* Collection Hero */
+  .collection-hero {
+    padding: 2rem 0;
+  }
+
+  .collection-hero__inner {
+    display: flex;
+    flex-direction: column;
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .collection-hero__text-wrapper {
+    flex-basis: 100%;
+  }
+
+  .collection-hero__title {
+    margin: 2.5rem 0;
+    font-family: var(--font-heading-family);
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+    text-align: center;
+  }
+
+  @media screen and (min-width: 750px) {
+    .collection-hero {
+      padding: 3rem 0;
+    }
+
+    .collection-hero__inner {
+      align-items: center;
+      flex-direction: row;
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .collection-hero__inner {
+      padding: 0 5rem;
+    }
+  }
+
+  /* Product Grid */
+  .collection-product-grid {
+    padding: 2rem 0 6.4rem;
+  }
+
+  .collection-product-grid .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  .collection-product-grid__wrapper {
+    margin-top: 2rem;
+  }
+
+  .product-grid {
+    display: grid;
+    gap: 2rem;
+    justify-items: center;
+  }
+
+  .product-grid--4-col-desktop {
+    grid-template-columns: repeat(1, 1fr);
+    max-width: 40rem;
+    margin: 0 auto;
+  }
+
+  @media screen and (min-width: 550px) {
+    .product-grid--4-col-desktop {
+      grid-template-columns: repeat(2, 1fr);
+      max-width: none;
+    }
+  }
+
+  @media screen and (min-width: 750px) {
+    .collection-product-grid .page-width {
+      padding: 0 4rem;
+    }
+
+    .product-grid {
+      gap: 3rem;
+    }
+
+    .product-grid--4-col-desktop {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .collection-product-grid .page-width {
+      padding: 0 5rem;
+    }
+
+    .product-grid--4-col-desktop {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  @media screen and (min-width: 1200px) {
+    .collection-product-grid .page-width {
+      padding: 0 6rem;
+    }
+  }
+
+  /* Facets/Filtering */
+  .facets-container {
+    margin-bottom: 3rem;
+    padding: 0 2rem;
+  }
+
+  .facets-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2rem;
+    padding: 2rem 0;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.1);
+    max-width: var(--page-width);
+    margin: 0 auto;
+  }
+
+  @media screen and (min-width: 750px) {
+    .facets-container {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .facets-container {
+      padding: 0 5rem;
+    }
+  }
+
+  .facets-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    flex: 1;
+  }
+
+  .facets-heading {
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin: 0;
+    color: var(--color-foreground);
+    font-family: var(--font-body-family);
+  }
+
+  .facets-filter-group {
+    position: relative;
+  }
+
+  .facets-disclosure {
+    position: relative;
+  }
+
+  .facets-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.2rem;
+    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--inputs-radius);
+    background: var(--color-background);
+    cursor: pointer;
+    font-size: 1.4rem;
+    font-family: var(--font-body-family);
+    color: var(--color-foreground);
+    list-style: none;
+  }
+
+  .facets-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .facets-summary:hover {
+    border-color: rgba(var(--color-foreground), 0.4);
+  }
+
+  .icon-caret {
+    width: 1rem;
+    height: 0.6rem;
+    transition: transform 0.2s ease;
+  }
+
+  .facets-disclosure[open] .icon-caret {
+    transform: rotate(180deg);
+  }
+
+  .facets-display {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: var(--color-background);
+    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--inputs-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-top: 0.5rem;
+    min-width: 20rem;
+  }
+
+  .facets-fieldset {
+    border: none;
+    margin: 0;
+    padding: 1rem;
+  }
+
+  .facets-label {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 0;
+    cursor: pointer;
+    font-size: 1.4rem;
+    color: var(--color-foreground);
+  }
+
+  .facets-checkbox {
+    width: 1.6rem;
+    height: 1.6rem;
+    border: 0.1rem solid rgba(var(--color-foreground), 0.3);
+    border-radius: 0.2rem;
+    background: var(--color-background);
+  }
+
+  .facets-checkbox:checked {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  .facets-label-text {
+    flex: 1;
+  }
+
+  /* Sort Section */
+  .facets-sort {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .facets-sort-label {
+    font-size: 1.4rem;
+    font-weight: 500;
+    font-family: var(--font-body-family);
+    color: var(--color-foreground);
+    white-space: nowrap;
+  }
+
+  .select-wrapper {
+    position: relative;
+  }
+
+  .facets-sort-select {
+    appearance: none;
+    padding: 0.8rem 3rem 0.8rem 1.2rem;
+    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--inputs-radius);
+    background: var(--color-background);
+    font-size: 1.4rem;
+    font-family: var(--font-body-family);
+    color: var(--color-foreground);
+    cursor: pointer;
+    min-width: 18rem;
+  }
+
+  .facets-sort-select:hover {
+    border-color: rgba(var(--color-foreground), 0.4);
+  }
+
+  .facets-sort-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .select-caret {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1rem;
+    height: 0.6rem;
+    pointer-events: none;
+    color: var(--color-foreground);
+  }
+
+  /* Results Count */
+  .facets-results {
+    margin-left: auto;
+  }
+
+  .facets-results-count {
+    font-size: 1.4rem;
+    font-family: var(--font-body-family);
+    color: var(--color-foreground);
+    white-space: nowrap;
+  }
+
+  /* Responsive Facets */
+  @media screen and (max-width: 749px) {
+    .facets-wrapper {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1.5rem;
+    }
+
+    .facets-filters {
+      justify-content: center;
+    }
+
+    .facets-sort {
+      justify-content: center;
+    }
+
+    .facets-results {
+      margin-left: 0;
+      text-align: center;
+    }
+
+    .facets-sort-select {
+      min-width: auto;
+      width: 100%;
+    }
+  }
+
+  /* Modal Styles */
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+  }
+
+  .modal[hidden] {
+    display: none;
+  }
+
+  .modal__backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+  }
+
+  .modal__content {
+    position: relative;
+    background: var(--color-background);
+    border-radius: var(--border-radius);
+    max-width: 50rem;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  }
+
+  .modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2rem 2rem 1rem;
+    border-bottom: 1px solid rgba(var(--color-foreground), 0.1);
+  }
+
+  .modal__title {
+    margin: 0;
+    font-size: 2.4rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .modal__close {
+    background: none;
+    border: none;
+    color: var(--color-foreground);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: var(--border-radius);
+    transition: background-color 0.2s ease;
+  }
+
+  .modal__close:hover {
+    background: rgba(var(--color-foreground), 0.1);
+  }
+
+  /* Quick Order Form */
+  .quick-order-form {
+    padding: 2rem;
+  }
+
+  .quick-order-form__product {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid rgba(var(--color-foreground), 0.1);
+  }
+
+  .quick-order-form__image {
+    width: 8rem;
+    height: 8rem;
+    object-fit: cover;
+    border-radius: var(--border-radius);
+    flex-shrink: 0;
+  }
+
+  .quick-order-form__details h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .quick-order-form__details p {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+
+  .form-group {
+    margin-bottom: 2rem;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+  }
+
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    padding: 1rem;
+    border: 1px solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--border-radius);
+    font-size: 1.4rem;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    transition: border-color 0.2s ease;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+
+  .quick-order-form__actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+  }
+
+  .quick-order-form__message {
+    margin-top: 1rem;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    font-size: 1.4rem;
+    text-align: center;
+  }
+
+  .quick-order-form__message--success {
+    background-color: rgba(var(--color-button), 0.1);
+    color: var(--color-foreground);
+    border: 1px solid var(--color-button);
+  }
+
+  .quick-order-form__message--error {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 1px solid #dc3545;
+  }
+
+  /* Modal Shipping Section */
+  .modal__shipping-section {
+    padding: 0 2rem 2rem;
+    border-top: 1px solid rgba(var(--color-foreground), 0.1);
+  }
+
+  /* Responsive adjustments */
+  @media screen and (max-width: 749px) {
+    .modal {
+      padding: 1rem;
+    }
+
+    .quick-order-form__actions {
+      flex-direction: column;
+    }
+
+    .quick-order-form__product {
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .quick-order-form__image {
+      align-self: center;
+    }
+  }
+
+  /* Section spacing */
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  /* Color schemes */
+  .color-background-1 {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  .gradient {
+    background: var(--gradient-base-background);
+  }
+
+  /* Typography */
+  .inline-richtext {
+    display: inline;
+  }
+
+  .h1 {
+    font-family: var(--font-heading-family);
+    font-size: clamp(2.4rem, 5vw, 4.8rem);
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .rte {
+    font-size: calc(1.6rem * var(--font-body-scale));
+    line-height: calc(1 + 0.6 / var(--font-body-scale));
+  }
+
+  .rte p {
+    margin: 0 0 1.5rem;
+  }
+
+  .rte p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Media */
+  .media {
+    position: relative;
+    display: block;
+    overflow: hidden;
+  }
+
+  .media img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Utility classes */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+
+<script>
+  // Quick Order Modal functionality
+  const modal = document.getElementById('quick-order-modal');
+  const modalClose = modal?.querySelector('.modal__close');
+  const modalBackdrop = modal?.querySelector('.modal__backdrop');
+  const quickOrderForm = document.getElementById('quick-order-form');
+  const cancelOrderBtn = document.getElementById('cancel-order');
+  const orderMessage = document.getElementById('order-message');
+
+  // Product data for the modal
+  let currentProduct = null;
+
+  // Add to cart button handlers
+  document.querySelectorAll('.product-card__add-to-cart').forEach(button => {
+    button.addEventListener('click', (e) => {
+      const productId = e.target.dataset.productId;
+      const productTitle = e.target.dataset.productTitle;
+      const productPrice = parseFloat(e.target.dataset.productPrice);
+
+      // Find the product card to get the image
+      const productCard = e.target.closest('.product-card');
+      const productImage = productCard?.querySelector('.product-card__image')?.src;
+
+      currentProduct = {
+        id: productId,
+        title: productTitle,
+        price: productPrice,
+        image: productImage
+      };
+
+      openQuickOrderModal();
+    });
+  });
+
+  function openQuickOrderModal() {
+    if (!currentProduct || !modal) return;
+
+    // Populate modal with product data
+    const modalImage = document.getElementById('modal-product-image');
+    const modalTitle = document.getElementById('modal-product-title');
+    const modalPrice = document.getElementById('modal-product-price');
+
+    if (modalImage) modalImage.src = currentProduct.image;
+    if (modalImage) modalImage.alt = currentProduct.title;
+    if (modalTitle) modalTitle.textContent = currentProduct.title;
+    if (modalPrice) modalPrice.textContent = `$${currentProduct.price.toFixed(2)}`;
+
+    // Show modal
+    modal.removeAttribute('hidden');
+    document.body.style.overflow = 'hidden';
+
+    // Focus first input
+    const firstInput = modal.querySelector('input');
+    if (firstInput) firstInput.focus();
+  }
+
+  function closeQuickOrderModal() {
+    if (!modal) return;
+
+    modal.setAttribute('hidden', '');
+    document.body.style.overflow = '';
+
+    // Reset form
+    if (quickOrderForm) quickOrderForm.reset();
+    if (orderMessage) {
+      orderMessage.hidden = true;
+      orderMessage.className = 'quick-order-form__message';
+    }
+
+    currentProduct = null;
+  }
+
+  // Modal close handlers
+  modalClose?.addEventListener('click', closeQuickOrderModal);
+  modalBackdrop?.addEventListener('click', closeQuickOrderModal);
+  cancelOrderBtn?.addEventListener('click', closeQuickOrderModal);
+
+  // Escape key handler
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && !modal.hasAttribute('hidden')) {
+      closeQuickOrderModal();
+    }
+  });
+
+  // Filtering and Sorting functionality
+  const sortSelect = document.getElementById('sort-by');
+  const productGrid = document.getElementById('product-grid');
+  const resultsCount = document.querySelector('.facets-results-count');
+  const checkboxes = document.querySelectorAll('.facets-checkbox');
+
+  // Store original product data
+  let allProducts = Array.from(productGrid.children);
+  let filteredProducts = [...allProducts];
+
+  // Sort functionality
+  sortSelect?.addEventListener('change', (e) => {
+    const sortValue = e.target.value;
+    sortProducts(sortValue);
+  });
+
+  function sortProducts(sortBy) {
+    const productCards = Array.from(productGrid.children);
+
+    productCards.sort((a, b) => {
+      const aTitle = a.querySelector('.product-card__link')?.textContent?.trim() || '';
+      const aPrice = parseFloat(a.querySelector('.product-card__add-to-cart')?.dataset?.productPrice || '0');
+      const bTitle = b.querySelector('.product-card__link')?.textContent?.trim() || '';
+      const bPrice = parseFloat(b.querySelector('.product-card__add-to-cart')?.dataset?.productPrice || '0');
+
+      switch (sortBy) {
+        case 'alphabetically-a-z':
+          return aTitle.localeCompare(bTitle);
+        case 'alphabetically-z-a':
+          return bTitle.localeCompare(aTitle);
+        case 'price-low-to-high':
+          return aPrice - bPrice;
+        case 'price-high-to-low':
+          return bPrice - aPrice;
+        case 'featured':
+        case 'best-selling':
+        case 'date-old-to-new':
+        case 'date-new-to-old':
+        default:
+          return 0; // Keep original order
+      }
+    });
+
+    // Clear and re-append sorted products
+    productGrid.innerHTML = '';
+    productCards.forEach(card => productGrid.appendChild(card));
+  }
+
+  // Filter functionality
+  checkboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', applyFilters);
+  });
+
+  function applyFilters() {
+    const availabilityFilters = Array.from(document.querySelectorAll('input[name="availability"]:checked')).map(cb => cb.value);
+    const priceFilters = Array.from(document.querySelectorAll('input[name="price"]:checked')).map(cb => cb.value);
+
+    filteredProducts = allProducts.filter(product => {
+      // Availability filter
+      if (availabilityFilters.length > 0) {
+        const isInStock = !product.querySelector('.product-card__add-to-cart')?.disabled;
+        const matchesAvailability = availabilityFilters.some(filter => {
+          if (filter === 'in-stock') return isInStock;
+          if (filter === 'out-of-stock') return !isInStock;
+          return false;
+        });
+        if (!matchesAvailability) return false;
+      }
+
+      // Price filter
+      if (priceFilters.length > 0) {
+        const price = parseFloat(product.querySelector('.product-card__add-to-cart')?.dataset?.productPrice || '0');
+        const matchesPrice = priceFilters.some(filter => {
+          if (filter === '0-50') return price >= 0 && price <= 50;
+          if (filter === '50-100') return price > 50 && price <= 100;
+          return false;
+        });
+        if (!matchesPrice) return false;
+      }
+
+      return true;
+    });
+
+    // Update display
+    productGrid.innerHTML = '';
+    filteredProducts.forEach(product => productGrid.appendChild(product));
+
+    // Update results count
+    if (resultsCount) {
+      const count = filteredProducts.length;
+      resultsCount.textContent = `${count} product${count !== 1 ? 's' : ''}`;
+    }
+
+    // Re-apply current sort
+    if (sortSelect) {
+      sortProducts(sortSelect.value);
+    }
+  }
+
+  // Quick order form submission
+  quickOrderForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    if (!currentProduct) return;
+
+    const formData = new FormData(quickOrderForm);
+    const customerName = formData.get('customerName');
+    const customerEmail = formData.get('customerEmail');
+    const customerPhone = formData.get('customerPhone');
+    const orderNotes = formData.get('orderNotes');
+
+    // Show loading state
+    const submitButton = document.getElementById('submit-order');
+    const originalText = submitButton?.textContent;
+    if (submitButton) {
+      submitButton.textContent = 'Placing Order...';
+      submitButton.disabled = true;
+    }
+
+    try {
+      // Prepare order data according to OpenAPI contract
+      const orderData = {
+        customer: {
+          email: customerEmail,
+          name: customerName,
+          ...(customerPhone && { phone: customerPhone })
+        },
+        items: [
+          {
+            sku: currentProduct.id,
+            name: currentProduct.title,
+            qty: 1,
+            price: currentProduct.price,
+            description: `Handcrafted ceramic planter`
+          }
+        ],
+        total: currentProduct.price,
+        currency: 'USD',
+        ...(orderNotes && { notes: orderNotes })
+      };
+
+      // Call the order API
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Show success message
+        if (orderMessage) {
+          orderMessage.textContent = 'Order placed successfully! We\'ll be in touch soon to arrange payment and delivery.';
+          orderMessage.className = 'quick-order-form__message quick-order-form__message--success';
+          orderMessage.hidden = false;
+        }
+
+        // Reset form after a delay
+        setTimeout(() => {
+          closeQuickOrderModal();
+        }, 3000);
+
+      } else {
+        throw new Error(result.error || 'Failed to place order');
+      }
+
+    } catch (error) {
+      console.error('Order submission error:', error);
+
+      // Show error message
+      if (orderMessage) {
+        orderMessage.textContent = error.message || 'Failed to place order. Please try again or contact us directly.';
+        orderMessage.className = 'quick-order-form__message quick-order-form__message--error';
+        orderMessage.hidden = false;
+      }
+    } finally {
+      // Reset button
+      if (submitButton && originalText) {
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
+      }
+    }
+  });
+</script>

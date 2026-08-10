@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.token.email in ['myfriendroze@gmail.com', 'myfriendroze.store@gmail.com'];
+    }
+
+    // Matches the actual folders StorageService.dart uploads to:
+    // 'products', 'events', 'gallery' (see uploadProductImage,
+    // uploadEventImage, and the generic uploadMultipleImages(files, folder)).
+    match /products/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /events/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /gallery/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

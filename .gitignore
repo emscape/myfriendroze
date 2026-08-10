@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.firebase/
+.astro/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.production.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Secrets & service accounts — never commit these.
+# Broad on purpose: a near-miss during this repo's first commit showed
+# firebase/service-account.json (no "firebase-" prefix, no hyphen) slipping
+# past narrower patterns. Match anything containing "service-account" or
+# "serviceaccount" (any case, any separator) at any depth.
+secrets/
+**/*service*account*.json
+**/*ServiceAccount*.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Working notes (per CLAUDE.md — not user-facing)
+docs/
+
+# Legacy reference material, not part of the live site
+theme_export__ddsucculents-com-crave__*/
+
+# Misc (carried over from existing file)
+.memory-bank
+data/
+newsletter-subscribers.json

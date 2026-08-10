@@ -1,0 +1,221 @@
+---
+// ProductCard component for displaying products in grids
+export interface Props {
+  product: {
+    id: string;
+    handle: string;
+    title: string;
+    description: string;
+    price: number;
+    compareAtPrice?: number;
+    images: string[];
+    tags: string[];
+    inStock: boolean;
+    category: string;
+  };
+  showQuickOrder?: boolean;
+}
+
+const { product, showQuickOrder = true } = Astro.props;
+---
+
+<article class="product-card" data-product-id={product.id}>
+  <a href={`/products/${product.handle}`} class="product-card__link-wrapper">
+    <div class="product-card__image-container">
+      <img
+        src={product.images[0]}
+        alt={product.title}
+        class="product-card__image"
+        loading="lazy"
+      />
+      {product.images.length > 1 && (
+        <img
+          src={product.images[1]}
+          alt={product.title}
+          class="product-card__image product-card__image--hover"
+          loading="lazy"
+        />
+      )}
+      {!product.inStock && (
+        <div class="product-card__badge product-card__badge--sold-out">
+          Sold Out
+        </div>
+      )}
+    </div>
+  </a>
+  
+  <div class="product-card__content">
+    <h3 class="product-card__title">
+      <a href={`/products/${product.handle}`} class="product-card__link">
+        {product.title}
+      </a>
+    </h3>
+    
+    <p class="product-card__description">
+      {product.description.length > 100 
+        ? product.description.substring(0, 100) + '...' 
+        : product.description}
+    </p>
+    
+    <div class="product-card__price">
+      <span class="product-card__price-current">
+        ${product.price.toFixed(2)}
+      </span>
+      {product.compareAtPrice && (
+        <span class="product-card__price-compare">
+          ${product.compareAtPrice.toFixed(2)}
+        </span>
+      )}
+    </div>
+    
+    {showQuickOrder && (
+      <div class="product-card__actions">
+        <button 
+          class="button product-card__add-to-cart"
+          data-product-id={product.id}
+          data-product-title={product.title}
+          data-product-price={product.price}
+          disabled={!product.inStock}
+        >
+          {product.inStock ? 'quick order' : 'sold out'}
+        </button>
+      </div>
+    )}
+  </div>
+</article>
+
+<style>
+  /* Product Cards */
+  .product-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--color-background);
+    border-radius: var(--card-corner-radius);
+    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    overflow: hidden;
+    box-shadow: var(--card-shadow-horizontal-offset) var(--card-shadow-vertical-offset) var(--card-shadow-blur) rgba(var(--color-shadow), var(--card-shadow-opacity));
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .product-card:hover {
+    transform: translateY(-0.5rem);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
+
+  .product-card__link-wrapper {
+    display: block;
+    text-decoration: none;
+  }
+
+  .product-card__image-container {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+  }
+
+  .product-card__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.3s ease;
+  }
+
+  .product-card__image--hover {
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0;
+  }
+
+  .product-card:hover .product-card__image--hover {
+    opacity: 1;
+  }
+
+  .product-card:hover .product-card__image:not(.product-card__image--hover) {
+    opacity: 0;
+  }
+
+  .product-card__badge {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--border-radius);
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .product-card__badge--sold-out {
+    background: rgba(220, 53, 69, 0.9);
+    color: white;
+  }
+
+  .product-card__content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 2rem;
+  }
+
+  .product-card__title {
+    margin: 0 0 1rem;
+    font-size: 1.8rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .product-card__link {
+    color: var(--color-foreground);
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .product-card__link:hover {
+    color: var(--color-accent);
+  }
+
+  .product-card__description {
+    margin: 0 0 1.5rem;
+    font-size: 1.4rem;
+    line-height: 1.5;
+    color: var(--color-foreground);
+    opacity: 0.8;
+    height: 6.3rem; /* 3 lines at 1.5 line-height = 4.2rem + margin */
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .product-card__price {
+    margin: auto 0 2rem 0;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .product-card__price-current {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .product-card__price-compare {
+    font-size: 1.6rem;
+    color: var(--color-foreground);
+    opacity: 0.6;
+    text-decoration: line-through;
+  }
+
+  .product-card__add-to-cart {
+    width: 100%;
+  }
+
+  .product-card__add-to-cart:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

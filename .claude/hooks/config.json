@@ -1,0 +1,84 @@
+{
+  "_readme": "Hook configuration for myfriendroze (Astro web app). See .claude/hooks/README.md for full documentation.",
+
+  "project_name": "myfriendroze",
+
+  "session_start": {
+    "custom_notes": [
+      "Astro project root is astro/ — run build/dev commands from there",
+      "Firebase functions live in firebase/functions/ — Node 18 ESM",
+      "Deploy: cd astro && npm run build, then firebase deploy --only hosting",
+      "Products/events data: astro/src/data/ (edit here, not in Firebase directly during dev)",
+      "No SSR — this is a static site. API routes go in astro/src/pages/api/"
+    ]
+  },
+
+  "arch_rules": {
+    "enabled": false,
+    "rules": []
+  },
+
+  "content_watch": {
+    "enabled": false,
+    "path_pattern": "astro/src",
+    "file_extensions": [".astro", ".ts", ".js"],
+    "validate_command": ""
+  },
+
+  "bash_description_guard": {
+    "enabled": true
+  },
+
+  "env_guard": {
+    "enabled": true
+  },
+
+  "push_audit": {
+    "enabled": true
+  },
+
+  "dep_guard": {
+    "enabled": true,
+    "warn_patterns": [
+      "npm install",
+      "npm i ",
+      "yarn add",
+      "pnpm add"
+    ],
+    "custom_message": "Remember to commit package-lock.json changes alongside any dependency additions."
+  },
+
+  "empty_test_guard": {
+    "enabled": true,
+    "test_file_patterns": ["*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"],
+    "block_empty_describe": true,
+    "block_empty_it": true,
+    "block_todo_tests": false
+  },
+
+  "todo_format": {
+    "enabled": false,
+    "required_pattern": "TODO\\([^)]+\\):",
+    "on_violation": "warn"
+  },
+
+  "script_guard": {
+    "enabled": true,
+    "package_json_paths": ["astro/package.json", "package.json"],
+    "on_missing": "warn"
+  },
+
+  "commit_guard": {
+    "enabled": true,
+    "required_markers": ["WHY:", "EXPECTED:"],
+    "on_violation": "warn"
+  },
+
+  "commands": {
+    "lint": "cd astro && npm run lint",
+    "test": "cd astro && npm test",
+    "typecheck": "cd astro && npx tsc --noEmit",
+    "build": "cd astro && npm run build",
+    "dev": "cd astro && npm run dev"
+  }
+}

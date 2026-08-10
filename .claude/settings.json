@@ -1,0 +1,84 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-arch-boundary.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-bash-description.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-dep-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-script-exists.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-commit-message.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-git-push-audit.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-env-guard.js"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/validate-content.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-empty-tests.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-todo-format.js"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(flutter test *)"
+    ]
+  }
+}

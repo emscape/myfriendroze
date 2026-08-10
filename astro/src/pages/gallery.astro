@@ -1,0 +1,140 @@
+---
+export const prerender = true;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { galleryPhotos } from '../data/syncedGallery.js';
+---
+
+<Layout
+  title="Gallery | myfriendroze"
+  description="Photos of myfriendroze ceramics & d.d. succulents."
+>
+  <Header slot="header" currentPath="/gallery" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">gallery</h1>
+    </div>
+  </section>
+
+  <section class="gallery section-padding">
+    <div class="page-width">
+      {galleryPhotos.length === 0 ? (
+        <p class="gallery-placeholder">
+          Follow us on <a href="https://www.instagram.com/myfriendroze_d.d.succulents/" target="_blank" rel="noopener">Instagram</a> —
+          the gallery here is coming soon.
+        </p>
+      ) : (
+        <ul class="gallery-grid">
+          {galleryPhotos.map((photo) => (
+            <li class="gallery-item">
+              {photo.link ? (
+                <a href={photo.link} target="_blank" rel="noopener">
+                  <img src={photo.src} alt={photo.alt} loading="lazy" />
+                </a>
+              ) : (
+                <img src={photo.src} alt={photo.alt} loading="lazy" />
+              )}
+              {photo.caption && <p class="gallery-item__caption">{photo.caption}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .page-hero {
+    background-color: var(--color-background);
+    text-align: center;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+  }
+
+  .page-hero__title {
+    font-family: var(--font-heading-family);
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+    color: var(--color-foreground);
+  }
+
+  .gallery {
+    background-color: var(--color-background);
+  }
+
+  .gallery-placeholder {
+    text-align: center;
+    font-size: calc(1.6rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.8;
+  }
+
+  .gallery-placeholder a {
+    color: var(--color-foreground);
+    text-decoration: underline;
+  }
+
+  .gallery-placeholder a:hover {
+    opacity: 0.7;
+  }
+
+  .gallery-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-grid-horizontal) var(--spacing-grid-vertical);
+  }
+
+  .gallery-item img {
+    width: 100%;
+    height: auto;
+    border-radius: var(--media-radius);
+    display: block;
+  }
+
+  .gallery-item__caption {
+    margin: 0.6rem 0 0;
+    font-size: calc(1.3rem * var(--font-body-scale));
+    color: var(--color-foreground);
+    opacity: 0.8;
+  }
+
+  @media screen and (min-width: 750px) {
+    .gallery-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .gallery-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  .section-padding {
+    padding: var(--spacing-sections) 0;
+  }
+
+  .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .page-width {
+      padding: 0 4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    .page-width {
+      padding: 0 5rem;
+    }
+  }
+</style>

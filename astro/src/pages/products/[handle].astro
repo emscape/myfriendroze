@@ -1,0 +1,675 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import ShippingCalculator from '../../components/ShippingCalculator.astro';
+import { getProductByHandle, getInStockProducts } from '../../data/products.js';
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const products = getInStockProducts();
+  return products.map(product => ({
+    params: { handle: product.handle },
+    props: { product }
+  }));
+}
+
+interface Props {
+  product: {
+    id: string;
+    handle: string;
+    title: string;
+    description: string;
+    price: number;
+    compareAtPrice?: number;
+    images: string[];
+    tags: string[];
+    inStock: boolean;
+    category: string;
+    dimensions: string;
+    features: string[];
+    weight: number;
+    seoTitle: string;
+    seoDescription: string;
+  };
+}
+
+const { product } = Astro.props;
+
+// Fallback if product not found
+if (!product) {
+  return Astro.redirect('/shop');
+}
+
+// Featured image is the first one
+const featuredImage = product.images[0];
+const additionalImages = product.images.slice(1);
+---
+
+<Layout
+  title={product.seoTitle || `${product.title} | myfriendroze Ceramics`}
+  description={product.seoDescription || product.description}
+>
+  <!-- Custom header -->
+  <Header slot="header" currentPath="/shop" />
+
+  <!-- Breadcrumb Navigation -->
+  <div class="breadcrumb-nav page-width">
+    <a href="/" class="breadcrumb-link">Home</a>
+    <span class="breadcrumb-separator">/</span>
+    <a href="/shop" class="breadcrumb-link">Shop</a>
+    <span class="breadcrumb-separator">/</span>
+    <span class="breadcrumb-current">{product.title}</span>
+  </div>
+
+  <!-- Product Details Section -->
+  <section class="product-detail section-padding">
+    <div class="page-width">
+      <div class="product-detail__grid">
+        <!-- Image Gallery -->
+        <div class="product-detail__gallery">
+          <!-- Featured Image -->
+          <div class="product-detail__featured-image-wrapper">
+            <img
+              src={featuredImage}
+              alt={product.title}
+              class="product-detail__featured-image"
+              id="featured-image"
+            />
+          </div>
+
+          <!-- Thumbnail Gallery -->
+          {product.images.length > 1 && (
+            <div class="product-detail__thumbnails">
+              {product.images.map((image, index) => (
+                <button
+                  class={`product-detail__thumbnail ${index === 0 ? 'is-active' : ''}`}
+                  data-image={image}
+                  aria-label={`View product image ${index + 1}`}
+                  type="button"
+                >
+                  <img src={image} alt={`${product.title} view ${index + 1}`} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <!-- Product Info -->
+        <div class="product-detail__info">
+          <!-- Category Badge -->
+          <div class="product-detail__meta">
+            <span class="product-detail__category">{product.category}</span>
+          </div>
+
+          <!-- Title -->
+          <h1 class="product-detail__title">{product.title}</h1>
+
+          <!-- Price -->
+          <div class="product-detail__price-wrapper">
+            <span class="product-detail__price">${product.price.toFixed(2)}</span>
+            {product.compareAtPrice && (
+              <span class="product-detail__price-compare">
+                ${product.compareAtPrice.toFixed(2)}
+              </span>
+            )}
+          </div>
+
+          <!-- In Stock Status -->
+          <div class="product-detail__availability">
+            {product.inStock ? (
+              <span class="product-detail__status in-stock">
+                ✓ In Stock
+              </span>
+            ) : (
+              <span class="product-detail__status out-of-stock">
+                Out of Stock
+              </span>
+            )}
+          </div>
+
+          <!-- Description -->
+          <div class="product-detail__description rte">
+            <p>{product.description}</p>
+          </div>
+
+          <!-- Specifications -->
+          <div class="product-detail__specs">
+            <div class="spec-item">
+              <dt class="spec-label">Dimensions:</dt>
+              <dd class="spec-value">{product.dimensions}</dd>
+            </div>
+            <div class="spec-item">
+              <dt class="spec-label">Weight:</dt>
+              <dd class="spec-value">{(product.weight / 453.592).toFixed(2)} lbs</dd>
+            </div>
+            {product.features && product.features.length > 0 && (
+              <div class="spec-item">
+                <dt class="spec-label">Features:</dt>
+                <dd class="spec-value">
+                  <ul class="spec-list">
+                    {product.features.map(feature => (
+                      <li>{feature}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
+          </div>
+
+          <!-- Add to Cart Form -->
+          <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-title={product.title} data-product-price={product.price}>
+            <div class="form-group">
+              <label for="quantity" class="form-label">Quantity:</label>
+              <div class="quantity-selector">
+                <button 
+                  type="button" 
+                  class="quantity-btn quantity-btn--minus"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <input
+                  type="number"
+                  id="quantity"
+                  name="quantity"
+                  min="1"
+                  max="99"
+                  value="1"
+                  class="quantity-input"
+                />
+                <button 
+                  type="button" 
+                  class="quantity-btn quantity-btn--plus"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              class="button button--primary product-detail__add-to-cart"
+              id="add-to-cart-btn"
+              disabled={!product.inStock}
+            >
+              {product.inStock ? 'Add to Cart' : 'Sold Out'}
+            </button>
+          </form>
+
+          <!-- Tags -->
+          {product.tags && product.tags.length > 0 && (
+            <div class="product-detail__tags">
+              {product.tags.map(tag => (
+                <span class="product-tag">{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shipping Calculator Section -->
+  {product.inStock && (
+    <section class="shipping-section color-background-1 gradient section-padding">
+      <div class="page-width">
+        <h2 class="section-title">Calculate Shipping</h2>
+        <ShippingCalculator weight={product.weight} />
+      </div>
+    </section>
+  )}
+
+  <!-- Related Products Section (Optional - for future enhancement) -->
+
+</Layout>
+
+<style>
+  /* Breadcrumb Navigation */
+  .breadcrumb-nav {
+    padding: 2rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(var(--color-foreground), 0.1);
+  }
+
+  @media screen and (min-width: 750px) {
+    .breadcrumb-nav {
+      padding: 2rem 5rem;
+    }
+  }
+
+  .breadcrumb-link {
+    color: var(--color-foreground);
+    text-decoration: none;
+    font-size: 1.4rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .breadcrumb-link:hover {
+    opacity: 0.7;
+  }
+
+  .breadcrumb-separator {
+    color: rgba(var(--color-foreground), 0.5);
+    margin: 0 0.5rem;
+  }
+
+  .breadcrumb-current {
+    color: rgba(var(--color-foreground), 0.7);
+    font-size: 1.4rem;
+  }
+
+  /* Product Detail Section */
+  .product-detail {
+    margin: 0;
+  }
+  
+  .product-detail .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .product-detail .page-width {
+      padding: 0 5rem;
+    }
+  }
+
+  .product-detail__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4rem;
+    align-items: start;
+  }
+
+  @media (min-width: 750px) {
+    .product-detail__grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 6rem;
+    }
+  }
+
+  /* Image Gallery */
+  .product-detail__gallery {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .product-detail__featured-image-wrapper {
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: var(--card-corner-radius);
+    background: rgba(var(--color-foreground), 0.05);
+  }
+
+  .product-detail__featured-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .product-detail__thumbnails {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: 1rem;
+  }
+
+  .product-detail__thumbnail {
+    aspect-ratio: 1;
+    border: 2px solid transparent;
+    border-radius: var(--card-corner-radius);
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    background: rgba(var(--color-foreground), 0.05);
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .product-detail__thumbnail:hover {
+    border-color: var(--color-foreground);
+    transform: scale(1.05);
+  }
+
+  .product-detail__thumbnail.is-active {
+    border-color: var(--color-foreground);
+  }
+
+  .product-detail__thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* Product Info */
+  .product-detail__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .product-detail__meta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .product-detail__category {
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-accent);
+    font-weight: 600;
+  }
+
+  .product-detail__title {
+    margin: 0;
+    font-size: 3.2rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--color-foreground);
+  }
+
+  @media (max-width: 749px) {
+    .product-detail__title {
+      font-size: 2.4rem;
+    }
+  }
+
+  .product-detail__price-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .product-detail__price {
+    font-size: 2.4rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .product-detail__price-compare {
+    font-size: 1.8rem;
+    color: rgba(var(--color-foreground), 0.6);
+    text-decoration: line-through;
+  }
+
+  .product-detail__availability {
+    margin: 0.5rem 0;
+  }
+
+  .product-detail__status {
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .product-detail__status.in-stock {
+    color: #27ae60;
+  }
+
+  .product-detail__status.out-of-stock {
+    color: #e74c3c;
+  }
+
+  .product-detail__description {
+    font-size: 1.6rem;
+    line-height: 1.6;
+    color: var(--color-foreground);
+    opacity: 0.85;
+  }
+
+  .product-detail__description p {
+    margin: 0;
+  }
+
+  /* Specifications */
+  .product-detail__specs {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 2rem 0;
+    border-top: 1px solid rgba(var(--color-foreground), 0.1);
+    border-bottom: 1px solid rgba(var(--color-foreground), 0.1);
+  }
+
+  .spec-item {
+    display: grid;
+    grid-template-columns: 15rem 1fr;
+    gap: 2rem;
+  }
+
+  .spec-label {
+    font-weight: 600;
+    font-size: 1.4rem;
+    color: var(--color-foreground);
+  }
+
+  .spec-value {
+    font-size: 1.4rem;
+    color: rgba(var(--color-foreground), 0.85);
+    margin: 0;
+  }
+
+  .spec-list {
+    margin: 0;
+    padding-left: 2rem;
+  }
+
+  .spec-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  @media (max-width: 749px) {
+    .spec-item {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+  }
+
+  /* Form */
+  .product-detail__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .form-label {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .quantity-selector {
+    display: flex;
+    align-items: center;
+    border: 1px solid rgba(var(--color-foreground), 0.2);
+    border-radius: var(--inputs-radius);
+    width: fit-content;
+  }
+
+  .quantity-btn {
+    background: transparent;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-size: 1.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--color-foreground);
+    transition: background-color 0.2s ease;
+  }
+
+  .quantity-btn:hover {
+    background: rgba(var(--color-foreground), 0.05);
+  }
+
+  .quantity-input {
+    border: none;
+    background: transparent;
+    width: 5rem;
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .quantity-input:focus {
+    outline: none;
+  }
+
+  .product-detail__add-to-cart {
+    width: 100%;
+    padding: 1.5rem 2rem;
+    font-size: 1.6rem;
+  }
+
+  .product-detail__add-to-cart:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Tags */
+  .product-detail__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding-top: 1rem;
+  }
+
+  .product-tag {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background: rgba(var(--color-accent), 0.1);
+    color: var(--color-accent);
+    border-radius: 2rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Shipping Section */
+  .shipping-section {
+    background: var(--color-accent-1);
+  }
+
+  .shipping-section .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .shipping-section .page-width {
+      padding: 0 5rem;
+    }
+  }
+
+  .section-title {
+    font-size: 2.4rem;
+    font-weight: 600;
+    margin: 0 0 2rem 0;
+    text-align: center;
+  }
+
+  /* Related Products (Placeholder) */
+  .related-products .page-width {
+    max-width: var(--page-width);
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  @media screen and (min-width: 750px) {
+    .related-products .page-width {
+      padding: 0 5rem;
+    }
+  }
+
+  .related-products__placeholder {
+    text-align: center;
+    padding: 4rem 2rem;
+    background: rgba(var(--color-foreground), 0.02);
+    border-radius: var(--card-corner-radius);
+    color: rgba(var(--color-foreground), 0.6);
+  }
+
+  .related-products__placeholder p {
+    margin: 0;
+    font-size: 1.6rem;
+  }
+</style>
+
+<script>
+  // Image gallery thumbnail switching
+  const thumbnailButtons = document.querySelectorAll('.product-detail__thumbnail');
+  const featuredImage = document.getElementById('featured-image');
+
+  thumbnailButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const imageUrl = btn.dataset.image;
+      if (imageUrl && featuredImage) {
+        featuredImage.src = imageUrl;
+        featuredImage.alt = btn.querySelector('img')?.alt || 'Product image';
+
+        // Update active state
+        thumbnailButtons.forEach(b => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+      }
+    });
+  });
+
+  // Quantity selector
+  const quantityInput = document.getElementById('quantity') as HTMLInputElement;
+  const minusBtn = document.querySelector('.quantity-btn--minus') as HTMLButtonElement;
+  const plusBtn = document.querySelector('.quantity-btn--plus') as HTMLButtonElement;
+
+  if (minusBtn && plusBtn && quantityInput) {
+    minusBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const current = parseInt(quantityInput.value) || 1;
+      quantityInput.value = Math.max(1, current - 1).toString();
+    });
+
+    plusBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const current = parseInt(quantityInput.value) || 1;
+      quantityInput.value = Math.min(99, current + 1).toString();
+    });
+  }
+
+  // Add to cart form submission
+  const form = document.getElementById('product-form') as HTMLFormElement;
+  if (form) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const quantity = parseInt(quantityInput.value) || 1;
+      const productData = {
+        id: form.dataset.productId,
+        title: form.dataset.productTitle,
+        price: parseFloat(form.dataset.productPrice || '0'),
+        quantity: quantity
+      };
+
+      // Dispatch custom event for cart handling
+      // This will be caught by a global cart manager
+      const event = new CustomEvent('product:add-to-cart', {
+        detail: productData
+      });
+      window.dispatchEvent(event);
+
+      // Show feedback (placeholder - will be replaced with cart implementation)
+      alert(`Added ${quantity}x ${productData.title} to cart`);
+    });
+  }
+</script>
