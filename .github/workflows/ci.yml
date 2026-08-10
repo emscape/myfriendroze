@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  astro:
+    name: Astro build & test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: astro
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: astro/package-lock.json
+
+      - run: npm ci
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Build
+        # Exercises the full build pipeline, including the prebuild Firestore
+        # fetch (scripts/fetch-gallery.mjs) and the Astro adapter — this is
+        # exactly the class of break (missing adapter, misconfigured output
+        # mode) that shipped to production silently before CI existed.
+        # No Firestore credentials are available here; fetch-gallery.mjs is
+        # designed to fail non-fatally and fall back to the committed
+        # syncedGallery.js placeholder, so this step needs no secrets.
+        run: npm run build
+
+  functions:
+    name: Functions dependency check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firebase/functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: firebase/functions/package-lock.json
+
+      - run: npm ci
+        # No test suite exists yet for Cloud Functions (pre-existing gap,
+        # tracked in the project backlog, not introduced by this workflow).
+        # This is a floor, not a ceiling: it only catches dependency
+        # resolution breaks until real function tests land.
