@@ -37,6 +37,13 @@
     "enabled": true
   },
 
+  "ci_status_check": {
+    "enabled": true,
+    "poll_interval_seconds": 5,
+    "new_run_timeout_seconds": 60,
+    "completion_timeout_seconds": 180
+  },
+
   "dep_guard": {
     "enabled": true,
     "warn_patterns": [
