@@ -37,7 +37,7 @@ jobs:
         run: npm run build
 
   functions:
-    name: Functions dependency check
+    name: Functions install & test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -52,7 +52,12 @@ jobs:
           cache-dependency-path: firebase/functions/package-lock.json
 
       - run: npm ci
-        # No test suite exists yet for Cloud Functions (pre-existing gap,
-        # tracked in the project backlog, not introduced by this workflow).
-        # This is a floor, not a ceiling: it only catches dependency
-        # resolution breaks until real function tests land.
+
+      - name: Unit tests (vitest, coverage-gated for lib/)
+        # Coverage threshold (vitest.config.js) is scoped to lib/ only, not
+        # the whole functions/ tree — most existing files (index.js,
+        # orderConfirmation.js, etc.) predate this test infrastructure and
+        # have zero coverage today; retrofitting that is a separate, larger
+        # task. New pure-logic modules built for the Stripe payment work
+        # (lib/pricing.js etc.) are held to CLAUDE.md's QS1 >85% bar.
+        run: npm run test:coverage
