@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "prebuild": "node scripts/fetch-gallery.mjs",
+    "prebuild": "node scripts/fetch-gallery.mjs && node scripts/fetch-products.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
