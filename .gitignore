@@ -42,5 +42,15 @@ theme_export__ddsucculents-com-crave__*/
 
 # Misc (carried over from existing file)
 .memory-bank
-data/
 newsletter-subscribers.json
+
+# Real customer PII (import_customers.js's CSV export) — never commit.
+# Anchored to this exact path on purpose: a bare "data/" here previously
+# matched ANY directory named "data" anywhere in the repo, which silently
+# excluded astro/src/data/*.js (products.js, events.js, syncedGallery.js,
+# syncedProducts.js) — essential source files, not generated/secret data.
+# That gap meant the site's actual product/event data was never committed
+# in this repo's first-ever commit, and GitHub Actions CI was failing on
+# every push as a result (a fresh clone had no product data to build with)
+# without anyone noticing, since local runs still had the files on disk.
+firebase/functions/data/
