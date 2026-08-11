@@ -1140,66 +1140,54 @@ const products = syncedProducts;
     }
 
     try {
-      // Prepare order data according to OpenAPI contract
-      const orderData = {
+      // sku/qty only — price/name/description are never sent, since the
+      // server always prices from Firestore regardless of what's here
+      // (see firebase/functions/lib/pricing.js). Shipping address isn't
+      // collected here either — Stripe Checkout's hosted page asks for it.
+      const checkoutData = {
         customer: {
           email: customerEmail,
           name: customerName,
           ...(customerPhone && { phone: customerPhone })
         },
         items: [
-          {
-            sku: currentProduct.id,
-            name: currentProduct.title,
-            qty: 1,
-            price: currentProduct.price,
-            description: `Handcrafted ceramic planter`
-          }
+          { sku: currentProduct.id, qty: 1 }
         ],
-        total: currentProduct.price,
-        currency: 'USD',
         ...(orderNotes && { notes: orderNotes })
       };
 
-      // Call the order API
-      const response = await fetch('/api/orders', {
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(orderData)
+        body: JSON.stringify(checkoutData)
       });
 
       const result = await response.json();
 
-      if (response.ok) {
-        // Show success message
-        if (orderMessage) {
-          orderMessage.textContent = 'Order placed successfully! We\'ll be in touch soon to arrange payment and delivery.';
-          orderMessage.className = 'quick-order-form__message quick-order-form__message--success';
-          orderMessage.hidden = false;
-        }
-
-        // Reset form after a delay
-        setTimeout(() => {
-          closeQuickOrderModal();
-        }, 3000);
-
+      if (response.ok && result.url) {
+        // Redirect to Stripe's hosted Checkout page — payment happens
+        // there, not on this site. No success message needed here; the
+        // navigation itself is the confirmation.
+        window.location.href = result.url;
+        return;
       } else {
-        throw new Error(result.error || 'Failed to place order');
+        throw new Error(result.error || 'Failed to start checkout');
       }
 
     } catch (error) {
-      console.error('Order submission error:', error);
+      console.error('Checkout error:', error);
 
       // Show error message
       if (orderMessage) {
-        orderMessage.textContent = error.message || 'Failed to place order. Please try again or contact us directly.';
+        orderMessage.textContent = error.message || 'Failed to start checkout. Please try again or contact us directly.';
         orderMessage.className = 'quick-order-form__message quick-order-form__message--error';
         orderMessage.hidden = false;
       }
     } finally {
-      // Reset button
+      // Reset button — only matters if we didn't navigate away above
+      // (i.e. an error occurred), but harmless either way.
       if (submitButton && originalText) {
         submitButton.textContent = originalText;
         submitButton.disabled = false;
