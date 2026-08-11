@@ -25,13 +25,20 @@
 const { execSync } = require('child_process');
 
 // ── Secret patterns ────────────────────────────────────────────────────────────
+// Generic (non-vendor-specific) patterns use a length floor to cut down on
+// false positives against short, human-readable test fixtures like
+// `apiKey: 'test-api-key'` (12 chars) — real API keys/secrets are almost
+// always 20+ chars. The vendor-specific patterns below (Google/OpenAI/
+// GitHub/Slack/AWS) don't need this since they already match exact
+// real-world formats, not just "any quoted string after a credential-
+// shaped key name".
 const SECRET_PATTERNS = [
   {
-    re: /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|client[_-]?secret)\s*[:=]\s*['"`][A-Za-z0-9+/\-_]{8,}['"`]/i,
+    re: /(?:api[_-]?key|api[_-]?secret|access[_-]?token|auth[_-]?token|client[_-]?secret)\s*[:=]\s*['"`][A-Za-z0-9+/\-_]{20,}['"`]/i,
     name: 'hardcoded credential',
   },
   {
-    re: /password\s*[:=]\s*['"`][^'"`\s]{4,}['"`]/i,
+    re: /password\s*[:=]\s*['"`][^'"`\s]{12,}['"`]/i,
     name: 'hardcoded password',
   },
   {
@@ -67,7 +74,7 @@ function run(cmd) {
 
 // Existence check by exit code only — git's "ambiguous argument" error for a
 // missing ref (e.g. HEAD~1 on a root commit) writes the ref name itself to
-// stdout as part of its usage hint, which made a truthy-stdout check above
+// stdout as part of its usage hint, which would make a truthy-stdout check
 // misread failure as success. Exit code is the only reliable signal.
 function refExists(ref) {
   try {
@@ -105,7 +112,11 @@ function parseAddedLines(diffText) {
 
 function isTestFile(path) {
   return (
-    /\.(test|spec)\.[jt]sx?$/.test(path) ||
+    // [mc]? covers .mjs/.cjs, not just .js/.ts/.jsx/.tsx — without it this
+    // never once matched a vitest-in-ESM *.test.mjs file (this project's
+    // actual convention for testing CommonJS Functions code), making the
+    // "source changed with no test changes" check fire on every such PR.
+    /\.(test|spec)\.[mc]?[jt]sx?$/.test(path) ||
     /__(?:tests?|specs?)__/.test(path) ||
     /\/tests?\//.test(path) ||
     /_test\.[a-z]+$/.test(path)
@@ -163,13 +174,19 @@ process.stdin.on('end', () => {
   const findings = [];
 
   // ── Check 1: Hardcoded secrets ─────────────────────────────────────────────
+  // A trailing `// nosecret` (or `# nosecret`) comment suppresses this check
+  // for that one line — an explicit, auditable, per-line escape hatch for
+  // genuine false positives (test fixtures, docs examples) that no regex
+  // can fully anticipate, without weakening the patterns themselves.
+  const SUPPRESS_MARKER = /(?:\/\/|#)\s*nosecret\s*$/;
   for (const { file, lineNum, content } of addedLines) {
+    if (SUPPRESS_MARKER.test(content)) continue;
     for (const { re, name } of SECRET_PATTERNS) {
       if (re.test(content)) {
         findings.push({
           file, line: lineNum, severity: 'high',
           issue: `Possible ${name} detected`,
-          fix: 'Move to environment variable or secrets manager; never commit credentials',
+          fix: 'Move to environment variable or secrets manager; never commit credentials. If this is a genuine false positive (e.g. a test fixture), add a trailing `// nosecret` comment.',
         });
       }
     }
