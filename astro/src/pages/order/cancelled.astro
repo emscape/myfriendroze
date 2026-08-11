@@ -1,0 +1,38 @@
+---
+export const prerender = true;
+
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+---
+
+<Layout
+  title="Checkout Cancelled | myfriendroze"
+  description="Your checkout was cancelled — nothing was charged."
+>
+  <Header slot="header" currentPath="/shop" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">checkout cancelled</h1>
+    </div>
+  </section>
+
+  <section class="order-status section-padding">
+    <div class="page-width order-status__wrapper">
+      <p>No worries — nothing was charged. Your items are still there whenever you're ready.</p>
+      <a href="/shop" class="button button--primary">Back to Shop</a>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .order-status__wrapper {
+    max-width: 640px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .order-status__wrapper p {
+    margin-bottom: 1.5rem;
+  }
+</style>

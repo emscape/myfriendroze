@@ -1,0 +1,52 @@
+---
+export const prerender = true;
+
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+---
+
+<!--
+  Deliberately generic — no live order-status lookup by session_id.
+  Stripe's webhook (which actually creates the order) can arrive before or
+  after the browser gets redirected here; a live lookup risks a false
+  "order not found" flash if the webhook hasn't landed yet. A confirmation
+  email is the actual receipt.
+-->
+<Layout
+  title="Order Confirmed | myfriendroze"
+  description="Thank you for your order."
+>
+  <Header slot="header" currentPath="/shop" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">thank you!</h1>
+    </div>
+  </section>
+
+  <section class="order-status section-padding">
+    <div class="page-width order-status__wrapper">
+      <p>
+        Your order is confirmed and payment has gone through. A confirmation email is on its way
+        with all the details — that's your receipt, so keep an eye out for it.
+      </p>
+      <p>
+        Questions about your order? Reach out anytime at
+        <a href="mailto:myfriendroze@gmail.com">myfriendroze@gmail.com</a>.
+      </p>
+      <a href="/shop" class="button button--primary">Continue Shopping</a>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .order-status__wrapper {
+    max-width: 640px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .order-status__wrapper p {
+    margin-bottom: 1.5rem;
+  }
+</style>
