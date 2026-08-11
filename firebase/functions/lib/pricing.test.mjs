@@ -118,4 +118,14 @@ describe('buildLineItemsFromCatalog', () => {
 
     expect(() => buildLineItemsFromCatalog([], catalog)).toThrow(CatalogValidationError);
   });
+
+  it('throws when items is not an array at all', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+    });
+
+    expect(() => buildLineItemsFromCatalog(undefined, catalog)).toThrow(
+      CatalogValidationError
+    );
+  });
 });

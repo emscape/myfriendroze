@@ -114,3 +114,6 @@ exports.getShippingEstimate = onCall(async (request) => {
 
 // Newsletter signup Cloud Function
 exports.newsletterSignup = require('./newsletterSignup').newsletterSignup;
+
+// Stripe Checkout session creation
+exports.createCheckoutSession = require('./createCheckoutSession').createCheckoutSession;
