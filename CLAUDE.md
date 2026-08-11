@@ -70,6 +70,7 @@ No tool attribution in commit messages.
 - **Every feature, fix, or improvement** gets its own branch: `feature/name`, `fix/name`, `chore/name`.
 - **Never run `git commit` without explicit permission** from Emily in the current conversation.
 - Trivial one-line config changes may be committed to main only with explicit approval.
+- **Merge via GitHub, not locally**: after pushing a branch, open a PR (`gh pr create`) and merge it with `gh pr merge` or the GitHub UI — never `git merge` locally followed by a direct push to `main`. A local merge+push is invisible on GitHub (just an anonymous commit landing on `main`, no PR history, no inline checks-passed summary). Going through a real PR is also what's required for a future branch-protection rule to actually mean anything.
 
 ---
 

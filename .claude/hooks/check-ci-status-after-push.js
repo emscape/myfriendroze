@@ -98,8 +98,9 @@ process.stdin.on('end', () => {
   }
 
   const newRunTimeoutMs = (config.new_run_timeout_seconds ?? 60) * 1000;
-  const completionTimeoutMs = (config.completion_timeout_seconds ?? 180) * 1000;
   const pollIntervalMs = (config.poll_interval_seconds ?? 5) * 1000;
+  // completion_timeout_seconds (config.json) is intentionally unenforced —
+  // see the comment above the gh run watch call below for why.
 
   console.error(`[ci-status-check] Waiting for GitHub Actions run on ${branch}@${sha.slice(0, 7)}...`);
 
@@ -128,35 +129,25 @@ process.stdin.on('end', () => {
     process.exit(1);
   }
 
-  // Phase 2: wait for that specific run to finish.
-  let finalRun = matchedRun;
-  const phase2Deadline = Date.now() + completionTimeoutMs;
-  while (Date.now() < phase2Deadline && finalRun.status !== 'completed') {
-    sleepSync(pollIntervalMs);
-    const viewResult = tryRun(`gh run view ${finalRun.databaseId} --json status,conclusion`);
-    if (viewResult.ok) {
-      try {
-        finalRun = { ...finalRun, ...JSON.parse(viewResult.out) };
-      } catch {
-        // keep previous finalRun, retry next loop
-      }
-    }
-  }
+  // Phase 2: `gh run watch` does its own polling internally and exits
+  // non-zero on a failed conclusion with --exit-status — no need to
+  // hand-roll a second poll loop. It blocks until the run actually
+  // completes with no timeout flag of its own; execSync can't interrupt a
+  // blocking child process on a wall-clock deadline without spawning it
+  // separately and killing it, which isn't worth the complexity here —
+  // GitHub Actions jobs already have their own multi-hour cap, so this
+  // will always return eventually. completion_timeout_seconds (config.json)
+  // is currently unused anywhere in this file as a result — documented
+  // there for a future implementer, not silently deleted.
+  const watchResult = tryRun(`gh run watch ${matchedRun.databaseId} --exit-status`);
 
-  if (finalRun.status !== 'completed') {
-    console.error(
-      `[ci-status-check] GitHub Actions run ${finalRun.databaseId} for ${sha.slice(0, 7)} is still "${finalRun.status}" after ${completionTimeoutMs / 1000}s. You must check \`gh run view ${finalRun.databaseId}\` yourself before reporting success to the user.`
-    );
-    process.exit(1);
-  }
-
-  if (finalRun.conclusion === 'success') {
-    console.error(`[ci-status-check] ✅ CI PASSED for ${sha.slice(0, 7)} (run ${finalRun.databaseId}).`);
+  if (watchResult.ok) {
+    console.error(`[ci-status-check] ✅ CI PASSED for ${sha.slice(0, 7)} (run ${matchedRun.databaseId}).`);
     process.exit(0);
   }
 
   console.error(
-    `[ci-status-check] ❌ CI FAILED for ${sha.slice(0, 7)} (run ${finalRun.databaseId}, conclusion: ${finalRun.conclusion}). Run \`gh run view ${finalRun.databaseId} --log-failed\` to see why before telling the user this succeeded.`
+    `[ci-status-check] ❌ CI FAILED for ${sha.slice(0, 7)} (run ${matchedRun.databaseId}). Run \`gh run view ${matchedRun.databaseId} --log-failed\` to see why before telling the user this succeeded.`
   );
   process.exit(1);
 });
