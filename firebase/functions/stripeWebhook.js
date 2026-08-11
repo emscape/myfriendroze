@@ -17,6 +17,11 @@ const { sessionToOrderData } = require('./lib/orderFromSession');
 // which was creating an always-present-but-never-exercised module
 // instance that diluted coverage reporting for those two files.
 
+// Same env-var-driven convention as the original orderConfirmation.js —
+// no SITE_URL-style convention exists in this codebase for this either.
+const ORDERS_SENDER =
+  process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"MyFriendRoze Orders"}';
+
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -110,6 +115,7 @@ exports.stripeWebhook = onRequest(
         const templates = JSON.parse(brevoTemplates.value());
         await sendOrderConfirmationEmail({
           apiKey: brevoApiKey.value(),
+          sender: JSON.parse(ORDERS_SENDER),
           templateId: templates.orderConfirmation,
           email: orderData.customer.email,
           params: orderDataToConfirmationEmailParams(orderData),

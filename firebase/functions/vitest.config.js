@@ -12,21 +12,21 @@ const { defineConfig } = require('vitest/config');
 // Stripe payment work to the QS1 bar — add new files here as they gain
 // real test coverage, same pattern as lib/**'s pure logic modules.
 module.exports = defineConfig({
+  // Forced to a single fork: v8's coverage data gets collected per test
+  // worker, and when the same source file is loaded across multiple worker
+  // processes (e.g. stripeWebhook.js requiring lib/orderFromSession at
+  // module scope, while orderFromSession.test.mjs also imports it
+  // directly), the default multi-process pool's coverage merge under-
+  // reports — a file that's ~92% covered when its own test runs alone
+  // showed as ~28% in the full multi-worker suite. Single-fork execution
+  // sidesteps the merge entirely. This suite is small (well under a
+  // second), so the lost parallelism doesn't matter here.
+  pool: 'forks',
+  poolOptions: { forks: { singleFork: true } },
   test: {
-    // Forced to a single fork: v8's coverage data gets collected per test
-    // worker, and when the same source file is loaded across multiple
-    // worker processes (e.g. stripeWebhook.js requiring lib/orderFromSession
-    // at module scope, while orderFromSession.test.mjs also imports it
-    // directly), the default multi-process pool's coverage merge under-
-    // reports — a file that's ~92% covered when its own test runs alone
-    // showed as ~28% in the full multi-worker suite. Single-fork execution
-    // sidesteps the merge entirely. This suite is small (well under a
-    // second), so the lost parallelism doesn't matter here.
-    pool: 'forks',
-    poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: 'v8',
-      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js'],
+      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js', 'orderConfirmation.js'],
       thresholds: {
         lines: 85,
         functions: 85,

@@ -120,3 +120,6 @@ exports.createCheckoutSession = require('./createCheckoutSession').createCheckou
 
 // Stripe webhook — creates the order once payment is actually confirmed
 exports.stripeWebhook = require('./stripeWebhook').stripeWebhook;
+
+// Admin-only: resend an order confirmation email
+exports.resendOrderConfirmation = require('./orderConfirmation').resendOrderConfirmation;
