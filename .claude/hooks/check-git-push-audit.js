@@ -124,7 +124,11 @@ process.stdin.on('end', () => {
   }
 
   const cmd = (input?.tool_input?.command || '').trim();
-  if (!/\bgit\b.*\bpush\b/.test(cmd)) {
+  // Tighter than a bare substring match on purpose — the old
+  // `\bgit\b.*\bpush\b` matched any command whose text merely contained
+  // "push" anywhere (e.g. this very filename), not just actual `git push`
+  // invocations. Require "git push" as adjacent words.
+  if (!/(^|[;&|]\s*|\s)git\s+push(\s|$)/.test(cmd)) {
     process.exit(0); // not a push — allow
   }
 
