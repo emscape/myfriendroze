@@ -117,3 +117,6 @@ exports.newsletterSignup = require('./newsletterSignup').newsletterSignup;
 
 // Stripe Checkout session creation
 exports.createCheckoutSession = require('./createCheckoutSession').createCheckoutSession;
+
+// Stripe webhook — creates the order once payment is actually confirmed
+exports.stripeWebhook = require('./stripeWebhook').stripeWebhook;

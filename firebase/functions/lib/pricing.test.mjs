@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { buildLineItemsFromCatalog, CatalogValidationError } from './pricing.js';
+import { createRequire } from 'node:module';
+
+// require(), not a static ESM import — see orderFromSession.test.mjs for
+// why: pricing.js is also require()'d by createCheckoutSession.js, and
+// loading it a second way here caused v8's coverage merging to
+// under-report real coverage for this file.
+const require = createRequire(import.meta.url);
+const { buildLineItemsFromCatalog, CatalogValidationError } = require('./pricing.js');
 
 function catalogWith(entries) {
   return new Map(Object.entries(entries));
