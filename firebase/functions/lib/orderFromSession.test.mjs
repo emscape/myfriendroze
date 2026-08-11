@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { sessionToOrderData } from './orderFromSession.js';
+import { createRequire } from 'node:module';
+
+// Loaded via require(), not a static ESM import, so this test exercises the
+// exact same module instance stripeWebhook.js's CommonJS require() creates
+// — importing the same CJS file through both loaders creates two separate
+// instrumented instances, and v8 coverage merging across them was
+// under-reporting real coverage for this file (92% standalone vs. 60% in
+// the full suite) rather than properly unioning the two.
+const require = createRequire(import.meta.url);
+const { sessionToOrderData } = require('./orderFromSession.js');
 
 function baseSession(overrides = {}) {
   return {
