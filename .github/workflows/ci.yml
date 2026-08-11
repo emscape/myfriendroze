@@ -37,7 +37,7 @@ jobs:
         run: npm run build
 
   functions:
-    name: Functions dependency check
+    name: Functions install & test
     runs-on: ubuntu-latest
     defaults:
       run:
