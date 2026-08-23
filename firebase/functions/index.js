@@ -123,3 +123,4 @@ exports.stripeWebhook = require('./stripeWebhook').stripeWebhook;
 
 // Admin-only: resend an order confirmation email
 exports.resendOrderConfirmation = require('./orderConfirmation').resendOrderConfirmation;
+exports.ssrAstro = require('./ssrAstro').ssrAstro;
