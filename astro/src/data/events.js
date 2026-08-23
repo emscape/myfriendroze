@@ -20,7 +20,7 @@ export const events = [
     id: 'facebook-sunday-sale',
     title: 'Every Sunday 11am Sale in Plant Killers Purge on Facebook',
     description: null,
-    link: 'https://www.facebook.com/events/1074161793501349',
+    link: 'https://www.facebook.com/myfriendrozeceramics',
     linkLabel: 'Join us there to participate!',
     location: null,
     // null date = recurring / no expiry, always shown
