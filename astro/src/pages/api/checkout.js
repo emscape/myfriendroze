@@ -5,6 +5,7 @@
 // exercises the real path end-to-end.
 
 import { validateCheckoutRequest } from '../../lib/checkout-validation.js';
+import { buildCheckoutSessionUrl } from '../../lib/checkout-session-url.js';
 
 export const prerender = false;
 
@@ -27,13 +28,13 @@ export async function POST({ request }) {
     });
   }
 
-  const isDevelopment = import.meta.env.DEV;
-  const FIREBASE_PROJECT_ID = import.meta.env.FIREBASE_PROJECT_ID || 'myfriendroze-platform';
-  const FIREBASE_REGION = import.meta.env.FIREBASE_REGION || 'us-west1';
-
-  const url = isDevelopment
-    ? `http://127.0.0.1:5001/${FIREBASE_PROJECT_ID}/${FIREBASE_REGION}/createCheckoutSession`
-    : `https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/createCheckoutSession`;
+  const url = buildCheckoutSessionUrl({
+    isDevelopment: import.meta.env.DEV,
+    forwardedHost: request.headers.get('x-forwarded-host'),
+    host: request.headers.get('host'),
+    projectId: import.meta.env.FIREBASE_PROJECT_ID || 'myfriendroze-platform',
+    region: import.meta.env.FIREBASE_REGION || 'us-west1',
+  });
 
   try {
     const cloudFunctionResponse = await fetch(url, {

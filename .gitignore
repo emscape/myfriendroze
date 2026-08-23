@@ -7,12 +7,21 @@ dist/
 .astro/
 coverage/
 
+# Astro SSR build output copied into the ssrAstro Cloud Function at deploy
+# time (see firebase/functions/scripts/copy-astro-dist.js) — regenerated
+# every build, not source.
+firebase/functions/astro-dist/
+
 # Environment variables
 .env
 .env.local
 .env.production
 .env.production.local
 .env.*.local
+
+# Firebase Functions local secret resolution for the emulator (Stripe keys, etc.)
+# — doesn't match the .env* patterns above, needs its own entry.
+firebase/functions/.secret.local
 
 # Logs
 *.log

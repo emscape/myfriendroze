@@ -1,10 +1,27 @@
 {
   "hosting": {
-    "public": "dist",
+    "public": "astro/dist/client",
+    "predeploy": [
+      "npm --prefix astro run build"
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/stripe-webhook",
+        "function": { "functionId": "stripeWebhook", "region": "us-west1" }
+      },
+      {
+        "source": "/create-checkout-session-fn",
+        "function": { "functionId": "createCheckoutSession", "region": "us-west1" }
+      },
+      {
+        "source": "**",
+        "function": { "functionId": "ssrAstro", "region": "us-west1" }
+      }
     ]
   },
   "firestore": {
@@ -16,7 +33,11 @@
   "functions": {
     "source": "firebase/functions",
     "runtime": "nodejs22",
-    "codebase": "default"
+    "codebase": "default",
+    "predeploy": [
+      "npm --prefix astro run build",
+      "npm --prefix firebase/functions run build"
+    ]
   },
   "storage": {
     "rules": "firebase/storage.rules"
