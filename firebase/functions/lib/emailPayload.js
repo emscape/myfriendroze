@@ -11,6 +11,18 @@ function formatAddress(address) {
   return [...lines, ...tail].join(', ');
 }
 
+// Pre-formatted for direct interpolation into the Brevo template body
+// (`{{ params.ITEMS_TEXT }}`) rather than requiring template-side looping
+// syntax over ITEMS — keeps the tricky formatting logic here, where it's
+// unit-tested, instead of in Brevo's editor. <br> not \n: params get
+// substituted into already-built HTML, and a raw newline collapses to a
+// space in HTML rendering — it needs a real line-break tag to show up.
+function formatItemsText(items) {
+  return items
+    .map((item) => `${item.name} (x${item.qty}) — $${item.amountTotal.toFixed(2)}`)
+    .join('<br>');
+}
+
 /**
  * @param {ReturnType<typeof import('./orderFromSession.js').sessionToOrderData>} order
  */
@@ -21,6 +33,7 @@ function orderDataToConfirmationEmailParams(order) {
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
     CUSTOMER_NAME: order.customer.name || '',
     ITEMS: order.items,
+    ITEMS_TEXT: formatItemsText(order.items),
     SHIPPING_ADDRESS: formatAddress(order.shippingAddress),
   };
 }

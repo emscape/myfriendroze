@@ -34,8 +34,27 @@ describe('orderDataToConfirmationEmailParams', () => {
       ORDER_TOTAL: '$70.00',
       CUSTOMER_NAME: 'Buyer Name',
       ITEMS: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
+      ITEMS_TEXT: 'Blue Branches (x1) — $70.00',
       SHIPPING_ADDRESS: '123 Main St, Springfield, CA 90210, US',
     });
+  });
+
+  it('joins multiple items in ITEMS_TEXT with <br> — plain email templates render '
+    + 'params via string substitution into already-built HTML, so a real line break '
+    + 'needs an HTML tag, not just \\n, which browsers collapse to a space', () => {
+    const order = fullOrder({
+      items: [
+        { name: 'Blue Branches', qty: 1, amountTotal: 70 },
+        { name: 'Tiny Terracotta', qty: 2, amountTotal: 15 },
+      ],
+      total: 100,
+    });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe(
+      'Blue Branches (x1) — $70.00<br>Tiny Terracotta (x2) — $15.00'
+    );
   });
 
   it('formats a shipping address with line2 when present', () => {
