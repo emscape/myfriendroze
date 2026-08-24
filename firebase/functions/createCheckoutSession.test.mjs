@@ -48,7 +48,6 @@ describe('handleCreateCheckoutSession', () => {
       expect.objectContaining({
         mode: 'payment',
         customer_email: 'buyer@example.com',
-        automatic_payment_methods: { enabled: true },
         shipping_address_collection: { allowed_countries: ['US'] },
         success_url: `${SITE_ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_ORIGIN}/order/cancelled`,
@@ -66,6 +65,19 @@ describe('handleCreateCheckoutSession', () => {
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ url: 'https://checkout.stripe.com/pay/cs_test_123' });
+
+    // Regression guard: `automatic_payment_methods` is a Payment Intents API
+    // param, not valid on Checkout Session creation — passing it made every
+    // real checkout attempt fail with a live Stripe "parameter_unknown"
+    // error (caught via a real end-to-end request against test-mode Stripe,
+    // not by this mocked test — mocking sessionsCreate here means this
+    // suite alone can never catch an invalid-parameter error like that
+    // one; only a real Stripe call surfaces it). Checkout Sessions don't
+    // need this param at all — they use whatever payment methods are
+    // enabled in the Stripe Dashboard by default.
+    expect(sessionsCreate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ automatic_payment_methods: expect.anything() })
+    );
   });
 
   it('rejects non-POST requests', async () => {

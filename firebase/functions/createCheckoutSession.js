@@ -65,7 +65,6 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
     const session = await stripeClient.checkout.sessions.create({
       mode: 'payment',
       line_items: lineItems,
-      automatic_payment_methods: { enabled: true },
       shipping_address_collection: { allowed_countries: ['US'] },
       customer_email: customer.email,
       success_url: `${siteOrigin}/order/success?session_id={CHECKOUT_SESSION_ID}`,

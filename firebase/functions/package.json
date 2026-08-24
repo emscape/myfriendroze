@@ -23,6 +23,7 @@
     "clsx": "2.1.1",
     "cookie": "1.0.2",
     "devalue": "5.1.1",
+    "es-module-lexer": "1.7.0",
     "html-escaper": "3.0.3",
     "kleur": "4.1.5",
     "mrmime": "2.0.1",

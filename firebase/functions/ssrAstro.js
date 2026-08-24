@@ -49,7 +49,21 @@ function getApp() {
 // function in a different region than the two it's routed alongside for no
 // reason (extra cross-region latency talking to Firestore, inconsistent
 // deploy footprint).
-exports.ssrAstro = onRequest({ region: 'us-west1' }, async (req, res) => {
+//
+// invoker: 'public' — required, and worth explaining because the first
+// attempt at this got it backwards. Contrary to what the comment here used
+// to claim, Firebase Hosting's rewrite-to-function proxy has no privileged
+// identity that bypasses Cloud Run's invoker check — a rewrite target must
+// genuinely allow unauthenticated (allUsers) invocation, confirmed against
+// Google's own Cloud Run docs and by testing: every rewrite here 403'd
+// until each function was explicitly made public. Declaring it here (not
+// leaving it unset) makes `firebase deploy` actively manage this function's
+// invoker IAM policy going forward, so a future deploy can't silently drop
+// back to private and re-break the site the way the first deploy attempt
+// did (creating a function while org policy blocks the implicit public
+// grant fails outright — see the still-open project-level org-policy
+// exception this required, granted 2026-08-23).
+exports.ssrAstro = onRequest({ region: 'us-west1', invoker: 'public' }, async (req, res) => {
   const app = await getApp();
   app(req, res);
 });
