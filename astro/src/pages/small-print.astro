@@ -5,6 +5,7 @@ import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 
 const CLAIMS_EMAIL = 'myfriendroze@gmail.com';
+const SHIPPING_EMAIL = 'myfriendroze.store@gmail.com';
 ---
 
 <Layout
@@ -40,6 +41,11 @@ const CLAIMS_EMAIL = 'myfriendroze@gmail.com';
           <strong>Shipping Days:</strong> I aim to ship orders out on Mondays and Tuesdays. However,
           package drops can and probably will bleed into any other day of the week if my schedule
           spirals out of control.
+        </li>
+        <li>
+          <strong>Multiple Pieces:</strong> If purchasing multiple pieces, contact{' '}
+          <a href={`mailto:${SHIPPING_EMAIL}`}>{SHIPPING_EMAIL}</a> for a custom shipping estimate
+          prior to purchase — or else you're gonna pay double 😂
         </li>
       </ul>
 
