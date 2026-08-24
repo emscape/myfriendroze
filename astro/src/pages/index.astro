@@ -4,14 +4,11 @@ export const prerender = true;
 
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
-import { getUpcomingEvents } from '../data/events.js';
-
-const upcomingEvents = getUpcomingEvents();
 ---
 
 <Layout
   title="myfriendroze | Handcrafted Ceramics & Succulents"
-  description="Handcrafted ceramic planters and carefully curated succulents from myfriendroze ceramics and death's door succulents."
+  description="Handcrafted ceramic planters and carefully curated succulents from myfriendroze ceramics."
 >
 
   <!-- Custom header -->
@@ -22,7 +19,7 @@ const upcomingEvents = getUpcomingEvents();
     <div class="banner__media media">
       <img
         src="/banner1.png"
-        alt="myfriendroze ceramics & death's door succulents"
+        alt="myfriendroze ceramics"
         width="3840"
         height="auto"
         loading="eager"
@@ -35,48 +32,18 @@ const upcomingEvents = getUpcomingEvents();
   <section id="about" class="rich-text rich-text--full-width color-background-1 gradient section-padding">
     <div class="rich-text__wrapper rich-text__wrapper--center page-width">
       <div class="rich-text__blocks">
-        <h1 class="rich-text__heading rte inline-richtext h1">myfriendroze ceramics & death's door succulents</h1>
+        <h1 class="rich-text__heading rte inline-richtext h1">myfriendroze ceramics</h1>
         <div class="rich-text__text rte">
-          <p>Hello there, I'm Roze. I'm the owner and operator of DD Succulents, and myfriendroze. My name is not DD, but I answer to that now too. D.D stands for death's door- and as I like to say "buy them before I can kill them"!</p>
-          <p>You see, I love succulents and cacti (to death sometimes). I started hoarding (buying) succulents eons ago, but when the pandemic hit- my addiction kicked into full gear. Rather than go to rehab, I decided, this was my calling. At the same time, I "left" my career in the music industry, and also decided to finally dust off my art degree and start making things that would go with the plants. So now if you buy a planter you can say myfriendroze made it!</p>
+          <p>Hey there, I'm Roze, the hands and brain behind myfriendroze. I mainly create planters, vases, watering bells, and various other ceramic objects designed to keep your green roommates alive (or at least make their, and your, home look good).</p>
+          <p>My journey into clay was completely planned and not at all a panic response to the universe. When COVID arrived, it aggressively "ended" my career in the music industry. I realized that business was a little too dirty for me anyway, so I decided to trade it in for actual, literal dirt, and I started collecting (hoarding) and grudgingly selling succulents and cacti.</p>
+          <p>Upon realizing they needed better homes, I decided to dust off my art degree. Despite having a fine arts degree, I'd never actually thrown on the wheel before. I, however, still assumed that a background in sculpture meant it would be easy. Turns out it wasn't, I had to start completely from square one.</p>
+          <p>The hoarding plant phase evolved into "collecting" and making planters, and soon expanded into making vases, watering bells, and an array of other ceramic art pieces.</p>
+          <p>Today, myfriendroze has become the official marriage of those two worlds (and the divorce from the music industry). Every single piece is created by hand in my studio, and no two are exactly alike. I hope you enjoy them.</p>
+          <p>Now, when you make a purchase, you can officially say myfriendroze made it!</p>
         </div>
       </div>
     </div>
   </section>
-
-  <!-- Events Section -->
-  {upcomingEvents.length > 0 && (
-    <section class="rich-text rich-text--full-width color-background-1 gradient section-padding">
-      <div class="rich-text__wrapper rich-text__wrapper--center page-width">
-        <div class="rich-text__blocks">
-          <h2 class="rich-text__heading rte inline-richtext h1">myfriendroze & d.d. succulents in the wild</h2>
-          <div class="rich-text__text rte">
-            <ul>
-              {upcomingEvents.map((event) => (
-                <li>
-                  <strong>{event.title}</strong>
-                  {event.startDate && (
-                    <><br />
-                    {event.startDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
-                    {event.endDate && event.endDate.getTime() !== event.startDate.getTime() && (
-                      <> – {event.endDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</>
-                    )}
-                    {event.description && ` ${event.description}`}
-                    </>
-                  )}
-                  {event.location && <><br />{event.location}</>}
-                  {event.link && (
-                    <><br /><a href={event.link}>{event.linkLabel ?? event.link}</a></>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <a href="/events" class="events-link">see all events →</a>
-        </div>
-      </div>
-    </section>
-  )}
 
   <!-- Newsletter Section -->
   <section class="newsletter newsletter--full-width color-background-1 gradient section-padding">
@@ -217,18 +184,6 @@ const upcomingEvents = getUpcomingEvents();
   }
 
   .rich-text__text a:hover {
-    opacity: 0.7;
-  }
-
-  .events-link {
-    display: inline-block;
-    margin-top: 1.5rem;
-    font-size: calc(1.4rem * var(--font-body-scale));
-    color: var(--color-foreground);
-    text-decoration: underline;
-  }
-
-  .events-link:hover {
     opacity: 0.7;
   }
 

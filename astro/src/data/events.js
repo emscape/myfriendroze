@@ -1,4 +1,4 @@
-// Upcoming and recurring events for myfriendroze & d.d. succulents
+// Upcoming and recurring events for myfriendroze
 // Add new events here; past events are automatically hidden on the site.
 
 /**
@@ -20,7 +20,7 @@ export const events = [
     id: 'facebook-sunday-sale',
     title: 'Every Sunday 11am Sale in Plant Killers Purge on Facebook',
     description: null,
-    link: 'https://www.facebook.com/myfriendrozeceramics',
+    link: 'https://www.facebook.com/groups/plantkillers',
     linkLabel: 'Join us there to participate!',
     location: null,
     // null date = recurring / no expiry, always shown

@@ -1,4 +1,4 @@
-// Hand-curated gallery for myfriendroze & d.d. succulents.
+// Hand-curated gallery for myfriendroze.
 // No third-party Instagram integration — add a photo here whenever you post
 // one worth sharing on the site. Zero vendor cost, no view caps, no tokens.
 //
