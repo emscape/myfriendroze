@@ -10,9 +10,10 @@
 // it — predeploy hooks execute via the platform's default shell).
 //
 // IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie,
-// devalue, html-escaper, kleur, mrmime, send, server-destroy, unstorage,
-// zod as DIRECT dependencies (exact versions, not ^ranges), in addition to
-// astro itself: astro-dist/server/**/*.mjs imports these by bare specifier
+// devalue, es-module-lexer, html-escaper, kleur, mrmime, send,
+// server-destroy, unstorage, zod as DIRECT dependencies (exact versions,
+// not ^ranges), in addition to astro itself: astro-dist/server/**/*.mjs
+// imports these by bare specifier
 // (Astro's Node adapter leaves them external rather than bundling them —
 // confirmed by grepping the built output for non-relative imports). Firebase
 // never uploads local node_modules for a Functions deploy — Cloud Build
