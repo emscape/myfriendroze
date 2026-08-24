@@ -61,7 +61,7 @@ const upcomingEvents = getUpcomingEvents();
                     {event.endDate && event.endDate.getTime() !== event.startDate.getTime() && (
                       <> – {event.endDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</>
                     )}
-                    {event.description && <> {event.description}</>}
+                    {event.description && ` ${event.description}`}
                     </>
                   )}
                   {event.location && <><br />{event.location}</>}
