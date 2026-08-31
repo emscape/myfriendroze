@@ -88,7 +88,10 @@ const navigation = [
   .header__content {
     display: flex;
     align-items: center;
-    padding: 1rem 0;
+    /* top/bottom only — a horizontal `padding` shorthand here would override
+       the left/right padding .page-width sets on this same element */
+    padding-top: 1rem;
+    padding-bottom: 1rem;
     min-height: 6rem;
     gap: 1rem;
   }
