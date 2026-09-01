@@ -47,12 +47,15 @@ describe('fetchLiveProducts', () => {
   });
 
   it('queries only isActive products, leaning on the where clause rather than filtering client-side', async () => {
-    // fakeDb's where() itself asserts the query shape; a fetchLiveProducts
-    // that queried differently (e.g. no filter, filtered client-side after
-    // fetching everything) would throw here instead of returning cleanly.
+    // fakeDb's where() itself asserts the query shape and throws on a
+    // mismatch — a fetchLiveProducts that queried differently (e.g. no
+    // filter, filtered client-side after fetching everything) would
+    // reject this promise instead of resolving to the mapped product.
     const db = fakeDb([fakeDoc('abc', { title: 'Active', price: 10, isActive: true })]);
 
-    await expect(fetchLiveProducts(db)).resolves.not.toThrow();
+    await expect(fetchLiveProducts(db)).resolves.toEqual([
+      expect.objectContaining({ id: 'abc' }),
+    ]);
   });
 
   it('dedupes handle collisions the same way the build-time snapshot does', async () => {
