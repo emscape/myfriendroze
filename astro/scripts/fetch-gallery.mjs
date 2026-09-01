@@ -1,7 +1,11 @@
 // Build-time bridge: reads the `gallery` Firestore collection via the
-// Firebase Admin SDK and writes a static data file the Astro site can
-// import at build time. No live server, no HTTP endpoint — matches this
-// project's "static site, no SSR" non-goal for the gallery feature.
+// Firebase Admin SDK and writes a static data file, kept as a fallback for
+// CI (which has no Firestore credentials — see main()'s catch below) and
+// as the pre-SSR snapshot format. The live site itself now reads gallery
+// data on every request instead — see gallery-live.js/gallery.astro,
+// same pattern already applied to products (src/lib/products-live.js) to
+// fix content-freshness (admin-app uploads used to need a manual
+// rebuild+deploy to appear on the live site).
 //
 // Run automatically via the "prebuild" npm script before `astro build`.
 // Safe to run manually too: `node scripts/fetch-gallery.mjs`.
@@ -10,6 +14,7 @@ import admin from 'firebase-admin';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { docToGalleryPhoto } from '../src/lib/gallery-mapping.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,24 +31,11 @@ const serviceAccountPath = path.join(
   'serviceAccountKey.json'
 );
 
-/**
- * Pure transform from a Firestore gallery document to the shape
- * astro/src/data/gallery.js's GalleryPhoto typedef expects. No Firestore
- * calls here — this is what makes it unit-testable without a live/emulated
- * database.
- * @param {{ id: string, data: () => Record<string, any> }} doc
- * @returns {{ id: string, src: string, alt: string, caption: string|null, link: string|null }}
- */
-export function docToGalleryPhoto(doc) {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    src: data.imageUrl,
-    alt: data.altText || '',
-    caption: data.caption || null,
-    link: data.link || null,
-  };
-}
+// Re-exported for backward compatibility — this script's own tests
+// (fetch-gallery.test.mjs) import docToGalleryPhoto from here. The real
+// definition now lives in src/lib/gallery-mapping.js so gallery.astro's
+// live Firestore reads (gallery-live.js) share it instead of duplicating.
+export { docToGalleryPhoto };
 
 async function main() {
   if (!admin.apps.length) {
