@@ -30,6 +30,10 @@ export async function fetchLiveProducts(db) {
  * @returns {Promise<ReturnType<typeof docToProduct> | null>}
  */
 export async function fetchLiveProductByHandle(db, handle) {
+  // Skip the Firestore read entirely for a missing/empty handle (e.g. a
+  // malformed request) instead of fetching and mapping the whole active
+  // catalog just to fail to match anything.
+  if (!handle) return null;
   const products = await fetchLiveProducts(db);
   return products.find((p) => p.handle === handle) || null;
 }

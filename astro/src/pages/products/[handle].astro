@@ -12,11 +12,20 @@ import { getFirestoreDb } from '../../lib/firestore-admin.js';
 export const prerender = false;
 
 const { handle } = Astro.params;
-const product = await fetchLiveProductByHandle(getFirestoreDb(), handle);
 
-// Fallback if product not found (unknown handle, or deactivated since any
-// link to it was shared/cached — fetchLiveProductByHandle only matches
-// active products).
+// A transient Firestore/credentials failure here must not 500 the page —
+// treated the same as "not found" below (redirect to /shop) rather than
+// erroring, since there's nothing more useful to show either way.
+let product: Awaited<ReturnType<typeof fetchLiveProductByHandle>> = null;
+try {
+  product = await fetchLiveProductByHandle(getFirestoreDb(), handle);
+} catch (error) {
+  console.error(`[products/${handle}] Failed to fetch live product from Firestore — redirecting to /shop.`, error);
+}
+
+// Fallback if product not found: unknown handle, deactivated (any link to
+// it was shared/cached — fetchLiveProductByHandle only matches active
+// products), or the Firestore error caught above.
 if (!product) {
   return Astro.redirect('/shop');
 }

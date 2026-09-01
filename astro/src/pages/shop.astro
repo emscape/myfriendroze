@@ -12,7 +12,16 @@ import ShippingCalculator from '../components/ShippingCalculator.astro';
 import { fetchLiveProducts } from '../lib/products-live.js';
 import { getFirestoreDb } from '../lib/firestore-admin.js';
 
-const products = await fetchLiveProducts(getFirestoreDb());
+// A transient Firestore/credentials failure here must not take the whole
+// page down — falling back to an empty list keeps /shop serving (with a
+// "no products" state) instead of a 500 for every visitor until Firestore
+// recovers. Logged loudly since this is otherwise silent.
+let products: Awaited<ReturnType<typeof fetchLiveProducts>> = [];
+try {
+  products = await fetchLiveProducts(getFirestoreDb());
+} catch (error) {
+  console.error('[shop] Failed to fetch live products from Firestore — showing an empty list.', error);
+}
 ---
 
 <Layout

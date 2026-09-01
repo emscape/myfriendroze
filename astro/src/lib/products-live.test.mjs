@@ -107,4 +107,22 @@ describe('fetchLiveProductByHandle', () => {
 
     expect(product).toBeNull();
   });
+
+  it.each([undefined, null, ''])(
+    'returns null for a missing handle (%j) without querying Firestore at all',
+    async (handle) => {
+      // A db that throws the moment anything queries it — proves the
+      // guard actually skips the fetch for a missing handle, not just
+      // that the eventual result happens to be null.
+      const db = {
+        collection() {
+          throw new Error('fetchLiveProductByHandle should not query Firestore for a missing handle');
+        },
+      };
+
+      const product = await fetchLiveProductByHandle(db, handle);
+
+      expect(product).toBeNull();
+    }
+  );
 });
