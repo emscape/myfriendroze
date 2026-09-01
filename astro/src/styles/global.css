@@ -4,7 +4,17 @@
 :root {
   --color-accent-1: #f3f3f3;
   --color-accent-2: #e8e8e8;
-  --gradient-base-background: linear-gradient(180deg, rgba(240, 240, 240, 1), rgba(255, 255, 255, 1) 100%);
+  /* Was a leftover Shopify-theme default (a gray-to-white gradient) that
+     never actually appeared anywhere on the site — this stylesheet wasn't
+     loading at all until the global.css-not-loading fix. Once it started
+     loading, `.gradient` (used on <body> and several section elements,
+     see Layout.astro/shop.astro/index.astro/products/[handle].astro) beat
+     out those elements' own `background-color: var(--color-background)`
+     on specificity, replacing myfriendroze's actual cream background with
+     this gray/white gradient and creating a visible seam at section
+     boundaries. Resolving to the real site background keeps `.gradient`
+     working as a utility class without the unintended color swap. */
+  --gradient-base-background: var(--color-background);
 }
 
 /* Utility classes */
