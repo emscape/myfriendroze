@@ -22,6 +22,17 @@ try {
 } catch (error) {
   console.error('[shop] Failed to fetch live products from Firestore — showing an empty list.', error);
 }
+
+// Was hardcoded text ("in stock (3)"/"out of stock (0)") that silently
+// went stale the moment a product's stock status changed — computed from
+// the same live data the grid itself renders instead.
+const inStockCount = products.filter((p) => p.inStock).length;
+const outOfStockCount = products.filter((p) => !p.inStock).length;
+// Same staleness bug as above, for the price-bucket checkboxes below —
+// bucket bounds match the client-side filter script further down (0-50,
+// 50-100 inclusive of the upper bound).
+const priceUnder50Count = products.filter((p) => p.price >= 0 && p.price <= 50).length;
+const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100).length;
 ---
 
 <Layout
@@ -90,11 +101,11 @@ try {
                     <legend class="visually-hidden">availability</legend>
                     <label class="facets-label">
                       <input type="checkbox" name="availability" value="in-stock" class="facets-checkbox">
-                      <span class="facets-label-text">in stock (3)</span>
+                      <span class="facets-label-text">in stock ({inStockCount})</span>
                     </label>
                     <label class="facets-label">
                       <input type="checkbox" name="availability" value="out-of-stock" class="facets-checkbox">
-                      <span class="facets-label-text">out of stock (0)</span>
+                      <span class="facets-label-text">out of stock ({outOfStockCount})</span>
                     </label>
                   </fieldset>
                 </div>
@@ -114,11 +125,11 @@ try {
                     <legend class="visually-hidden">price</legend>
                     <label class="facets-label">
                       <input type="checkbox" name="price" value="0-50" class="facets-checkbox">
-                      <span class="facets-label-text">$0.00 - $50.00 (0)</span>
+                      <span class="facets-label-text">$0.00 - $50.00 ({priceUnder50Count})</span>
                     </label>
                     <label class="facets-label">
                       <input type="checkbox" name="price" value="50-100" class="facets-checkbox">
-                      <span class="facets-label-text">$50.00 - $100.00 (3)</span>
+                      <span class="facets-label-text">$50.00 - $100.00 ({price50to100Count})</span>
                     </label>
                   </fieldset>
                 </div>
