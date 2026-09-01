@@ -19,6 +19,7 @@ import admin from 'firebase-admin';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { docToProduct, dedupeHandles } from '../src/lib/product-mapping.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,78 +33,12 @@ const serviceAccountPath = path.join(
   'serviceAccountKey.json'
 );
 
-/**
- * Lowercases, strips punctuation, and hyphenates a title into a URL-safe
- * slug — matches the convention the old hand-written products.js already
- * used for its `handle` values (e.g. "Blue Branches" -> "blue-branches"),
- * since Firestore's product docs have no handle field of their own.
- * @param {string} title
- * @returns {string}
- */
-function slugify(title) {
-  return (title || '')
-    .toLowerCase()
-    .replace(/['’]/g, '') // contractions collapse: "you're" -> "youre"
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/**
- * Pure transform from a Firestore product document to the shape
- * astro/src/data/products.js's Product typedef expects. No Firestore calls
- * here — unit-testable without a live database, same as
- * fetch-gallery.mjs's docToGalleryPhoto.
- *
- * category/dimensions/features/tags/compareAtPrice default to safe empty
- * values rather than being invented — the Flutter admin app's Product model
- * doesn't collect those fields today, a known gap tracked separately, not
- * something to paper over with guessed data here.
- * @param {{ id: string, data: () => Record<string, any> }} doc
- */
-export function docToProduct(doc) {
-  const data = doc.data();
-  const images = Array.isArray(data.imageUrls) && data.imageUrls.length > 0
-    ? data.imageUrls
-    : data.imageUrl
-      ? [data.imageUrl]
-      : [];
-
-  return {
-    id: doc.id,
-    handle: slugify(data.title),
-    title: data.title || '',
-    description: data.description || '',
-    price: typeof data.price === 'number' ? data.price : 0,
-    compareAtPrice: null,
-    images,
-    tags: [],
-    inStock: data.isActive !== false,
-    category: '',
-    dimensions: '',
-    features: [],
-    weight: typeof data.weight === 'number' ? data.weight : 0,
-    seoTitle: '',
-    seoDescription: '',
-  };
-}
-
-/**
- * Disambiguates handle collisions (two products slugifying to the same
- * title) by suffixing every collision after the first with a short chunk
- * of its own Firestore doc id. Without this, getStaticPaths would silently
- * drop all but one product sharing a handle instead of erroring loudly.
- * @param {ReturnType<typeof docToProduct>[]} products
- */
-export function dedupeHandles(products) {
-  const seen = new Map();
-  return products.map((product) => {
-    const count = seen.get(product.handle) || 0;
-    seen.set(product.handle, count + 1);
-    if (count === 0) return product;
-    const suffix = product.id.slice(-4);
-    return { ...product, handle: `${product.handle}-${suffix}` };
-  });
-}
+// Re-exported for backward compatibility — this script's own tests
+// (fetch-products.test.mjs) import docToProduct/dedupeHandles from here.
+// The real definitions now live in src/lib/product-mapping.js so
+// shop.astro/products/[handle].astro's live Firestore reads (see
+// src/lib/products-live.js) can share them instead of duplicating.
+export { docToProduct, dedupeHandles };
 
 async function main() {
   if (!admin.apps.length) {

@@ -1,14 +1,18 @@
 ---
-export const prerender = true;
+// Rendered on demand (not prerendered) so every request reflects the
+// current Firestore data — an admin-app price/availability edit shows up
+// immediately instead of waiting for the next build+deploy. See
+// src/lib/products-live.js.
+export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 import ProductCard from '../components/ProductCard.astro';
 import ShippingCalculator from '../components/ShippingCalculator.astro';
-import { syncedProducts } from '../data/syncedProducts.js';
+import { fetchLiveProducts } from '../lib/products-live.js';
+import { getFirestoreDb } from '../lib/firestore-admin.js';
 
-// Use synced products instead of static products
-const products = syncedProducts;
+const products = await fetchLiveProducts(getFirestoreDb());
 ---
 
 <Layout
