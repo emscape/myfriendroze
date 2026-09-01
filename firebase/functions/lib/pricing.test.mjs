@@ -98,6 +98,31 @@ describe('buildLineItemsFromCatalog', () => {
     );
   });
 
+  // A sold-out product is still shown on the site (isActive: true) with a
+  // disabled "Sold Out" button — that's a UI courtesy, not a security
+  // boundary. A tampered/direct API request must be rejected here too,
+  // the same as an inactive product, so someone can't buy an out-of-stock
+  // item just by hitting the endpoint directly.
+  it('throws for a product marked out of stock, even though it is active', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Sold Out Planter', price: 70, isActive: true, inStock: false },
+    });
+
+    expect(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)).toThrow(
+      CatalogValidationError
+    );
+  });
+
+  it('allows a product with no inStock field at all (defaults to purchasable)', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+    });
+
+    expect(() =>
+      buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)
+    ).not.toThrow();
+  });
+
   it.each([0, -1, 21, 999])('throws for an out-of-bounds quantity of %i', (qty) => {
     const catalog = catalogWith({
       'sku-1': { title: 'Blue Branches', price: 70, isActive: true },

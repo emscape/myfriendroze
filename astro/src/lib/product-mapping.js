@@ -49,11 +49,15 @@ export function docToProduct(doc) {
     compareAtPrice: null,
     images,
     tags: [],
-    // Strict === true, not !== false: matches the where('isActive', '==',
-    // true) query every real caller already filters on — a doc missing
-    // the field entirely wouldn't match that query either, so it
-    // shouldn't read as in-stock here.
-    inStock: data.isActive === true,
+    // inStock is distinct from isActive: isActive gates whether the
+    // product is fetched/shown at all (the Firestore query itself filters
+    // on it); inStock is a visible-but-sold-out signal for products that
+    // are still active. Defaults to true so existing products with no
+    // inStock field set keep behaving as purchasable, no migration needed.
+    // (Not derived from isActive at all, strict or otherwise — a doc that
+    // reaches this point is already isActive by construction, since every
+    // real caller queries where('isActive', '==', true) first.)
+    inStock: data.inStock !== false,
     category: '',
     dimensions: '',
     features: [],

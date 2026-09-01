@@ -105,14 +105,28 @@ describe('docToProduct', () => {
     expect(product.weight).toBe(0);
   });
 
-  // Every real caller only ever passes docs already filtered by Firestore's
-  // own `where('isActive', '==', true)` query, so this never actually
-  // differs in practice today — but docToProduct is a general-purpose
-  // mapper, and its own semantics should still match that query's: a doc
-  // missing the field entirely does not match `== true` and must not be
-  // treated as in-stock just because it also isn't explicitly `false`.
-  it('treats a missing isActive field as not in stock, matching the where(isActive, ==, true) query semantics used everywhere this mapper is called', () => {
-    const doc = fakeDoc('abc', { title: 'No isActive Field' });
+  // inStock is a distinct concept from isActive: isActive controls whether
+  // a product is fetched/shown on the site at all (see the isActive==true
+  // Firestore query in main()); inStock controls whether a *visible*
+  // product can be purchased (shows a "Sold Out" badge/disabled button
+  // instead of disappearing entirely). Conflating them (inStock derived
+  // from isActive) was the bug — it made "visible but sold out" not
+  // representable at all.
+  it('defaults inStock to true when the field is absent', () => {
+    const doc = fakeDoc('abc', { title: 'No Stock Field Product', price: 10, isActive: true });
+
+    const product = docToProduct(doc);
+
+    expect(product.inStock).toBe(true);
+  });
+
+  it('reads inStock from its own Firestore field, independent of isActive — a visible (isActive: true) product can still be sold out', () => {
+    const doc = fakeDoc('abc', {
+      title: 'Sold Out But Visible',
+      price: 10,
+      isActive: true,
+      inStock: false,
+    });
 
     const product = docToProduct(doc);
 

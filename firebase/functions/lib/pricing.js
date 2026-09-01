@@ -51,6 +51,12 @@ function buildLineItemsFromCatalog(items, catalog) {
     if (product.isActive === false) {
       throw new CatalogValidationError('INACTIVE_PRODUCT', `Product is not active: ${sku}`);
     }
+    // A sold-out product can still be isActive (shown on the site with a
+    // disabled "Sold Out" button) — that UI state is a courtesy, not a
+    // security boundary, so it's enforced here too.
+    if (product.inStock === false) {
+      throw new CatalogValidationError('OUT_OF_STOCK', `Product is out of stock: ${sku}`);
+    }
     if (!Number.isInteger(qty) || qty < MIN_QTY || qty > MAX_QTY) {
       throw new CatalogValidationError(
         'INVALID_QTY',
