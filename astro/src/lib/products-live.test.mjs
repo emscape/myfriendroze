@@ -17,8 +17,14 @@ function fakeDb(docs) {
           return {
             async get() {
               return {
+                // Real Firestore equality queries only match docs where
+                // the field is literally the given value — a doc missing
+                // isActive entirely would NOT match `== true` and would
+                // be excluded, not included. Filtering on `!== false`
+                // here would incorrectly include those, diverging from
+                // production behavior.
                 docs: docs
-                  .filter((d) => d.data().isActive !== false)
+                  .filter((d) => d.data().isActive === true)
                   .map((d) => ({ id: d.id, data: d.data })),
               };
             },
