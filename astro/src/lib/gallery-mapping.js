@@ -34,8 +34,12 @@ export function docToGalleryPhoto(doc) {
     // Falls back to '' (not null) on an invalid/missing value — src is
     // typed as a plain string, never nullable, unlike link below.
     src: sanitizeHttpUrl(data.imageUrl, ''),
-    alt: data.altText || '',
-    caption: data.caption || null,
+    // `|| ''`/`|| null` alone only replace *falsy* values — a non-string
+    // truthy value (a stray number, object, array from bad Firestore
+    // data) would otherwise pass straight through and violate the
+    // declared string/string|null shape. typeof-guard first.
+    alt: typeof data.altText === 'string' ? data.altText : '',
+    caption: typeof data.caption === 'string' ? data.caption : null,
     link: sanitizeHttpUrl(data.link, null),
   };
 }

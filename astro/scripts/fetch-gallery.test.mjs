@@ -58,6 +58,37 @@ describe('docToGalleryPhoto', () => {
     expect(photo.alt).toBe('');
   });
 
+  // Firestore data isn't trusted to actually match the declared shape —
+  // a non-string altText/caption (e.g. a stray number) must not leak
+  // through into rendered HTML/the build snapshot as-is.
+  it.each([42, { nested: true }, ['a', 'b'], true])(
+    'falls back to an empty string when altText is a non-string value (%j)',
+    (badAlt) => {
+      const doc = fakeDoc('abc123', {
+        imageUrl: 'https://example.com/photo.jpg',
+        altText: badAlt,
+      });
+
+      const photo = docToGalleryPhoto(doc);
+
+      expect(photo.alt).toBe('');
+    }
+  );
+
+  it.each([42, { nested: true }, ['a', 'b'], true])(
+    'falls back to null when caption is a non-string value (%j)',
+    (badCaption) => {
+      const doc = fakeDoc('abc123', {
+        imageUrl: 'https://example.com/photo.jpg',
+        caption: badCaption,
+      });
+
+      const photo = docToGalleryPhoto(doc);
+
+      expect(photo.caption).toBeNull();
+    }
+  );
+
   // photo.link is rendered directly into an <a href> on the gallery page.
   // Firestore data isn't a trusted input — a javascript: (or other
   // non-http(s)) URL landing there would be an XSS vector on click.

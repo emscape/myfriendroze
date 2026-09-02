@@ -21,8 +21,12 @@ function fakeDb(docs) {
               return {
                 async get() {
                   return {
+                    // Real Firestore equality queries only match docs
+                    // where the field is literally the given value — a
+                    // doc missing isActive entirely would NOT match
+                    // `== true` and would be excluded, not included.
                     docs: docs
-                      .filter((d) => d.data().isActive !== false)
+                      .filter((d) => d.data().isActive === true)
                       .map((d) => ({ id: d.id, data: d.data })),
                   };
                 },
@@ -57,11 +61,14 @@ describe('fetchLiveGalleryPhotos', () => {
   });
 
   it('queries only isActive photos, ordered newest first, via the where/orderBy clauses rather than client-side filtering', async () => {
-    // fakeDb's where()/orderBy() themselves assert the query shape; a
-    // fetchLiveGalleryPhotos that queried differently would throw here.
+    // fakeDb's where()/orderBy() themselves assert the query shape and
+    // throw on a mismatch — a fetchLiveGalleryPhotos that queried
+    // differently would reject this promise instead of resolving.
     const db = fakeDb([fakeDoc('abc', { imageUrl: 'https://example.com/a.jpg', isActive: true })]);
 
-    await expect(fetchLiveGalleryPhotos(db)).resolves.not.toThrow();
+    await expect(fetchLiveGalleryPhotos(db)).resolves.toEqual([
+      expect.objectContaining({ id: 'abc' }),
+    ]);
   });
 
   it('returns an empty array when there are no active photos', async () => {
