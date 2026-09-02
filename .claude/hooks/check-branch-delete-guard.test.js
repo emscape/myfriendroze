@@ -93,6 +93,41 @@ test('extractDeletedBranches', async (t) => {
     assert.deepEqual(branches('env node -e "console.log(1)"'), []);
   });
 
+  await t.test('env -u NAME (separate-argument unset flag) is stripped', () => {
+    assert.deepEqual(branches('env -u GIT_SSH_COMMAND git push origin --delete branch14'), ['branch14']);
+  });
+
+  await t.test('env --unset=NAME (combined long-flag form) is stripped', () => {
+    assert.deepEqual(branches('env --unset=GIT_SSH_COMMAND git push origin --delete branch15'), ['branch15']);
+  });
+
+  await t.test('env -C DIR (change-directory flag) is stripped', () => {
+    assert.deepEqual(branches('env -C /tmp git push origin --delete branch16'), ['branch16']);
+  });
+
+  await t.test('a mix of env flags and VAR=value assignments in one prefix is stripped', () => {
+    assert.deepEqual(
+      branches('env -i GIT_TRACE=1 -u GIT_SSH_COMMAND git push origin --delete branch17'),
+      ['branch17']
+    );
+  });
+
+  await t.test('a double-quoted --delete branch argument is unquoted before matching', () => {
+    assert.deepEqual(branches('git push origin --delete "branch18"'), ['branch18']);
+  });
+
+  await t.test('a single-quoted --delete branch argument is unquoted before matching', () => {
+    assert.deepEqual(branches("git push origin --delete 'branch19'"), ['branch19']);
+  });
+
+  await t.test('a fully double-quoted :branch refspec token is detected and unquoted', () => {
+    assert.deepEqual(branches('git push origin ":branch20"'), ['branch20']);
+  });
+
+  await t.test('a fully single-quoted :branch refspec token is detected and unquoted', () => {
+    assert.deepEqual(branches("git push origin ':branch21'"), ['branch21']);
+  });
+
   await t.test('an unrelated command is not flagged', () => {
     assert.deepEqual(branches('git status'), []);
   });

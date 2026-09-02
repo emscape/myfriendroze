@@ -113,34 +113,68 @@ function tryRun(cmd) {
 // space-containing values in practice) case.
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s*/;
 
-// Strips a leading `env` invocation and/or any number of leading
-// `VAR=value` assignments so `GIT_TRACE=1 git push origin --delete branch`
-// and `env GIT_TRACE=1 git push origin --delete branch` are recognized as
-// the git push invocations they are, instead of being skipped because the
-// segment doesn't start with the literal string "git". Both forms are
-// ordinary ways to set an env var for one command and are common enough
-// (debugging a push, CI scripts) that skipping them would be a real,
-// easy-to-hit bypass of the guard rather than a theoretical one.
+// `env`'s own option surface, beyond the bare command it's stripping down
+// to. GNU env accepts several flags before the VAR=value assignments and
+// the real command — a delete push prefixed with any of these (most
+// plausibly `-u`/`--unset`, e.g. `env -u GIT_SSH_COMMAND git push ...`)
+// would otherwise leave a segment that doesn't start with "git" and never
+// gets recognized as a push at all.
+const ENV_NO_ARG_FLAG = /^(?:-i|--ignore-environment|-0|--null|-v|--debug)\s*/;
+const ENV_ARG_FLAG_SEPARATE = /^(?:-u|--unset|-C|--chdir|-S|--split-string)\s+(?:"[^"]*"|'[^']*'|\S*)\s*/;
+const ENV_ARG_FLAG_COMBINED = /^(?:--unset|--chdir|--split-string)=(?:"[^"]*"|'[^']*'|\S*)\s*/;
+const ENV_END_OPTIONS = /^--\s+/;
+
+// Strips a leading `env` invocation (including its own flags, with or
+// without a value) and/or any number of leading `VAR=value` assignments so
+// `GIT_TRACE=1 git push origin --delete branch` and
+// `env -u GIT_SSH_COMMAND git push origin --delete branch` are both
+// recognized as the git push invocations they are, instead of being
+// skipped because the segment doesn't start with the literal string
+// "git". Both forms are ordinary ways to adjust the environment for one
+// command and are common enough (debugging a push, CI scripts) that
+// skipping them would be a real, easy-to-hit bypass of the guard rather
+// than a theoretical one.
 function stripLeadingEnvPrefix(segment) {
-  let s = segment.replace(/^env\s+(-i\s+)?/, '');
-  // Loop (rather than a single repeated group) so each assignment is
-  // matched and consumed one at a time, regardless of how many precede the
-  // real command.
+  let s = segment.replace(/^env(?=\s|$)\s*/, '');
+  // Loop (rather than a single repeated group) so any mix, order, and
+  // count of env flags and VAR=value assignments preceding the real
+  // command are all consumed, not just the first one.
   let prev;
   do {
     prev = s;
-    s = s.replace(ENV_ASSIGNMENT, '');
+    s = s
+      .replace(ENV_END_OPTIONS, '')
+      .replace(ENV_ARG_FLAG_COMBINED, '')
+      .replace(ENV_ARG_FLAG_SEPARATE, '')
+      .replace(ENV_NO_ARG_FLAG, '')
+      .replace(ENV_ASSIGNMENT, '');
   } while (s !== prev);
   return s;
 }
 
+// Whitespace-splitting a shell command doesn't understand quoting, so a
+// quoted argument like `"branch"` or `':branch'` keeps its literal quote
+// characters as part of the token. Strips one matching pair of surrounding
+// quotes, if present, before a captured name is compared against anything.
+function stripSurroundingQuotes(token) {
+  if (token.length >= 2) {
+    const first = token[0];
+    const last = token[token.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return token.slice(1, -1);
+    }
+  }
+  return token;
+}
+
 // `git push origin :refs/heads/some-branch` is equivalent to
 // `git push origin :some-branch` — git accepts the fully-qualified ref on
-// either side of a refspec. Strip the refs/heads/ prefix so a
-// fully-qualified delete still matches `pr.baseRefName`, which GitHub
-// always reports as the bare branch name.
+// either side of a refspec. Strips a quoted token down to its bare value
+// first (see stripSurroundingQuotes), then the refs/heads/ prefix, so a
+// quoted and/or fully-qualified delete still matches `pr.baseRefName`,
+// which GitHub always reports as the bare, unquoted branch name.
 function normalizeBranchName(name) {
-  return name.replace(/^refs\/heads\//, '');
+  return stripSurroundingQuotes(name).replace(/^refs\/heads\//, '');
 }
 
 function extractDeletedBranches(fullCmd) {
@@ -168,8 +202,12 @@ function extractDeletedBranches(fullCmd) {
     // class — git ref names permit a wide range of characters (`@`, `+`,
     // etc.; see git-check-ref-format), and a narrower class here would
     // silently fail to extract a real, valid branch name, defeating the
-    // guard for exactly the kind of ref it should be catching.
-    for (const m of segment.matchAll(/(?:^|\s):(\S+)/g)) {
+    // guard for exactly the kind of ref it should be catching. The colon
+    // may also be immediately preceded by an opening quote (a quoted
+    // refspec token, e.g. `":branch"`) rather than only whitespace/start
+    // of segment — without allowing for that, the colon itself is never
+    // found and the whole delete goes undetected, not just misparsed.
+    for (const m of segment.matchAll(/(?:^|\s)["']?:(\S+?)["']?(?=\s|$)/g)) {
       branches.add(normalizeBranchName(m[1]));
     }
   }
