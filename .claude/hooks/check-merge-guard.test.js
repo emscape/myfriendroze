@@ -297,6 +297,27 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('bash -c "gh pr view 27"'), false);
   });
 
+  await t.test('a multi-line command with the merge on the second line', () => {
+    assert.equal(blocked('echo hi\ngh pr merge 27'), true);
+  });
+
+  await t.test('a multi-line command with an implicit push reached via a checkout on an earlier line', () => {
+    assert.equal(blocked('git switch main\ngit push origin'), true);
+  });
+
+  await t.test('a newline inside a quoted -m argument is still protected from splitting', () => {
+    // Regression guard for the fix's own known interaction: newline
+    // handling must only apply when quote === null, same as every other
+    // separator character, or this would reopen the original
+    // commit-message false-positive for any multi-line message.
+    const cmd = 'git commit -m "line one\nline two: e.g. gh pr merge 27 is just an example"';
+    assert.equal(blocked(cmd), false);
+  });
+
+  await t.test('a multi-line command where only the first line is a merge is not missed', () => {
+    assert.equal(blocked('gh pr merge 27\necho done'), true);
+  });
+
   await t.test('an env-prefixed command that is not a merge is not flagged', () => {
     assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
   });

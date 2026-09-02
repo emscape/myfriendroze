@@ -124,7 +124,13 @@ function segmentsOf(fullCmd) {
       i++; // consume the second character of the two-char operator too
       continue;
     }
-    if (ch === ';' || ch === '&' || ch === '|') {
+    // A newline is an ordinary command separator too — a Bash tool call
+    // can legitimately be a multi-line command string, and the shell runs
+    // each line as its own statement exactly like `;` would. Without
+    // this, `echo hi\ngh pr merge 27` was one un-split segment starting
+    // with "echo", never "gh", so the merge on the second line was
+    // invisible to every anchored check.
+    if (ch === ';' || ch === '&' || ch === '|' || ch === '\n') {
       segments.push(current);
       current = '';
       continue;
