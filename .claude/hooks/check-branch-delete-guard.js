@@ -68,32 +68,53 @@ function tryRun(cmd) {
 
 // Pulls every branch name a `git push` invocation would delete.
 //
+// Splits the whole command into shell-chained segments *first*, then
+// inspects each segment independently for one that actually starts with
+// `git push` — rather than searching the raw string for the first "git
+// push" substring and taking everything up to the next operator. The
+// search-then-slice approach broke on something like
+// `echo "git push" && git push origin --delete some-branch`: the regex
+// matched inside the quoted echo argument, the segment split then handed
+// back `git push"` as the "push segment" (no --delete flag on it), and
+// the hook concluded there was nothing to check — silently allowing the
+// real delete later in the same command to slip through unexamined.
+//
 // Handles `--delete`/`-d` in any position relative to the remote (e.g.
 // both `git push origin --delete branch` and `git push --delete origin
-// branch` are valid git syntax and equally common) by tokenizing the push
-// segment and treating every non-flag token after the first (the remote)
-// as a branch to delete — rather than assuming a fixed "remote, then
+// branch` are valid git syntax and equally common) by tokenizing each
+// push segment and treating every non-flag token after the remote as a
+// branch to delete — rather than assuming a fixed "remote, then
 // --delete, then branches" shape, which silently matched zero branches
 // (and so silently allowed the delete) for the flag-before-remote form.
 // Also handles the older `:branch` refspec shorthand independently, since
 // that doesn't need a --delete/-d flag at all.
 //
-// Known limitation: if a remote is omitted entirely (relying on
-// push.default / an upstream tracking branch), the first branch name
-// would be mistaken for the remote and skipped. Rare enough in practice
-// (this codebase's own workflow always names the remote explicitly) not
-// to be worth the added complexity of distinguishing a remote name from a
-// branch name with no ground truth to check against.
+// Known limitations:
+//   - Segment splitting is not quote-aware, so a chain operator sitting
+//     inside a quoted string (rare, and not the scenario above — that one
+//     only involved "git push" itself inside quotes) can still split
+//     mid-string. Any resulting false-positive segment errs toward
+//     blocking, not toward silently allowing a real delete, which is the
+//     safe direction for a security check.
+//   - If a remote is omitted entirely (relying on push.default / an
+//     upstream tracking branch), the first branch name would be mistaken
+//     for the remote and skipped. Rare enough in practice (this
+//     codebase's own workflow always names the remote explicitly) not to
+//     be worth the added complexity of distinguishing a remote name from
+//     a branch name with no ground truth to check against.
 function extractDeletedBranches(fullCmd) {
   const branches = new Set();
 
-  const pushMatch = fullCmd.match(/\bgit\s+push\b.*/);
-  if (pushMatch) {
-    // Stop at the next shell operator so trailing `&& something-else`
-    // doesn't get swallowed as part of this push invocation's arguments.
-    const segment = pushMatch[0].split(/&&|\|\||[;&|]/)[0];
-    const tokens = segment.trim().split(/\s+/); // tokens[0] === 'push'
-    const rest = tokens.slice(1);
+  const segments = fullCmd.split(/&&|\|\||[;&|]/);
+  for (const rawSegment of segments) {
+    const segment = rawSegment.trim();
+    // Anchored at the start of the segment — "contains git push" isn't
+    // enough, since that also matches inside an unrelated quoted string
+    // that merely mentions it.
+    if (!/^git\s+push\b/.test(segment)) continue;
+
+    const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
+    const rest = tokens.slice(2);
     const hasDeleteFlag = rest.some((t) => t === '--delete' || t === '-d');
     if (hasDeleteFlag) {
       const nonFlags = rest.filter((t) => !t.startsWith('-'));
@@ -101,7 +122,7 @@ function extractDeletedBranches(fullCmd) {
     }
 
     // `git push origin :branch-name` — a leading bare colon means
-    // "delete", scoped to the same segment (before any shell chaining).
+    // "delete", scoped to this same segment.
     for (const m of segment.matchAll(/(?:^|\s):([A-Za-z0-9_./-]+)(?=\s|$)/g)) {
       branches.add(m[1]);
     }
