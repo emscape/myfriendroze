@@ -34,7 +34,7 @@ function dollarsToCents(amount) {
  * ignored entirely — they are never read, let alone trusted.
  *
  * @param {{sku: string, qty: number}[]} items
- * @param {Map<string, {title: string, price: number, isActive: boolean}>} catalog
+ * @param {Map<string, {title: string, price: number, isActive: boolean, inStock?: boolean}>} catalog
  * @returns {Array<{price_data: {currency: string, product_data: {name: string}, unit_amount: number}, quantity: number}>}
  * @throws {CatalogValidationError}
  */

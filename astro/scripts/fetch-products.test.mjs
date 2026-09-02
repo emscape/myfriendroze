@@ -132,6 +132,26 @@ describe('docToProduct', () => {
 
     expect(product.inStock).toBe(false);
   });
+
+  // Fails safe the same way pricing.js's checkout boundary does — a
+  // present-but-malformed inStock value must not silently read as
+  // purchasable, or the site could show an item as in stock while
+  // checkout (correctly) rejects the very same doc as out of stock.
+  it.each(['false', null, {}, [], 0])(
+    'treats a present but non-boolean inStock (%j) as out of stock, not in stock',
+    (badInStock) => {
+      const doc = fakeDoc('abc', {
+        title: 'Malformed Stock Field',
+        price: 10,
+        isActive: true,
+        inStock: badInStock,
+      });
+
+      const product = docToProduct(doc);
+
+      expect(product.inStock).toBe(false);
+    }
+  );
 });
 
 describe('dedupeHandles', () => {
