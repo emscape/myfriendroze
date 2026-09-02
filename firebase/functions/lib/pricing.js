@@ -34,7 +34,7 @@ function dollarsToCents(amount) {
  * ignored entirely — they are never read, let alone trusted.
  *
  * @param {{sku: string, qty: number}[]} items
- * @param {Map<string, {title: string, price: number, isActive: boolean}>} catalog
+ * @param {Map<string, {title: string, price: number, isActive: boolean, inStock?: boolean}>} catalog
  * @returns {Array<{price_data: {currency: string, product_data: {name: string}, unit_amount: number}, quantity: number}>}
  * @throws {CatalogValidationError}
  */
@@ -48,8 +48,25 @@ function buildLineItemsFromCatalog(items, catalog) {
     if (!product) {
       throw new CatalogValidationError('UNKNOWN_SKU', `No product found for sku: ${sku}`);
     }
-    if (product.isActive === false) {
+    // Fail closed: this is a checkout security boundary (the caller fetches
+    // a product doc directly by sku, with no isActive==true query filter of
+    // its own — this check is the only thing standing between a request
+    // and buying an inactive product), so isActive must be the literal
+    // boolean true. A missing field, a truthy-but-wrong value, or anything
+    // else that merely isn't `=== false` must not be treated as active.
+    if (product.isActive !== true) {
       throw new CatalogValidationError('INACTIVE_PRODUCT', `Product is not active: ${sku}`);
+    }
+    // A sold-out product can still be isActive (shown on the site with a
+    // disabled "Sold Out" button) — that UI state is a courtesy, not a
+    // security boundary, so it's enforced here too. Unlike isActive above,
+    // a *missing* inStock field deliberately still defaults to purchasable
+    // (matches product-mapping.js's docToProduct — no admin-app migration
+    // needed for existing products) — but a *present* value that isn't a
+    // real boolean is malformed data, not "no opinion", and must not
+    // silently fall through to purchasable either.
+    if (product.inStock === false || (product.inStock !== undefined && typeof product.inStock !== 'boolean')) {
+      throw new CatalogValidationError('OUT_OF_STOCK', `Product is out of stock: ${sku}`);
     }
     if (!Number.isInteger(qty) || qty < MIN_QTY || qty > MAX_QTY) {
       throw new CatalogValidationError(

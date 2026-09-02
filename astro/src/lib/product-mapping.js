@@ -49,11 +49,20 @@ export function docToProduct(doc) {
     compareAtPrice: null,
     images,
     tags: [],
-    // Strict === true, not !== false: matches the where('isActive', '==',
-    // true) query every real caller already filters on — a doc missing
-    // the field entirely wouldn't match that query either, so it
-    // shouldn't read as in-stock here.
-    inStock: data.isActive === true,
+    // inStock is distinct from isActive: isActive gates whether the
+    // product is fetched/shown at all (the Firestore query itself filters
+    // on it); inStock is a visible-but-sold-out signal for products that
+    // are still active. Defaults to true only when the field is genuinely
+    // absent, so existing products with no inStock field set keep behaving
+    // as purchasable with no migration needed — but a *present* value that
+    // isn't a real boolean fails safe to false (out of stock), matching
+    // firebase/functions/lib/pricing.js's checkout-boundary check. Without
+    // this, a malformed doc could show as purchasable here while checkout
+    // correctly rejects the very same doc as out of stock.
+    // (Not derived from isActive at all, strict or otherwise — a doc that
+    // reaches this point is already isActive by construction, since every
+    // real caller queries where('isActive', '==', true) first.)
+    inStock: data.inStock === undefined ? true : data.inStock === true,
     category: '',
     dimensions: '',
     features: [],
