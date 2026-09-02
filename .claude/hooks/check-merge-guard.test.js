@@ -261,6 +261,14 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git checkout -b fix/some-feature && git push origin', onFeatureBranch), false);
   });
 
+  await t.test('git switch "main" (quoted) then an implicit push is still blocked', () => {
+    assert.equal(blocked('git switch "main" && git push origin'), true);
+  });
+
+  await t.test('git checkout -B "master" (quoted, force-create) then a local merge is still blocked', () => {
+    assert.equal(blocked('git checkout -B "master" && git merge fix/some-branch'), true);
+  });
+
   await t.test('an env-prefixed command that is not a merge is not flagged', () => {
     assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
   });

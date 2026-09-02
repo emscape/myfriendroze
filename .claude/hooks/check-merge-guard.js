@@ -316,9 +316,16 @@ function checkoutTarget(segment) {
   const tokens = m[1].split(/\s+/).filter(Boolean);
   const createFlagIdx = tokens.findIndex((t) => t === '-b' || t === '-B' || t === '-c' || t === '-C');
   if (createFlagIdx !== -1) {
-    return tokens[createFlagIdx + 1] || null;
+    const raw = tokens[createFlagIdx + 1];
+    // This hook sees the raw command string, quotes and all — a quoted
+    // branch name (`git switch "main"`) otherwise yields a checkout
+    // target of `"main"`, which never matches PROTECTED_BRANCHES and
+    // bypasses the implicit-push/local-merge checks for the rest of the
+    // chain.
+    return raw ? stripSurroundingQuotes(raw) : null;
   }
-  return tokens.find((t) => !t.startsWith('-')) || null;
+  const raw = tokens.find((t) => !t.startsWith('-'));
+  return raw ? stripSurroundingQuotes(raw) : null;
 }
 
 // A refspec token is `<src>:<dest>` with no spaces, and a bare branch-name
