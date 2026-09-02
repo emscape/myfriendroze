@@ -65,11 +65,51 @@ function currentBranch() {
 }
 
 // Splits on shell chain operators so each command in a chain is checked on
-// its own terms, same rationale as check-branch-delete-guard.js: a match
-// inside one segment of a chained command must not be missed just because
-// an earlier or later segment looks different.
+// its own terms — but only operators actually outside any quoted string.
+// A naive split found in practice, not just in theory: a `git commit -m
+// "... e.g. git switch main && git push origin ..."` message that merely
+// *discusses* a push pattern in prose got split on the `&&` inside its own
+// quoted -m argument, and the fragment starting with "git push origin"
+// (which also happened to contain the bare word "main" later in the same
+// sentence) was flagged as a real push — blocking an ordinary commit
+// because its message talked about push commands. Tracking quote state
+// while scanning avoids splitting inside a quoted argument at all, so
+// this only ever splits on operators a shell would actually treat as
+// chaining, not ones sitting inertly inside a string literal.
 function segmentsOf(fullCmd) {
-  return fullCmd.split(/&&|\|\||[;&|]/).map((s) => s.trim()).filter(Boolean);
+  const segments = [];
+  let current = '';
+  let quote = null; // null | '"' | "'"
+
+  for (let i = 0; i < fullCmd.length; i++) {
+    const ch = fullCmd[i];
+
+    if (quote) {
+      current += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      continue;
+    }
+    if ((ch === '&' && fullCmd[i + 1] === '&') || (ch === '|' && fullCmd[i + 1] === '|')) {
+      segments.push(current);
+      current = '';
+      i++; // consume the second character of the two-char operator too
+      continue;
+    }
+    if (ch === ';' || ch === '&' || ch === '|') {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  segments.push(current);
+
+  return segments.map((s) => s.trim()).filter(Boolean);
 }
 
 // Env-var-prefix stripping, duplicated from check-branch-delete-guard.js
@@ -179,13 +219,35 @@ function protectedRefspecPush(segment) {
   return null;
 }
 
-function findMergeReason(fullCmd) {
+// `getCurrentBranch` defaults to the real `currentBranch()` (a live `git
+// rev-parse` call) but is overridable — tests inject a fixed value instead
+// of depending on whatever branch happens to be checked out in the real
+// repo when they run, which would otherwise make any test exercising the
+// "no explicit branch/refspec given" fallback path non-deterministic.
+function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
   const segments = segmentsOf(fullCmd);
   // Every anchored check below runs against the normalized form (env
   // prefix and command-path prefix stripped) — the original, raw segment
   // is kept only for the human-readable "matched:" text in a block
   // report, so the reason shown still looks like what was actually typed.
   const normalized = segments.map(normalizeSegment);
+
+  // Resolved once per command and reused by both the push and merge
+  // checks below: a branch this command chain explicitly checks out to
+  // (textually — the actual HEAD hasn't moved yet when this hook runs),
+  // falling back to whatever branch is actually currently checked out.
+  // Lazy since a real `git rev-parse` call is only worth paying for when
+  // nothing in the command already answers the question textually.
+  const checkedOutTo = PROTECTED_BRANCHES.find((b) =>
+    normalized.some((s) => new RegExp(`^git\\s+checkout\\s+${b}\\b`).test(s) || new RegExp(`^git\\s+switch\\s+${b}\\b`).test(s))
+  );
+  let effectiveBranchCache;
+  function effectiveBranch() {
+    if (effectiveBranchCache === undefined) {
+      effectiveBranchCache = checkedOutTo || getCurrentBranch();
+    }
+    return effectiveBranchCache;
+  }
 
   for (let i = 0; i < segments.length; i++) {
     const segment = normalized[i];
@@ -213,18 +275,33 @@ function findMergeReason(fullCmd) {
         : `push refspec targets protected branch "${refspec.dest}" directly from "${refspec.src}"`;
       return `${detail} — matched: ${segments[i]}`;
     }
+    // A `git push` with no explicit branch/refspec argument (at most a
+    // remote) pushes the *current* branch via git's own defaults — e.g.
+    // `git switch main && git push origin`. protectedRefspecPush() only
+    // catches an explicit mention of a protected branch, so this implicit
+    // form landed commits on master/main completely undetected. Only
+    // applies when nothing explicit was given (nonFlags.length <= 1):
+    // an explicit branch/refspec naming a *different* branch (e.g.
+    // `git push origin some-other-branch` while sitting on master) is a
+    // deliberate, legitimate push of something else and shouldn't be
+    // swept in just because HEAD happens to be on a protected branch.
+    if (/^git\s+push\b/.test(segment)) {
+      const tokens = segment.split(/\s+/);
+      const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
+      if (nonFlags.length <= 1) {
+        const branch = effectiveBranch();
+        if (branch && PROTECTED_BRANCHES.includes(branch)) {
+          return `implicit push (no explicit branch/refspec given) while on protected branch "${branch}" — matched: ${segments[i]}`;
+        }
+      }
+    }
   }
 
   // Local `git merge` while sitting on (or about to check out to) a
-  // protected branch. Command-chain checkout is checked textually, since
-  // the actual HEAD hasn't moved yet when this hook runs (the checkout in
-  // the same chain hasn't executed).
+  // protected branch.
   const hasMerge = normalized.some((s) => /^git\s+merge\b/.test(s));
   if (hasMerge) {
-    const checkedOutTo = PROTECTED_BRANCHES.find((b) =>
-      normalized.some((s) => new RegExp(`^git\\s+checkout\\s+${b}\\b`).test(s) || new RegExp(`^git\\s+switch\\s+${b}\\b`).test(s))
-    );
-    const branch = checkedOutTo || currentBranch();
+    const branch = effectiveBranch();
     if (branch && PROTECTED_BRANCHES.includes(branch)) {
       return `local \`git merge\` on protected branch "${branch}"`;
     }

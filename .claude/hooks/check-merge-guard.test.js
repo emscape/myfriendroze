@@ -13,9 +13,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { findMergeReason } = require('./check-merge-guard.js');
 
-function blocked(cmd) {
-  return findMergeReason(cmd) !== null;
+function blocked(cmd, getCurrentBranch) {
+  return findMergeReason(cmd, getCurrentBranch) !== null;
 }
+
+// A command with no explicit branch/refspec (e.g. `git push origin`) falls
+// back to whatever branch is actually checked out, via a real `git
+// rev-parse` call by default — fine for the hook itself, but a real
+// ambient value would make any test exercising that fallback path
+// non-deterministic (its result would depend on whichever branch happens
+// to be checked out when the test suite runs). These fixed stand-ins are
+// injected as the second argument instead.
+const onFeatureBranch = () => 'fix/unrelated-feature';
+const onMaster = () => 'master';
 
 test('findMergeReason', async (t) => {
   await t.test('gh pr merge, plain', () => {
@@ -123,12 +133,31 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git push origin fix/some-feature'), false);
   });
 
-  await t.test('git push origin alone (no branch argument) is not a merge', () => {
-    assert.equal(blocked('git push origin'), false);
+  await t.test('git push origin alone (no branch argument) is not a merge, when not on a protected branch', () => {
+    assert.equal(blocked('git push origin', onFeatureBranch), false);
   });
 
-  await t.test('a single bare token is treated as the remote, not a branch push', () => {
-    assert.equal(blocked('git push some-remote'), false);
+  await t.test('a single bare token is treated as the remote, not a branch push, when not on a protected branch', () => {
+    assert.equal(blocked('git push some-remote', onFeatureBranch), false);
+  });
+
+  await t.test('git switch main && git push origin — implicit push while on a protected branch', () => {
+    // Deterministic via the textual checkout in the command chain itself;
+    // no branch injection needed since checkedOutTo resolves this before
+    // any real current-branch lookup would even happen.
+    assert.equal(blocked('git switch main && git push origin'), true);
+  });
+
+  await t.test('git checkout master && git push — implicit push (no remote either) while on a protected branch', () => {
+    assert.equal(blocked('git checkout master && git push'), true);
+  });
+
+  await t.test('git push origin — implicit push while on a protected branch, via injected current-branch fallback', () => {
+    assert.equal(blocked('git push origin', onMaster), true);
+  });
+
+  await t.test('an explicit different-branch push is not swept in just because HEAD is on a protected branch', () => {
+    assert.equal(blocked('git push origin some-other-branch', onMaster), false);
   });
 
   await t.test('an env-prefixed command that is not a merge is not flagged', () => {
@@ -137,6 +166,16 @@ test('findMergeReason', async (t) => {
 
   await t.test('a refspec pushing an unrelated branch to itself is not flagged', () => {
     assert.equal(blocked('git push origin feature:feature'), false);
+  });
+
+  await t.test('a commit message that merely discusses push/merge commands in prose is not flagged', () => {
+    // Found in practice, not just in theory: this is (a close paraphrase
+    // of) an actual commit message body that got mis-split on the "&&"
+    // inside its own quoted -m argument, producing a fragment that
+    // started with "git push origin" and also contained the bare word
+    // "main" later in the same sentence — blocking a plain git commit.
+    const cmd = 'git commit -m "Explain the fix\n\nWHY:\n- e.g. git switch main && git push origin — pushes the current branch, landing commits on main directly, went undetected"';
+    assert.equal(blocked(cmd), false);
   });
 
   await t.test('an unrelated command is not flagged', () => {
