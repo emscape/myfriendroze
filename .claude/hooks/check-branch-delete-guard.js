@@ -102,12 +102,36 @@ function tryRun(cmd) {
 //     codebase's own workflow always names the remote explicitly) not to
 //     be worth the added complexity of distinguishing a remote name from
 //     a branch name with no ground truth to check against.
+
+// Strips a leading `env` invocation and/or leading `VAR=value` assignments
+// so `GIT_TRACE=1 git push origin --delete branch` and
+// `env GIT_TRACE=1 git push origin --delete branch` are recognized as the
+// git push invocations they are, instead of being skipped because the
+// segment doesn't start with the literal string "git". Both forms are
+// ordinary ways to set an env var for one command and are common enough
+// (debugging a push, CI scripts) that skipping them would be a real,
+// easy-to-hit bypass of the guard rather than a theoretical one.
+function stripLeadingEnvPrefix(segment) {
+  let s = segment.replace(/^env\s+(-i\s+)?/, '');
+  s = s.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*/, '');
+  return s;
+}
+
+// `git push origin :refs/heads/some-branch` is equivalent to
+// `git push origin :some-branch` — git accepts the fully-qualified ref on
+// either side of a refspec. Strip the refs/heads/ prefix so a
+// fully-qualified delete still matches `pr.baseRefName`, which GitHub
+// always reports as the bare branch name.
+function normalizeBranchName(name) {
+  return name.replace(/^refs\/heads\//, '');
+}
+
 function extractDeletedBranches(fullCmd) {
   const branches = new Set();
 
   const segments = fullCmd.split(/&&|\|\||[;&|]/);
   for (const rawSegment of segments) {
-    const segment = rawSegment.trim();
+    const segment = stripLeadingEnvPrefix(rawSegment.trim());
     // Anchored at the start of the segment — "contains git push" isn't
     // enough, since that also matches inside an unrelated quoted string
     // that merely mentions it.
@@ -118,13 +142,13 @@ function extractDeletedBranches(fullCmd) {
     const hasDeleteFlag = rest.some((t) => t === '--delete' || t === '-d');
     if (hasDeleteFlag) {
       const nonFlags = rest.filter((t) => !t.startsWith('-'));
-      for (const b of nonFlags.slice(1)) branches.add(b); // [0] is the remote
+      for (const b of nonFlags.slice(1)) branches.add(normalizeBranchName(b)); // [0] is the remote
     }
 
     // `git push origin :branch-name` — a leading bare colon means
     // "delete", scoped to this same segment.
     for (const m of segment.matchAll(/(?:^|\s):([A-Za-z0-9_./-]+)(?=\s|$)/g)) {
-      branches.add(m[1]);
+      branches.add(normalizeBranchName(m[1]));
     }
   }
 
