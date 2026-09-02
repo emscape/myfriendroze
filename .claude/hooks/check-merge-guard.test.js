@@ -160,6 +160,26 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git push origin some-other-branch', onMaster), false);
   });
 
+  await t.test('git checkout -B main (force-create/reset + switch) then an implicit push is blocked', () => {
+    assert.equal(blocked('git checkout -B main && git push origin'), true);
+  });
+
+  await t.test('git switch -c main (create + switch) then an implicit push is blocked', () => {
+    assert.equal(blocked('git switch -c main && git push origin'), true);
+  });
+
+  await t.test('git switch -C master (force-create + switch) then a local merge is blocked', () => {
+    assert.equal(blocked('git switch -C master && git merge fix/some-branch'), true);
+  });
+
+  await t.test('git checkout -b (create, non-forcing) a non-protected branch is not flagged', () => {
+    // Injected fallback keeps this deterministic — the checkout target
+    // here is a non-protected branch, so effectiveBranch() falls through
+    // to the (otherwise real) current-branch lookup, same as any other
+    // implicit-push case with no protected checkout in the chain.
+    assert.equal(blocked('git checkout -b fix/some-feature && git push origin', onFeatureBranch), false);
+  });
+
   await t.test('an env-prefixed command that is not a merge is not flagged', () => {
     assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
   });
@@ -175,6 +195,15 @@ test('findMergeReason', async (t) => {
     // started with "git push origin" and also contained the bare word
     // "main" later in the same sentence — blocking a plain git commit.
     const cmd = 'git commit -m "Explain the fix\n\nWHY:\n- e.g. git switch main && git push origin — pushes the current branch, landing commits on main directly, went undetected"';
+    assert.equal(blocked(cmd), false);
+  });
+
+  await t.test('a commit message with an escaped quote does not prematurely end the quoted region', () => {
+    // Reproduces the review-reported case: an escaped `\"` inside a
+    // double-quoted -m argument must not be treated as the real closing
+    // quote, or the "&&"/"main" after it get re-exposed to splitting —
+    // the exact bug the quote-tracking in segmentsOf() exists to prevent.
+    const cmd = 'git commit -m "He said \\"hi\\" && then explained: e.g. git push origin main directly"';
     assert.equal(blocked(cmd), false);
   });
 

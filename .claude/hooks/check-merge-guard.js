@@ -84,9 +84,33 @@ function segmentsOf(fullCmd) {
   for (let i = 0; i < fullCmd.length; i++) {
     const ch = fullCmd[i];
 
-    if (quote) {
+    if (quote === '"') {
+      // Double-quote escaping: a backslash immediately before another
+      // character is consumed as one literal unit, so an escaped quote
+      // (`\"`, e.g. inside a commit message like `-m "He said \"hi\" &&
+      // ..."`) doesn't end the quoted region early — reproduced in
+      // review: without this, the `&&` after an escaped `\"` was treated
+      // as a real chain operator again, the exact false-positive class
+      // this function exists to prevent. Bash only treats \", \\, \$,
+      // and \` as escapes inside double quotes (any other backslash is
+      // literal), but consuming any \X pair here errs toward keeping
+      // more of the string un-split, which is the safe direction — it
+      // can never cause an operator that should be treated as literal to
+      // be missed, only the reverse.
+      if (ch === '\\' && i + 1 < fullCmd.length) {
+        current += ch + fullCmd[i + 1];
+        i++;
+        continue;
+      }
       current += ch;
-      if (ch === quote) quote = null;
+      if (ch === '"') quote = null;
+      continue;
+    }
+    if (quote === "'") {
+      // Single quotes are fully literal in POSIX/bash — no escaping at
+      // all, not even for a backslash. Only a real closing quote ends it.
+      current += ch;
+      if (ch === "'") quote = null;
       continue;
     }
     if (ch === '"' || ch === "'") {
@@ -158,6 +182,29 @@ function stripCommandPathPrefix(segment) {
 // to this file's own anchored patterns.
 function normalizeSegment(segment) {
   return stripCommandPathPrefix(stripLeadingEnvPrefix(segment));
+}
+
+// Extracts the branch a `git checkout`/`git switch` invocation moves HEAD
+// to, if any. A plain `git checkout master` or `git switch main` takes the
+// branch name as an ordinary positional argument, but `-b`/`-B`
+// (checkout) and `-c`/`-C` (switch) create-and-switch flags take the new
+// branch name as *their own* argument instead — `git checkout -B main`
+// force-resets and switches to main with no separate "main" positional to
+// find. Missing that form meant effectiveBranch() could fall back to the
+// pre-checkout branch and miss an implicit push/merge onto master/main
+// immediately after — silently contradicting this hook's "unconditional"
+// premise for exactly the case (force-creating/resetting the protected
+// branch itself) that matters most.
+function checkoutTarget(segment) {
+  const m = segment.match(/^git\s+(?:checkout|switch)\s+(.*)$/);
+  if (!m) return null;
+
+  const tokens = m[1].split(/\s+/).filter(Boolean);
+  const createFlagIdx = tokens.findIndex((t) => t === '-b' || t === '-B' || t === '-c' || t === '-C');
+  if (createFlagIdx !== -1) {
+    return tokens[createFlagIdx + 1] || null;
+  }
+  return tokens.find((t) => !t.startsWith('-')) || null;
 }
 
 // A refspec token is `<src>:<dest>` with no spaces, and a bare branch-name
@@ -238,9 +285,9 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
   // falling back to whatever branch is actually currently checked out.
   // Lazy since a real `git rev-parse` call is only worth paying for when
   // nothing in the command already answers the question textually.
-  const checkedOutTo = PROTECTED_BRANCHES.find((b) =>
-    normalized.some((s) => new RegExp(`^git\\s+checkout\\s+${b}\\b`).test(s) || new RegExp(`^git\\s+switch\\s+${b}\\b`).test(s))
-  );
+  const checkedOutTo = normalized
+    .map(checkoutTarget)
+    .find((target) => target && PROTECTED_BRANCHES.includes(target));
   let effectiveBranchCache;
   function effectiveBranch() {
     if (effectiveBranchCache === undefined) {
