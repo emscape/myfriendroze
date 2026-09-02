@@ -301,6 +301,10 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('bash -c "gh pr view 27"'), false);
   });
 
+  await t.test('a bash -c wrapper with trailing $0/$1-style arguments after the quoted command', () => {
+    assert.equal(blocked('bash -c "gh pr merge 27" bash_arg0 extra_arg1'), true);
+  });
+
   await t.test('a multi-line command with the merge on the second line', () => {
     assert.equal(blocked('echo hi\ngh pr merge 27'), true);
   });

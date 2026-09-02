@@ -157,11 +157,40 @@ function segmentsOf(fullCmd) {
 // literal escaped instance of the same quote character (a narrower case
 // than segmentsOf() itself handles, and one this hook can't fully resolve
 // without a real shell parser).
-function unwrapShellDashC(segment) {
-  const m = segment.match(/^(?:\S*[\\/])?(?:bash|sh|zsh|dash|ksh)(?:\.exe)?\s+(?:-[a-zA-Z]*c[a-zA-Z]*|--command)\s+(["'])([\s\S]*)\1\s*$/);
-  if (!m) return null;
+// Finds the index of the true closing quote for a quoted argument that
+// starts at `startIdx` in `str` (the character right after the opening
+// quote), honoring double-quote backslash-escaping the same way
+// segmentsOf() does — an escaped `\"` doesn't count as the close. Returns
+// -1 if the quote is never closed.
+function findClosingQuote(str, startIdx, quoteChar) {
+  for (let i = startIdx; i < str.length; i++) {
+    const ch = str[i];
+    if (quoteChar === '"' && ch === '\\' && i + 1 < str.length) {
+      i++; // the escaped character doesn't end the quote — skip it too
+      continue;
+    }
+    if (ch === quoteChar) return i;
+  }
+  return -1;
+}
 
-  const [, quoteChar, content] = m;
+function unwrapShellDashC(segment) {
+  const opener = segment.match(/^(?:\S*[\\/])?(?:bash|sh|zsh|dash|ksh)(?:\.exe)?\s+(?:-[a-zA-Z]*c[a-zA-Z]*|--command)\s+(["'])/);
+  if (!opener) return null;
+
+  const quoteChar = opener[1];
+  const contentStart = opener[0].length;
+  const closeIdx = findClosingQuote(segment, contentStart, quoteChar);
+  if (closeIdx === -1) return null; // unterminated quote — malformed, nothing safe to unwrap
+
+  // Anything after the closing quote — `bash -c "cmd" arg0 arg1` is valid
+  // syntax, where trailing words become $0/$1/... for the executed
+  // string — is deliberately ignored rather than required to be absent.
+  // They can't change what's inside the quotes, and requiring them to be
+  // absent (an earlier version anchored the match to end-of-string) meant
+  // this whole form went unrecognized, hiding the real command entirely.
+  const content = segment.slice(contentStart, closeIdx);
+
   // A double-quoted outer wrapper allows bash's own limited escaping
   // (\", \\, \$, \`) — undo exactly that before treating the content as a
   // fresh command string, so a nested wrapper (e.g. `bash -c "sh -c
