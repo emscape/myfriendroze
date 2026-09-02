@@ -4,17 +4,19 @@
 // extraction rationale as product-mapping.js.
 
 /**
- * Firestore data isn't a trusted input, and this value gets rendered
- * directly into an <a href> on the gallery page — an unvalidated
- * javascript:/data:/vbscript: URL landing there would be an XSS vector on
- * click. Only http(s) links pass through; anything else maps to null (the
- * same "no link" value already used when the field is absent).
- * @param {unknown} link
- * @returns {string|null}
+ * Firestore data isn't a trusted input, and both imageUrl and link get
+ * rendered directly into HTML attributes (<img src>, <a href>) on the
+ * gallery page — an unvalidated javascript:/data:/vbscript: URL landing in
+ * either would be an XSS vector. Only http(s) URLs pass through; anything
+ * else falls back to `whenInvalid`.
+ * @param {unknown} url
+ * @param {T} whenInvalid
+ * @returns {string | T}
+ * @template T
  */
-function sanitizeLink(link) {
-  if (typeof link !== 'string') return null;
-  return /^https?:\/\//i.test(link) ? link : null;
+function sanitizeHttpUrl(url, whenInvalid) {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return whenInvalid;
+  return url;
 }
 
 /**
@@ -29,9 +31,11 @@ export function docToGalleryPhoto(doc) {
   const data = doc.data();
   return {
     id: doc.id,
-    src: data.imageUrl,
+    // Falls back to '' (not null) on an invalid/missing value — src is
+    // typed as a plain string, never nullable, unlike link below.
+    src: sanitizeHttpUrl(data.imageUrl, ''),
     alt: data.altText || '',
     caption: data.caption || null,
-    link: sanitizeLink(data.link),
+    link: sanitizeHttpUrl(data.link, null),
   };
 }

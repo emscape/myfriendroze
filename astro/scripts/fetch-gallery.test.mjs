@@ -86,6 +86,27 @@ describe('docToGalleryPhoto', () => {
     expect(photo.link).toBe('http://example.com/some-page');
   });
 
+  // src is rendered directly into an <img src> on the gallery page — same
+  // trust boundary as link, just a different attribute.
+  it.each(['data:text/html,<script>alert(1)</script>', 'javascript:alert(1)', 42, null, undefined])(
+    'maps a non-http(s) imageUrl (%j) to an empty string rather than passing it through',
+    (badImageUrl) => {
+      const doc = fakeDoc('abc123', { imageUrl: badImageUrl });
+
+      const photo = docToGalleryPhoto(doc);
+
+      expect(photo.src).toBe('');
+    }
+  );
+
+  it('allows an http (not just https) imageUrl through', () => {
+    const doc = fakeDoc('abc123', { imageUrl: 'http://example.com/photo.jpg' });
+
+    const photo = docToGalleryPhoto(doc);
+
+    expect(photo.src).toBe('http://example.com/photo.jpg');
+  });
+
   it('sources id from doc.id, not from the document data', () => {
     const doc = fakeDoc('the-real-id', {
       id: 'a-decoy-id-in-the-data',
