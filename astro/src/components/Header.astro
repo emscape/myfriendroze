@@ -27,7 +27,7 @@ const navigation = [
 
     <!-- Logo -->
     <a href="/" class="header__logo">
-      <img src="/mfr-logo.svg" alt="myfriendroze" loading="lazy">
+      <img src="/giraffe-logo.png" alt="myfriendroze" loading="lazy">
     </a>
 
     <!-- Desktop Navigation -->
@@ -244,6 +244,13 @@ const navigation = [
 
     .desktop-only {
       display: block;
+    }
+
+    /* Balances the logo's right-side gap (header__content's 2rem gap)
+       against the page's 5rem left padding, so the giraffe logo sits with
+       roughly even space on both sides */
+    .header__logo {
+      margin-right: 3rem;
     }
 
     .header__content {
