@@ -43,6 +43,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/check-git-push-audit.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-branch-delete-guard.js"
           }
         ]
       },

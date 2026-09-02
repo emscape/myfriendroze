@@ -37,6 +37,11 @@
     "enabled": true
   },
 
+  "branch_delete_guard": {
+    "enabled": true,
+    "_note": "Blocks `git push <remote> --delete <branch>` when an open PR still bases off that branch (deleting a stacked PR's base auto-closes it instead of merging it, and a closed PR's base can't be retargeted — see myfriendroze#22/#23 incident, 2026-09-02). Fails open if gh CLI is unavailable/unauthenticated."
+  },
+
   "ci_status_check": {
     "enabled": true,
     "poll_interval_seconds": 5,
