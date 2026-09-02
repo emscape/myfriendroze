@@ -9,7 +9,16 @@ import Header from '../components/Header.astro';
 import { fetchLiveGalleryPhotos } from '../lib/gallery-live.js';
 import { getFirestoreDb } from '../lib/firestore-admin.js';
 
-const galleryPhotos = await fetchLiveGalleryPhotos(getFirestoreDb());
+// A transient Firestore/credentials failure here must not take the whole
+// page down — falling back to an empty list keeps /gallery serving (the
+// existing "coming soon" placeholder below already covers zero photos)
+// instead of a 500 for every visitor until Firestore recovers.
+let galleryPhotos: Awaited<ReturnType<typeof fetchLiveGalleryPhotos>> = [];
+try {
+  galleryPhotos = await fetchLiveGalleryPhotos(getFirestoreDb());
+} catch (error) {
+  console.error('[gallery] Failed to fetch live gallery photos from Firestore — showing the empty-gallery placeholder.', error);
+}
 ---
 
 <Layout
