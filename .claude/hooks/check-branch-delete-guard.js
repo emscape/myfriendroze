@@ -103,17 +103,34 @@ function tryRun(cmd) {
 //     be worth the added complexity of distinguishing a remote name from
 //     a branch name with no ground truth to check against.
 
-// Strips a leading `env` invocation and/or leading `VAR=value` assignments
-// so `GIT_TRACE=1 git push origin --delete branch` and
-// `env GIT_TRACE=1 git push origin --delete branch` are recognized as the
-// git push invocations they are, instead of being skipped because the
+// Matches one leading `VAR=value` assignment, where value is a double- or
+// single-quoted string (which may contain spaces, e.g. `GIT_SSH_COMMAND="ssh
+// -vv"`) or an unquoted run of non-whitespace. Quoted values must be
+// recognized as a single token — a plain `\S*` value pattern stops at the
+// first space *inside* the quotes, leaving a dangling `-vv"` that can't
+// match anything else, which silently broke stripping for exactly this
+// (common — GIT_SSH_COMMAND, GIT_TRACE, GIT_CURL_VERBOSE all take
+// space-containing values in practice) case.
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s*/;
+
+// Strips a leading `env` invocation and/or any number of leading
+// `VAR=value` assignments so `GIT_TRACE=1 git push origin --delete branch`
+// and `env GIT_TRACE=1 git push origin --delete branch` are recognized as
+// the git push invocations they are, instead of being skipped because the
 // segment doesn't start with the literal string "git". Both forms are
 // ordinary ways to set an env var for one command and are common enough
 // (debugging a push, CI scripts) that skipping them would be a real,
 // easy-to-hit bypass of the guard rather than a theoretical one.
 function stripLeadingEnvPrefix(segment) {
   let s = segment.replace(/^env\s+(-i\s+)?/, '');
-  s = s.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*/, '');
+  // Loop (rather than a single repeated group) so each assignment is
+  // matched and consumed one at a time, regardless of how many precede the
+  // real command.
+  let prev;
+  do {
+    prev = s;
+    s = s.replace(ENV_ASSIGNMENT, '');
+  } while (s !== prev);
   return s;
 }
 
