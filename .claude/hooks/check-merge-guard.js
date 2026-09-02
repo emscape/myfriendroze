@@ -488,10 +488,13 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
     // The merge REST endpoint only actually merges on PUT — a GET to the
     // same path (checking merge state/method, used by ordinary read-only
     // status tooling) doesn't merge anything and shouldn't be blocked.
+    // -X's value can be space-separated (`-X PUT`) or concatenated
+    // curl-style (`-XPUT`, no space at all) — `\s*` covers both in one
+    // alternative rather than requiring a separator that may not be there.
     if (
       /^gh\s+api\b/.test(segment) &&
       /\/pulls\/[^\s/]+\/merge\b/.test(segment) &&
-      /(?:^|\s)(?:-X|--method)(?:\s+|=)PUT\b/i.test(segment)
+      /(?:^|\s)(?:-X\s*PUT|--method(?:\s+|=)PUT)\b/i.test(segment)
     ) {
       return `\`gh api\` PUT call to a PR's /merge REST endpoint — matched: ${segments[i]}`;
     }

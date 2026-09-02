@@ -45,6 +45,10 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('gh api repos/emscape/myfriendroze/pulls/27/merge --method PUT'), true);
   });
 
+  await t.test('gh api call to the /merge endpoint using curl-style -XPUT (no space)', () => {
+    assert.equal(blocked('gh api repos/emscape/myfriendroze/pulls/27/merge -XPUT'), true);
+  });
+
   await t.test('a read-only GET to the /merge endpoint (no -X PUT) is not blocked', () => {
     assert.equal(blocked('gh api repos/emscape/myfriendroze/pulls/27/merge'), false);
   });
