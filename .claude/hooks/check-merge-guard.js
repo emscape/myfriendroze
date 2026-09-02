@@ -9,15 +9,15 @@
 // master/main directly from a different branch name.
 //
 // This exists because "CI is green and there are no open review comments"
-// was treated as implicit permission to merge two PRs Emily had explicitly
-// said she wanted a fresh Copilot review pass on first — see myfriendroze
+// was treated as implicit permission to merge two PRs that a fresh Copilot
+// review pass had explicitly been requested for first — see myfriendroze
 // project_backlog memory, 2026-09-02. That was a judgment failure, not a
 // missing fact the hook could have surfaced; a hook can't read the
-// conversation to know whether she actually said yes. So this hook does
-// not try to — it blocks every single time, unconditionally, and the fix
-// for that judgment failure is procedural: ask her, wait for an explicit
-// yes in the conversation, and have the merge itself happen somewhere
-// this hook can't intercept — the GitHub PR page, run by her.
+// conversation to know whether permission was actually given. So this
+// hook does not try to — it blocks every single time, unconditionally,
+// and the fix for that judgment failure is procedural: ask first, wait
+// for an explicit yes in the conversation, and have the merge itself
+// happen somewhere this hook can't intercept — the GitHub PR page.
 //
 // Deliberately not configurable with a "confirmed" bypass flag/env var on
 // the command itself: anything checkable from inside a Bash tool call is
@@ -71,6 +71,41 @@ function segmentsOf(fullCmd) {
   return fullCmd.split(/&&|\|\||[;&|]/).map((s) => s.trim()).filter(Boolean);
 }
 
+// A refspec token is `<src>:<dest>` with no spaces — so once flags are
+// filtered out and the remote (first non-flag token) is skipped, any
+// remaining non-flag token containing a colon is a candidate refspec,
+// regardless of where a flag like --force/-f/--force-with-lease sits
+// relative to it. A rigid positional regex (`git push <remote> <refspec>`
+// with nothing else) missed `git push --force origin feature:main` and
+// `git push origin --force feature:main` entirely, since neither matches
+// that fixed shape — tokenizing instead, the same approach
+// check-branch-delete-guard.js already uses for --delete, closes that gap.
+function protectedRefspecPush(segment) {
+  if (!/^git\s+push\b/.test(segment)) return null;
+
+  const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
+  const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
+  if (nonFlags.length < 2) return null; // no remote + refspec pair present
+
+  for (const token of nonFlags.slice(1)) { // [0] is the remote
+    const colonIdx = token.indexOf(':');
+    if (colonIdx === -1) continue;
+
+    let src = token.slice(0, colonIdx);
+    // An empty dest (`git push origin branch:`) means "push to a remote ref
+    // with the same name as src" — git's own default-dest behavior for a
+    // trailing-colon refspec.
+    let dest = token.slice(colonIdx + 1) || src;
+    src = src.replace(/^refs\/heads\//, '');
+    dest = dest.replace(/^refs\/heads\//, '');
+
+    if (PROTECTED_BRANCHES.includes(dest) && src !== dest) {
+      return { src, dest };
+    }
+  }
+  return null;
+}
+
 function findMergeReason(fullCmd) {
   const segments = segmentsOf(fullCmd);
 
@@ -83,12 +118,9 @@ function findMergeReason(fullCmd) {
     }
     // Push refspec that lands a different branch directly onto master/main,
     // bypassing PR + merge entirely (e.g. `git push origin some-branch:master`).
-    const refspecPush = segment.match(/^git\s+push\s+\S+\s+([A-Za-z0-9_./-]+):([A-Za-z0-9_./-]+)\s*$/);
-    if (refspecPush) {
-      const [, src, dest] = refspecPush;
-      if (PROTECTED_BRANCHES.includes(dest) && src !== dest) {
-        return `push refspec targets protected branch "${dest}" directly from "${src}" — matched: ${segment}`;
-      }
+    const refspec = protectedRefspecPush(segment);
+    if (refspec) {
+      return `push refspec targets protected branch "${refspec.dest}" directly from "${refspec.src}" — matched: ${segment}`;
     }
   }
 
@@ -110,40 +142,51 @@ function findMergeReason(fullCmd) {
   return null;
 }
 
-const chunks = [];
-process.stdin.on('data', (d) => chunks.push(d));
-process.stdin.on('end', () => {
-  if (!isEnabled()) process.exit(0);
+module.exports = { findMergeReason, protectedRefspecPush, isEnabled, currentBranch };
 
-  let input;
-  try {
-    input = JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    process.exit(0);
-  }
+// Only run the stdin-driven hook lifecycle when this file is executed
+// directly (`node check-merge-guard.js`, which is how Claude Code invokes
+// it) — not when it's require()'d, e.g. from check-merge-guard.test.js.
+if (require.main === module) {
+  runHook();
+}
 
-  const cmd = (input?.tool_input?.command || '').trim();
-  if (!cmd) process.exit(0);
+function runHook() {
+  const chunks = [];
+  process.stdin.on('data', (d) => chunks.push(d));
+  process.stdin.on('end', () => {
+    if (!isEnabled()) process.exit(0);
 
-  const reason = findMergeReason(cmd);
-  if (!reason) process.exit(0);
+    let input;
+    try {
+      input = JSON.parse(Buffer.concat(chunks).toString());
+    } catch {
+      process.exit(0);
+    }
 
-  const report = [
-    'MERGE GUARD — BLOCK (always, by design)',
-    '',
-    `This command would merge a PR or land commits on a protected branch: ${reason}`,
-    '',
-    'This hook does not check whether permission was already given in the',
-    'conversation — it can\'t read the chat, and any bypass this session',
-    'could set on the command itself would defeat the point. It blocks every',
-    'matching command, unconditionally.',
-    '',
-    'Fix: confirm with Emily in this conversation that this specific PR',
-    'should be merged now, then have her merge it herself via the GitHub PR',
-    'page (or her own terminal) — not from this session.',
-  ].join('\n');
+    const cmd = (input?.tool_input?.command || '').trim();
+    if (!cmd) process.exit(0);
 
-  console.error(report);
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
-  process.exit(2);
-});
+    const reason = findMergeReason(cmd);
+    if (!reason) process.exit(0);
+
+    const report = [
+      'MERGE GUARD — BLOCK (always, by design)',
+      '',
+      `This command would merge a PR or land commits on a protected branch: ${reason}`,
+      '',
+      'This hook does not check whether permission was already given in the',
+      'conversation — it can\'t read the chat, and any bypass this session',
+      'could set on the command itself would defeat the point. It blocks every',
+      'matching command, unconditionally.',
+      '',
+      'Fix: get explicit confirmation in this conversation that this specific',
+      'PR should be merged now, then have the merge happen via the GitHub PR',
+      'page (or a terminal outside this session) — not from this session.',
+    ].join('\n');
+
+    console.error(report);
+    process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
+    process.exit(2);
+  });
+}
