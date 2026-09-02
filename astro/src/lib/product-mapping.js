@@ -49,7 +49,11 @@ export function docToProduct(doc) {
     compareAtPrice: null,
     images,
     tags: [],
-    inStock: data.isActive !== false,
+    // Strict === true, not !== false: matches the where('isActive', '==',
+    // true) query every real caller already filters on — a doc missing
+    // the field entirely wouldn't match that query either, so it
+    // shouldn't read as in-stock here.
+    inStock: data.isActive === true,
     category: '',
     dimensions: '',
     features: [],
