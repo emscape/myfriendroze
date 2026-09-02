@@ -269,6 +269,34 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git checkout -B "master" && git merge fix/some-branch'), true);
   });
 
+  await t.test('gh pr merge hidden inside a bash -c wrapper', () => {
+    assert.equal(blocked('bash -c "gh pr merge 27"'), true);
+  });
+
+  await t.test('gh pr merge hidden inside a bash -lc wrapper (combined login+command flags)', () => {
+    assert.equal(blocked('bash -lc "gh pr merge 27"'), true);
+  });
+
+  await t.test('a protected-branch push hidden inside an sh -c wrapper', () => {
+    assert.equal(blocked('sh -c "git push feature:main"'), true);
+  });
+
+  await t.test('a wrapped command chained after an unrelated segment', () => {
+    assert.equal(blocked('echo hi && bash -c "gh pr merge 27"'), true);
+  });
+
+  await t.test('a doubly-nested shell wrapper (bash -c wrapping an sh -c)', () => {
+    assert.equal(blocked('bash -c "sh -c \\"gh pr merge 27\\""'), true);
+  });
+
+  await t.test('an implicit push hidden inside a wrapper, via a checkout inside the same wrapped string', () => {
+    assert.equal(blocked('bash -c "git switch main && git push origin"'), true);
+  });
+
+  await t.test('a bash -c wrapper running a non-merge command is not flagged', () => {
+    assert.equal(blocked('bash -c "gh pr view 27"'), false);
+  });
+
   await t.test('an env-prefixed command that is not a merge is not flagged', () => {
     assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
   });

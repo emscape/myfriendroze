@@ -136,6 +136,55 @@ function segmentsOf(fullCmd) {
   return segments.map((s) => s.trim()).filter(Boolean);
 }
 
+// `bash -c "..."` / `sh -c "..."` (and combined-flag forms like `-lc`,
+// `-ic`, `-lic`) run their quoted argument as a nested command string —
+// not a different, unwatched command, just the same gh/git invocation one
+// layer further in. Because segmentsOf() deliberately never splits inside
+// a quoted region (that's what fixed the earlier commit-message
+// false-positive), a wrapped segment like `bash -c "gh pr merge 27"`
+// never starts with "gh"/"git" at all — it starts with "bash" — so
+// without unwrapping it, the entire inner command was invisible to every
+// check in this file. Only the common `-c`/`-lc`/`-ic`/`-lic`/`--command`
+// forms are recognized, not a full shell-flag grammar; greedy matching to
+// the *last* occurrence of the opening quote character handles an inner
+// command that itself contains a different quote style, though not a
+// literal escaped instance of the same quote character (a narrower case
+// than segmentsOf() itself handles, and one this hook can't fully resolve
+// without a real shell parser).
+function unwrapShellDashC(segment) {
+  const m = segment.match(/^(?:\S*[\\/])?(?:bash|sh|zsh|dash|ksh)(?:\.exe)?\s+(?:-[a-zA-Z]*c[a-zA-Z]*|--command)\s+(["'])([\s\S]*)\1\s*$/);
+  if (!m) return null;
+
+  const [, quoteChar, content] = m;
+  // A double-quoted outer wrapper allows bash's own limited escaping
+  // (\", \\, \$, \`) — undo exactly that before treating the content as a
+  // fresh command string, so a nested wrapper (e.g. `bash -c "sh -c
+  // \"gh pr merge 27\""`) is captured with real, bare quote characters
+  // rather than the literal backslash-quote pairs the outer shell would
+  // already have resolved before the inner shell ever saw them. A
+  // single-quoted outer wrapper is always fully literal in bash — no
+  // un-escaping applies there.
+  return quoteChar === '"' ? content.replace(/\\(["\\$`])/g, '$1') : content;
+}
+
+// Replaces any segment that's a shell -c wrapper with the segments of its
+// unwrapped inner command (re-run through segmentsOf(), since the inner
+// command can have its own chaining/quoting), recursively — so nested
+// wrapping (`bash -c "sh -c \"gh pr merge 27\""`) is fully flattened
+// before any anchored check runs.
+function expandShellWrappers(segments) {
+  const expanded = [];
+  for (const segment of segments) {
+    const inner = unwrapShellDashC(segment);
+    if (inner !== null) {
+      expanded.push(...expandShellWrappers(segmentsOf(inner)));
+    } else {
+      expanded.push(segment);
+    }
+  }
+  return expanded;
+}
+
 // Env-var-prefix stripping, duplicated from check-branch-delete-guard.js
 // rather than shared — each hook is a standalone script Claude Code
 // invokes independently, and the two files are small enough that a shared
@@ -400,7 +449,7 @@ function protectedRefspecPush(segment) {
 // repo when they run, which would otherwise make any test exercising the
 // "no explicit branch/refspec given" fallback path non-deterministic.
 function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
-  const segments = segmentsOf(fullCmd);
+  const segments = expandShellWrappers(segmentsOf(fullCmd));
   // Every anchored check below runs against the normalized form (env
   // prefix and command-path prefix stripped) — the original, raw segment
   // is kept only for the human-readable "matched:" text in a block
