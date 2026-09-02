@@ -240,17 +240,56 @@ function stripGhGlobalOptions(afterGh) {
   return s;
 }
 
+// `sudo`, `command`, and `exec` invoke the real command as a subprocess
+// without being a different, unwatched command themselves — `sudo gh pr
+// merge 27` or `command git push origin main` both still run exactly the
+// gh/git invocation this hook cares about. Only each wrapper's most
+// common flags are handled explicitly here, not their full option
+// surface: this project targets Windows 11, where none of these are the
+// primary shell anyway, so the goal is closing the realistic gap found in
+// review, not replicating every real CLI's complete grammar.
+const SUDO_ARG_FLAG = /^(?:-u|--user)\s+\S+\s*/;
+const SUDO_NO_ARG_FLAG = /^(?:-n|--non-interactive|-i|--login|-E|--preserve-env|-H|--set-home)\s*/;
+const COMMAND_NO_ARG_FLAG = /^-[pvV]\s*/;
+
+function stripLeadingWrapperPrefix(segment) {
+  const m = segment.match(/^(sudo|command|exec)\b\s*/);
+  if (!m) return segment;
+
+  let s = segment.slice(m[0].length);
+  let prev;
+  do {
+    prev = s;
+    if (m[1] === 'sudo') {
+      s = s.replace(SUDO_ARG_FLAG, '').replace(SUDO_NO_ARG_FLAG, '');
+    } else if (m[1] === 'command') {
+      s = s.replace(COMMAND_NO_ARG_FLAG, '');
+    }
+  } while (s !== prev);
+  return s;
+}
+
 // Normalizes a segment before any anchored gh/git pattern is tested
 // against it — strips a leading env-var prefix (plus env's own flags), a
+// leading `sudo`/`command`/`exec` wrapper (in any mix/order with the env
+// prefix — e.g. both `sudo GIT_TRACE=1 git push ...` and `GIT_TRACE=1
+// sudo git push ...` are ordinary ways to write the same thing), a
 // leading path prefix on the command name, and any of the command's own
 // global options that can appear before its subcommand. Every pattern in
 // this file is anchored on a bare `gh pr`/`gh api`/`git push`/`git
 // merge`/`git checkout`/`git switch` start, so without this, `GH_
 // TOKEN=... gh pr merge 27`, `/usr/bin/git merge ...`, `gh -R owner/repo
-// pr merge 27`, or `git -C /some/dir push origin master` would all
-// silently bypass every check here.
+// pr merge 27`, `git -C /some/dir push origin master`, or `sudo gh pr
+// merge 27` would all silently bypass every check here.
 function normalizeSegment(segment) {
-  let s = stripCommandPathPrefix(stripLeadingEnvPrefix(segment));
+  let s = segment;
+  let prev;
+  do {
+    prev = s;
+    s = stripLeadingWrapperPrefix(stripLeadingEnvPrefix(s));
+  } while (s !== prev);
+
+  s = stripCommandPathPrefix(s);
   if (/^git\s+/.test(s)) {
     s = `git ${stripGitGlobalOptions(s.slice('git '.length))}`;
   } else if (/^gh\s+/.test(s)) {

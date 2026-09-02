@@ -177,6 +177,31 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git push origin --mirror', onFeatureBranch), true);
   });
 
+  await t.test('gh pr merge behind a sudo prefix', () => {
+    assert.equal(blocked('sudo gh pr merge 27'), true);
+  });
+
+  await t.test('a protected-branch push behind a sudo prefix with a flag', () => {
+    assert.equal(blocked('sudo -n git push origin master'), true);
+  });
+
+  await t.test('a protected-branch push behind a command prefix', () => {
+    assert.equal(blocked('command git push origin master'), true);
+  });
+
+  await t.test('gh pr merge behind an exec prefix', () => {
+    assert.equal(blocked('exec gh pr merge 27'), true);
+  });
+
+  await t.test('sudo and an env-var prefix stacked together, in either order', () => {
+    assert.equal(blocked('sudo GIT_TRACE=1 git push origin master'), true);
+    assert.equal(blocked('GIT_TRACE=1 sudo git push origin master'), true);
+  });
+
+  await t.test('sudo behind an env-var prefix that is not a merge is not flagged', () => {
+    assert.equal(blocked('sudo gh pr view 27'), false);
+  });
+
   await t.test('gh pr view is not a merge', () => {
     assert.equal(blocked('gh pr view 27'), false);
   });
