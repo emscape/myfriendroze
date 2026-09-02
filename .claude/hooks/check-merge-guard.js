@@ -172,16 +172,65 @@ function stripCommandPathPrefix(segment) {
   return segment.replace(/^(\S*[\\/])(gh|git)\b/, '$2');
 }
 
+// git's own global options can sit between `git` and the actual
+// subcommand — e.g. `git -C /some/dir push origin master` runs in a
+// different directory but is still exactly the push this hook cares
+// about. Only the value-taking forms are handled explicitly (the risk is
+// a bare `-C`/`-c`/etc. swallowing the *next* token as its own argument
+// rather than as part of the subcommand); a few common no-argument global
+// flags are stripped too for the same reason env's own flags were.
+const GIT_GLOBAL_ARG_FLAG_SEPARATE = /^(?:-C|-c|--git-dir|--work-tree|--namespace|--exec-path)\s+\S+\s*/;
+const GIT_GLOBAL_ARG_FLAG_COMBINED = /^(?:--git-dir|--work-tree|--namespace|--exec-path)=\S*\s*/;
+const GIT_GLOBAL_NO_ARG_FLAG = /^(?:-p|--paginate|--no-pager|--bare|--no-replace-objects|--literal-pathspecs)\s*/;
+
+function stripGitGlobalOptions(afterGit) {
+  let s = afterGit;
+  let prev;
+  do {
+    prev = s;
+    s = s
+      .replace(GIT_GLOBAL_ARG_FLAG_COMBINED, '')
+      .replace(GIT_GLOBAL_ARG_FLAG_SEPARATE, '')
+      .replace(GIT_GLOBAL_NO_ARG_FLAG, '');
+  } while (s !== prev);
+  return s;
+}
+
+// gh's global options relevant here: -R/--repo (an explicit repo selector
+// between `gh` and the subcommand) and --hostname — the specific forms
+// found in review (`gh -R owner/repo pr merge 27`).
+const GH_GLOBAL_ARG_FLAG_SEPARATE = /^(?:-R|--repo|--hostname)\s+\S+\s*/;
+const GH_GLOBAL_ARG_FLAG_COMBINED = /^--(?:repo|hostname)=\S*\s*/;
+
+function stripGhGlobalOptions(afterGh) {
+  let s = afterGh;
+  let prev;
+  do {
+    prev = s;
+    s = s
+      .replace(GH_GLOBAL_ARG_FLAG_COMBINED, '')
+      .replace(GH_GLOBAL_ARG_FLAG_SEPARATE, '');
+  } while (s !== prev);
+  return s;
+}
+
 // Normalizes a segment before any anchored gh/git pattern is tested
-// against it — strips a leading env-var prefix (plus env's own flags),
-// then a leading path prefix on the command name. Every pattern in this
-// file is anchored on a bare `gh `/`git ` start, so without this, `GH_
-// TOKEN=... gh pr merge 27` or `/usr/bin/git merge ...` would silently
-// bypass every check here — the exact same class of gap already fixed
-// once for --delete in check-branch-delete-guard.js, just not yet applied
-// to this file's own anchored patterns.
+// against it — strips a leading env-var prefix (plus env's own flags), a
+// leading path prefix on the command name, and any of the command's own
+// global options that can appear before its subcommand. Every pattern in
+// this file is anchored on a bare `gh pr`/`gh api`/`git push`/`git
+// merge`/`git checkout`/`git switch` start, so without this, `GH_
+// TOKEN=... gh pr merge 27`, `/usr/bin/git merge ...`, `gh -R owner/repo
+// pr merge 27`, or `git -C /some/dir push origin master` would all
+// silently bypass every check here.
 function normalizeSegment(segment) {
-  return stripCommandPathPrefix(stripLeadingEnvPrefix(segment));
+  let s = stripCommandPathPrefix(stripLeadingEnvPrefix(segment));
+  if (/^git\s+/.test(s)) {
+    s = `git ${stripGitGlobalOptions(s.slice('git '.length))}`;
+  } else if (/^gh\s+/.test(s)) {
+    s = `gh ${stripGhGlobalOptions(s.slice('gh '.length))}`;
+  }
+  return s;
 }
 
 // Extracts the branch a `git checkout`/`git switch` invocation moves HEAD

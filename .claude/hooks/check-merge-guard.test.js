@@ -121,6 +121,34 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('GIT_TRACE=1 git push origin master'), true);
   });
 
+  await t.test('gh pr merge behind the -R global repo flag', () => {
+    assert.equal(blocked('gh -R emscape/myfriendroze pr merge 27'), true);
+  });
+
+  await t.test('gh pr merge behind the --repo global flag, separate-argument form', () => {
+    assert.equal(blocked('gh --repo emscape/myfriendroze pr merge 27'), true);
+  });
+
+  await t.test('gh pr merge behind the --repo global flag, combined-argument form', () => {
+    assert.equal(blocked('gh --repo=emscape/myfriendroze pr merge 27'), true);
+  });
+
+  await t.test('a protected-branch push behind the git -C global flag', () => {
+    assert.equal(blocked('git -C /some/dir push origin master'), true);
+  });
+
+  await t.test('git merge on a protected branch behind the git -c global config-override flag', () => {
+    assert.equal(blocked('git checkout master && git -c user.name=bot merge fix/some-branch'), true);
+  });
+
+  await t.test('a protected-branch push behind a global flag stacked with an env-var prefix', () => {
+    assert.equal(blocked('GIT_TRACE=1 git -C /some/dir push origin master'), true);
+  });
+
+  await t.test('gh -R with a non-merge subcommand is not flagged', () => {
+    assert.equal(blocked('gh -R emscape/myfriendroze pr view 27'), false);
+  });
+
   await t.test('gh pr view is not a merge', () => {
     assert.equal(blocked('gh pr view 27'), false);
   });
