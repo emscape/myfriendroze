@@ -92,6 +92,10 @@
   "permissions": {
     "allow": [
       "Bash(flutter test *)"
+    ],
+    "ask": [
+      "Bash(gh pr merge*)",
+      "Bash(gh api*/merge*)"
     ]
   }
 }
