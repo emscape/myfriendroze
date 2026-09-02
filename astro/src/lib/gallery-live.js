@@ -17,5 +17,9 @@ export async function fetchLiveGalleryPhotos(db) {
     .orderBy('createdAt', 'desc')
     .get();
 
-  return snapshot.docs.map(docToGalleryPhoto);
+  // docToGalleryPhoto maps an invalid/missing imageUrl to '' rather than
+  // throwing — filter those out here instead of letting them reach the
+  // page as <img src="">, which browsers resolve as a request to the
+  // current document URL (wasted load, not just a broken image).
+  return snapshot.docs.map(docToGalleryPhoto).filter((photo) => photo.src !== '');
 }

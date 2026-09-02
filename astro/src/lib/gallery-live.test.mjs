@@ -71,6 +71,22 @@ describe('fetchLiveGalleryPhotos', () => {
     ]);
   });
 
+  // docToGalleryPhoto maps an invalid/missing imageUrl to '' rather than
+  // throwing (see gallery-mapping.js) — but rendering that as <img src="">
+  // triggers an extra request to the current document URL in browsers, so
+  // a photo with no real image shouldn't reach the page at all.
+  it('filters out photos with no valid imageUrl instead of returning an empty src', async () => {
+    const db = fakeDb([
+      fakeDoc('good', { imageUrl: 'https://example.com/a.jpg', isActive: true }),
+      fakeDoc('bad-url', { imageUrl: 'not-a-url', isActive: true }),
+      fakeDoc('missing-url', { isActive: true }),
+    ]);
+
+    const photos = await fetchLiveGalleryPhotos(db);
+
+    expect(photos.map((p) => p.id)).toEqual(['good']);
+  });
+
   it('returns an empty array when there are no active photos', async () => {
     const db = fakeDb([]);
 

@@ -59,7 +59,11 @@ async function main() {
     .orderBy('createdAt', 'desc')
     .get();
 
-  const photos = snapshot.docs.map(docToGalleryPhoto);
+  // Same filter as gallery-live.js's live-read path: docToGalleryPhoto
+  // maps an invalid/missing imageUrl to '' rather than throwing, and an
+  // <img src=""> in the snapshot would trigger a request to whatever page
+  // loads it, not just a broken image.
+  const photos = snapshot.docs.map(docToGalleryPhoto).filter((photo) => photo.src !== '');
 
   const outPath = path.join(__dirname, '..', 'src', 'data', 'syncedGallery.js');
   const contents =
