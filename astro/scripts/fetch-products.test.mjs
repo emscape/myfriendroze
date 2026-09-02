@@ -104,6 +104,20 @@ describe('docToProduct', () => {
     expect(product.price).toBe(0);
     expect(product.weight).toBe(0);
   });
+
+  // Every real caller only ever passes docs already filtered by Firestore's
+  // own `where('isActive', '==', true)` query, so this never actually
+  // differs in practice today — but docToProduct is a general-purpose
+  // mapper, and its own semantics should still match that query's: a doc
+  // missing the field entirely does not match `== true` and must not be
+  // treated as in-stock just because it also isn't explicitly `false`.
+  it('treats a missing isActive field as not in stock, matching the where(isActive, ==, true) query semantics used everywhere this mapper is called', () => {
+    const doc = fakeDoc('abc', { title: 'No isActive Field' });
+
+    const product = docToProduct(doc);
+
+    expect(product.inStock).toBe(false);
+  });
 });
 
 describe('dedupeHandles', () => {

@@ -5,6 +5,13 @@ export interface Props {
 }
 
 const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and carefully curated succulents from myfriendroze.' } = Astro.props;
+
+// global.css lives at src/styles/, so it must be imported here for Vite to bundle it.
+// The <link href="/styles/global.css"> below was 404ing sitewide — Astro only serves
+// files placed under public/ at their literal path, and nothing was importing this
+// stylesheet, so .page-width's padding (and everything else defined only here) was
+// never actually applied on any page.
+import '../styles/global.css';
 ---
 
 <!doctype html>
@@ -36,9 +43,6 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
 
     <!-- Font preload for better performance -->
     <link rel="preload" href="https://fonts.gstatic.com/s/notosansdisplay/v26/RLpbK4fMKhaknNNJp0WCHxWB_JOB8VeV-HtjGbQhbw.woff2" as="font" type="font/woff2" crossorigin>
-
-    <!-- Base CSS -->
-    <link rel="stylesheet" href="/styles/global.css" />
 
     <!-- Scripts -->
     <script src="/scripts/constants.js" defer="defer"></script>

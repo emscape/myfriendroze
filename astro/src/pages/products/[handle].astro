@@ -2,41 +2,30 @@
 import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import ShippingCalculator from '../../components/ShippingCalculator.astro';
-import { getProductByHandle, getInStockProducts } from '../../data/syncedProducts.js';
+import { fetchLiveProductByHandle } from '../../lib/products-live.js';
+import { getFirestoreDb } from '../../lib/firestore-admin.js';
 
-export const prerender = true;
+// Rendered on demand (not prerendered/getStaticPaths-enumerated) so a
+// price/availability edit in the admin app shows up immediately instead of
+// waiting for the next build+deploy — see src/lib/products-live.js and the
+// druzy-wood-pot $10-vs-$1000 incident this fixes.
+export const prerender = false;
 
-export async function getStaticPaths() {
-  const products = getInStockProducts();
-  return products.map(product => ({
-    params: { handle: product.handle },
-    props: { product }
-  }));
+const { handle } = Astro.params;
+
+// A transient Firestore/credentials failure here must not 500 the page —
+// treated the same as "not found" below (redirect to /shop) rather than
+// erroring, since there's nothing more useful to show either way.
+let product: Awaited<ReturnType<typeof fetchLiveProductByHandle>> = null;
+try {
+  product = await fetchLiveProductByHandle(getFirestoreDb(), handle);
+} catch (error) {
+  console.error(`[products/${handle}] Failed to fetch live product from Firestore — redirecting to /shop.`, error);
 }
 
-interface Props {
-  product: {
-    id: string;
-    handle: string;
-    title: string;
-    description: string;
-    price: number;
-    compareAtPrice?: number;
-    images: string[];
-    tags: string[];
-    inStock: boolean;
-    category: string;
-    dimensions: string;
-    features: string[];
-    weight: number;
-    seoTitle: string;
-    seoDescription: string;
-  };
-}
-
-const { product } = Astro.props;
-
-// Fallback if product not found
+// Fallback if product not found: unknown handle, deactivated (any link to
+// it was shared/cached — fetchLiveProductByHandle only matches active
+// products), or the Firestore error caught above.
 if (!product) {
   return Astro.redirect('/shop');
 }
