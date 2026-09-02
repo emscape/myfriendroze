@@ -56,8 +56,12 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     </div>
   </section>
 
-  <!-- Rich Text Section -->
-  <section class="rich-text color-background-1 gradient section-padding">
+  <!-- Rich Text + Collection Banner: a caption directly above the
+       heading, styled and spaced as one unit — no separator-bar between
+       them (it read as a divider splitting the pair apart) and no
+       `section-padding` utility (see the note that used to be here: it
+       collided with .rich-text's own smaller padding rule). -->
+  <section class="rich-text color-background-1 gradient">
     <div class="rich-text__wrapper rich-text__wrapper--center page-width">
       <div class="rich-text__blocks">
         <div class="rich-text__text rte">
@@ -66,9 +70,6 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
       </div>
     </div>
   </section>
-
-  <!-- Separator Bar -->
-  <hr class="separator-bar">
 
   <!-- Collection Banner -->
   <section class="collection-hero color-background-1 gradient">
@@ -264,7 +265,9 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    margin-bottom: 2rem;
+    /* Slightly more than .rich-text's gap below (caption->heading stays
+       tight) — Emily's call, ~a quarter inch more breathing room here. */
+    margin-bottom: 3rem;
     width: 100vw;
     margin-left: calc(-50vw + 50%);
   }
@@ -275,7 +278,18 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     height: 40rem;
   }
 
-  .banner__image {
+  /* .banner__media .banner__image, not just .banner__image: this needs
+     to out-specificity .media img below (max-width:100%; height:auto;),
+     which was silently winning — .media img is a two-part descendant
+     selector, higher specificity than .banner__image alone, regardless
+     of which rule comes later in the stylesheet. Confirmed via the
+     browser's own matched-styles output: `height: auto` was what
+     actually applied, not this rule's `height: 100%` — the <img>
+     rendered at its own aspect-ratio height (~420px) inside the 500px
+     .banner__media box, leaving a real ~80px void below the visible
+     photo that read as part of the gap before
+     "buy stuff or the cactus gets it!". */
+  .banner__media .banner__image {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -322,18 +336,13 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     }
   }
 
-  /* Separator Bar */
-  .separator-bar {
-    border: none;
-    height: 0.1rem;
-    background-color: rgba(var(--color-foreground), 0.2);
-    margin: 0;
-    width: 100%;
-  }
-
   /* Rich Text Section */
   .rich-text {
-    padding: 4rem 0;
+    padding: 0;
+    /* Kept tight — this caption sits directly above the heading below it
+       as one grouped unit. .image-banner's and .collection-hero's
+       margin-bottom (both larger) are the real breathing room. */
+    margin-bottom: 0.75rem;
   }
 
   .rich-text__wrapper--center {
@@ -361,23 +370,32 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   }
 
   .rich-text__text {
-    font-size: calc(1.6rem * var(--font-body-scale));
-    line-height: calc(1 + 0.6 / var(--font-body-scale));
+    /* Reads as a caption/eyebrow directly above the "you're kiln me"
+       heading — smaller and softer than body text, not full weight.
+       No uppercase/letter-spacing here: the site's voice is lowercase
+       throughout ("you're kiln me", "in the wild", ...); a caps
+       treatment would be inconsistent with that. */
+    font-size: 1.2rem;
+    line-height: 1.4;
+    color: var(--color-foreground);
+    opacity: 0.7;
   }
 
   .rich-text__text p {
     margin: 0;
   }
 
-  @media screen and (min-width: 750px) {
-    .rich-text__text {
-      font-size: calc(1.8rem * var(--font-body-scale));
-    }
-  }
 
   /* Collection Hero */
   .collection-hero {
-    padding: 2rem 0;
+    padding: 0;
+    /* Slightly more than .rich-text's gap above (caption->heading stays
+       tight) — Emily's call, ~a quarter inch more breathing room here.
+       Everything that used to also add space below the heading (this
+       section's own padding, the title's margin, collection-product-grid's
+       and facets-wrapper's own top padding) is zeroed out below so this is
+       the only thing controlling that gap. */
+    margin-bottom: 3rem;
   }
 
   .collection-hero__inner {
@@ -393,7 +411,9 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   }
 
   .collection-hero__title {
-    margin: 2.5rem 0;
+    /* No margin of its own — .collection-hero's margin-bottom is the
+       single source of the gap below this heading. */
+    margin: 0;
     font-family: var(--font-heading-family);
     font-size: clamp(2.4rem, 5vw, 4rem);
     font-weight: 600;
@@ -403,10 +423,6 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   }
 
   @media screen and (min-width: 750px) {
-    .collection-hero {
-      padding: 3rem 0;
-    }
-
     .collection-hero__inner {
       align-items: center;
       flex-direction: row;
@@ -422,7 +438,10 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
 
   /* Product Grid */
   .collection-product-grid {
-    padding: 2rem 0 6.4rem;
+    /* No top padding — would otherwise add to the gap .collection-hero's
+       margin-bottom already controls. Bottom padding is unrelated
+       (end-of-page breathing room), left as-is. */
+    padding: 0 0 6.4rem;
   }
 
   .collection-product-grid .page-width {
@@ -495,7 +514,10 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     flex-wrap: wrap;
     align-items: center;
     gap: 2rem;
-    padding: 2rem 0;
+    /* No top padding — would otherwise add to the gap .collection-hero's
+       margin-bottom already controls. Bottom padding is unrelated
+       (space before the border/product grid below), left as-is. */
+    padding: 0 0 2rem;
     border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.1);
     max-width: var(--page-width);
     margin: 0 auto;
