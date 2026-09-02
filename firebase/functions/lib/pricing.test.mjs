@@ -98,6 +98,28 @@ describe('buildLineItemsFromCatalog', () => {
     );
   });
 
+  // This is a checkout security boundary, not just a UI filter — the
+  // caller (createCheckoutSession.js) fetches a product doc directly by
+  // sku, with no isActive==true query filter of its own, so this check is
+  // the *only* thing standing between a request and buying an inactive
+  // product. It must fail closed: require isActive === true explicitly,
+  // rather than only rejecting an explicit false. A doc with the field
+  // missing, misspelled, or holding a truthy-but-wrong value (a stray "1"
+  // string, say) must not be purchasable just because it isn't literally
+  // `false`.
+  it.each([undefined, 'true', 1, null, {}])(
+    'throws for a product whose isActive is not the literal boolean true (%j)',
+    (badIsActive) => {
+      const catalog = catalogWith({
+        'sku-1': { title: 'Ambiguous Product', price: 70, isActive: badIsActive },
+      });
+
+      expect(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)).toThrow(
+        CatalogValidationError
+      );
+    }
+  );
+
   // A sold-out product is still shown on the site (isActive: true) with a
   // disabled "Sold Out" button — that's a UI courtesy, not a security
   // boundary. A tampered/direct API request must be rejected here too,
@@ -122,6 +144,23 @@ describe('buildLineItemsFromCatalog', () => {
       buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)
     ).not.toThrow();
   });
+
+  // Distinct from the "field absent" case above, which deliberately still
+  // defaults to purchasable (no admin-app migration needed) — a *present*
+  // inStock value that isn't a real boolean is malformed data, not "no
+  // opinion", and must not silently fall through to purchasable.
+  it.each(['false', 0, 'true', {}, []])(
+    'throws for a product whose inStock is present but not a real boolean (%j)',
+    (badInStock) => {
+      const catalog = catalogWith({
+        'sku-1': { title: 'Malformed Stock Field', price: 70, isActive: true, inStock: badInStock },
+      });
+
+      expect(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)).toThrow(
+        CatalogValidationError
+      );
+    }
+  );
 
   it.each([0, -1, 21, 999])('throws for an out-of-bounds quantity of %i', (qty) => {
     const catalog = catalogWith({
