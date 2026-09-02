@@ -163,8 +163,13 @@ function extractDeletedBranches(fullCmd) {
     }
 
     // `git push origin :branch-name` — a leading bare colon means
-    // "delete", scoped to this same segment.
-    for (const m of segment.matchAll(/(?:^|\s):([A-Za-z0-9_./-]+)(?=\s|$)/g)) {
+    // "delete", scoped to this same segment. Captures any run of
+    // non-whitespace after the colon rather than an allow-listed character
+    // class — git ref names permit a wide range of characters (`@`, `+`,
+    // etc.; see git-check-ref-format), and a narrower class here would
+    // silently fail to extract a real, valid branch name, defeating the
+    // guard for exactly the kind of ref it should be catching.
+    for (const m of segment.matchAll(/(?:^|\s):(\S+)/g)) {
       branches.add(normalizeBranchName(m[1]));
     }
   }
@@ -172,76 +177,90 @@ function extractDeletedBranches(fullCmd) {
   return [...branches];
 }
 
-const chunks = [];
-process.stdin.on('data', (d) => chunks.push(d));
-process.stdin.on('end', () => {
-  if (!isEnabled()) process.exit(0);
+module.exports = { extractDeletedBranches, stripLeadingEnvPrefix, normalizeBranchName, isEnabled, tryRun };
 
-  let input;
-  try {
-    input = JSON.parse(Buffer.concat(chunks).toString());
-  } catch {
-    process.exit(0);
-  }
+// Only run the stdin-driven hook lifecycle when this file is executed
+// directly (`node check-branch-delete-guard.js`, which is how Claude Code
+// invokes it) — not when it's require()'d, e.g. from
+// check-branch-delete-guard.test.js. Without this guard, requiring the
+// file for its pure functions would also attach stdin listeners and hang
+// the process waiting for input that's never coming.
+if (require.main === module) {
+  runHook();
+}
 
-  const cmd = (input?.tool_input?.command || '').trim();
-  if (!/\bgit\s+push\b/.test(cmd)) process.exit(0); // not a push — allow
+function runHook() {
+  const chunks = [];
+  process.stdin.on('data', (d) => chunks.push(d));
+  process.stdin.on('end', () => {
+    if (!isEnabled()) process.exit(0);
 
-  const branches = extractDeletedBranches(cmd);
-  if (branches.length === 0) process.exit(0); // push, but not a delete — allow
+    let input;
+    try {
+      input = JSON.parse(Buffer.concat(chunks).toString());
+    } catch {
+      process.exit(0);
+    }
 
-  const ghAuth = tryRun('gh auth status');
-  if (!ghAuth.ok) {
-    console.error('[branch-delete-guard] gh CLI not available/authenticated — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` first.');
-    process.exit(0);
-  }
+    const cmd = (input?.tool_input?.command || '').trim();
+    if (!/\bgit\s+push\b/.test(cmd)) process.exit(0); // not a push — allow
 
-  const prList = tryRun('gh pr list --state open --json number,baseRefName,headRefName,title --limit 200');
-  if (!prList.ok || !prList.out.trim()) {
-    console.error(`[branch-delete-guard] \`gh pr list\` ${prList.ok ? 'returned no output' : 'failed'} — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with \`gh pr list --state open\` before deleting.${prList.err ? `\n${prList.err}` : ''}`);
-    process.exit(0);
-  }
+    const branches = extractDeletedBranches(cmd);
+    if (branches.length === 0) process.exit(0); // push, but not a delete — allow
 
-  let openPrs;
-  try {
-    openPrs = JSON.parse(prList.out);
-  } catch {
-    console.error('[branch-delete-guard] Could not parse `gh pr list` output — allowing, but verify manually before deleting.');
-    process.exit(0);
-  }
+    const ghAuth = tryRun('gh auth status');
+    if (!ghAuth.ok) {
+      console.error('[branch-delete-guard] gh CLI not available/authenticated — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` first.');
+      process.exit(0);
+    }
 
-  const affected = branches
-    .map((branch) => ({
-      branch,
-      dependents: openPrs.filter((pr) => pr.baseRefName === branch),
-    }))
-    .filter((entry) => entry.dependents.length > 0);
+    const prList = tryRun('gh pr list --state open --json number,baseRefName,headRefName,title --limit 200');
+    if (!prList.ok || !prList.out.trim()) {
+      console.error(`[branch-delete-guard] \`gh pr list\` ${prList.ok ? 'returned no output' : 'failed'} — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with \`gh pr list --state open\` before deleting.${prList.err ? `\n${prList.err}` : ''}`);
+      process.exit(0);
+    }
 
-  if (affected.length === 0) process.exit(0);
+    let openPrs;
+    try {
+      openPrs = JSON.parse(prList.out);
+    } catch {
+      console.error('[branch-delete-guard] Could not parse `gh pr list` output — allowing, but verify manually before deleting.');
+      process.exit(0);
+    }
 
-  const rows = affected
-    .flatMap(({ branch, dependents }) =>
-      dependents.map((pr) => `  #${pr.number} "${pr.title}" (${pr.headRefName}) still bases off "${branch}"`)
-    )
-    .join('\n');
+    const affected = branches
+      .map((branch) => ({
+        branch,
+        dependents: openPrs.filter((pr) => pr.baseRefName === branch),
+      }))
+      .filter((entry) => entry.dependents.length > 0);
 
-  const report = [
-    'BRANCH DELETE GUARD — BLOCK',
-    '',
-    'Deleting this branch would pull the base out from under a still-open PR:',
-    rows,
-    '',
-    'Deleting a PR\'s base branch does not merge it — GitHub auto-closes it instead',
-    '(since its commits usually are not in the new target yet), and a closed PR\'s',
-    'base cannot be retargeted. The only recovery is opening a brand-new PR from',
-    'the same branch/commits.',
-    '',
-    'Fix: retarget the dependent PR(s) above to their real final base first',
-    '(`gh pr edit <number> --base <new-base>`), confirm it shows a clean/correct',
-    'diff, then delete this branch.',
-  ].join('\n');
+    if (affected.length === 0) process.exit(0);
 
-  console.error(report);
-  process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
-  process.exit(2);
-});
+    const rows = affected
+      .flatMap(({ branch, dependents }) =>
+        dependents.map((pr) => `  #${pr.number} "${pr.title}" (${pr.headRefName}) still bases off "${branch}"`)
+      )
+      .join('\n');
+
+    const report = [
+      'BRANCH DELETE GUARD — BLOCK',
+      '',
+      'Deleting this branch would pull the base out from under a still-open PR:',
+      rows,
+      '',
+      'Deleting a PR\'s base branch does not merge it — GitHub auto-closes it instead',
+      '(since its commits usually are not in the new target yet), and a closed PR\'s',
+      'base cannot be retargeted. The only recovery is opening a brand-new PR from',
+      'the same branch/commits.',
+      '',
+      'Fix: retarget the dependent PR(s) above to their real final base first',
+      '(`gh pr edit <number> --base <new-base>`), confirm it shows a clean/correct',
+      'diff, then delete this branch.',
+    ].join('\n');
+
+    console.error(report);
+    process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
+    process.exit(2);
+  });
+}

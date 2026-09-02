@@ -2,36 +2,16 @@
 // Behavioral tests for the pure extraction logic in
 // check-branch-delete-guard.js — run with `node --test .claude/hooks/`.
 //
-// The hook file itself is a script, not a module (no module.exports;
-// it drives its own stdin/stdout/exit-code lifecycle at the bottom), so
-// extractDeletedBranches() is pulled out of it via a small text
-// transform rather than require()'d directly — requiring the file as-is
-// would immediately start consuming process.stdin and never return.
+// check-branch-delete-guard.js only runs its stdin-driven hook lifecycle
+// when executed directly (`require.main === module`), so it's safe to
+// require() here for its exported pure functions without triggering that
+// lifecycle or hanging the test process waiting on stdin.
 
 'use strict';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-
-function loadExtractDeletedBranches() {
-  const filePath = path.join(__dirname, 'check-branch-delete-guard.js');
-  const src = fs.readFileSync(filePath, 'utf8').replace(/^#!.*\r?\n/, '');
-  // Stop before the stdin-reading lifecycle at the bottom of the file, and
-  // export the one function under test instead of letting the script run.
-  const wrapped = src.replace(
-    'const chunks = [];',
-    'module.exports = { extractDeletedBranches }; return; const chunks = [];'
-  );
-  const mod = { exports: {} };
-  // eslint-disable-next-line no-new-func
-  const fn = new Function('module', 'require', '__dirname', wrapped);
-  fn(mod, require, __dirname);
-  return mod.exports.extractDeletedBranches;
-}
-
-const extractDeletedBranches = loadExtractDeletedBranches();
+const { extractDeletedBranches } = require('./check-branch-delete-guard.js');
 
 function branches(cmd) {
   return extractDeletedBranches(cmd).sort();
@@ -56,6 +36,10 @@ test('extractDeletedBranches', async (t) => {
 
   await t.test('fully-qualified :refs/heads/branch shorthand is normalized to the bare name', () => {
     assert.deepEqual(branches('git push origin :refs/heads/branch5'), ['branch5']);
+  });
+
+  await t.test(':branch shorthand captures ref characters outside the old allow-list (@, +)', () => {
+    assert.deepEqual(branches('git push origin :feature/branch+with@chars'), ['feature/branch+with@chars']);
   });
 
   await t.test('a non-delete push is not flagged', () => {
