@@ -149,6 +149,34 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('gh -R emscape/myfriendroze pr view 27'), false);
   });
 
+  await t.test('a quoted Windows absolute path (with spaces) to git.exe is normalized', () => {
+    assert.equal(blocked('"C:\\Program Files\\Git\\bin\\git.exe" push origin master'), true);
+  });
+
+  await t.test('a quoted Windows absolute path (with spaces) to gh.exe is normalized', () => {
+    assert.equal(blocked('"C:\\Program Files\\GitHub CLI\\gh.exe" pr merge 27'), true);
+  });
+
+  await t.test('an unquoted path to git.exe (no spaces) is still normalized', () => {
+    assert.equal(blocked('C:\\Git\\bin\\git.exe push origin master'), true);
+  });
+
+  await t.test('a quoted refspec targeting a protected branch is unquoted before matching', () => {
+    assert.equal(blocked('git push origin "feature:main"'), true);
+  });
+
+  await t.test('a quoted bare branch name matching a protected branch is unquoted before matching', () => {
+    assert.equal(blocked('git push origin "main"'), true);
+  });
+
+  await t.test('git push --all is blocked regardless of the current branch', () => {
+    assert.equal(blocked('git push --all', onFeatureBranch), true);
+  });
+
+  await t.test('git push --mirror is blocked regardless of the current branch', () => {
+    assert.equal(blocked('git push origin --mirror', onFeatureBranch), true);
+  });
+
   await t.test('gh pr view is not a merge', () => {
     assert.equal(blocked('gh pr view 27'), false);
   });

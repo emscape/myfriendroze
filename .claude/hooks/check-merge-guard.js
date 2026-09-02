@@ -168,8 +168,34 @@ function stripLeadingEnvPrefix(segment) {
 // same as a bare `gh`/`git` invocation — invoking the same binary by an
 // explicit path instead of relying on $PATH isn't a different, unwatched
 // command, and every check below is anchored on the bare command name.
+// Also handles a Windows-style absolute path containing spaces (which
+// must be quoted as a single shell token to be one argument at all, e.g.
+// `"C:\Program Files\Git\bin\git.exe" push origin master` — this project
+// targets Windows 11) and an optional `.exe` suffix on the binary name,
+// quoted or not.
 function stripCommandPathPrefix(segment) {
-  return segment.replace(/^(\S*[\\/])(gh|git)\b/, '$2');
+  const quoted = segment.match(/^(["'])([^"']*[\\/](gh|git)(?:\.exe)?)\1(\s.*)?$/);
+  if (quoted) {
+    return `${quoted[3]}${quoted[4] || ''}`;
+  }
+  return segment.replace(/^(\S*[\\/])(gh|git)(?:\.exe)?\b/, '$2');
+}
+
+// Whitespace-splitting a raw command string doesn't understand quoting, so
+// a quoted argument like `"main"` keeps its literal quote characters as
+// part of the token. Strips one matching pair of surrounding quotes, if
+// present — duplicated from check-branch-delete-guard.js's identical
+// helper rather than shared, matching the pattern already used for
+// env-prefix stripping in this file.
+function stripSurroundingQuotes(token) {
+  if (token.length >= 2) {
+    const first = token[0];
+    const last = token[token.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return token.slice(1, -1);
+    }
+  }
+  return token;
 }
 
 // git's own global options can sit between `git` and the actual
@@ -282,7 +308,14 @@ function protectedRefspecPush(segment) {
   const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
   const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
 
-  for (const token of nonFlags) {
+  for (const rawToken of nonFlags) {
+    // This hook sees the raw command string, quotes and all — the shell
+    // hasn't stripped them yet the way it would before argv reaches git
+    // itself. `git push origin "main"` or `git push origin "feature:main"`
+    // would otherwise leave a trailing quote character on the token
+    // (`main"`), which never matches PROTECTED_BRANCHES even though the
+    // quoting changes nothing about what actually gets pushed.
+    const token = stripSurroundingQuotes(rawToken);
     const colonIdx = token.indexOf(':');
     if (colonIdx !== -1) {
       let src = token.slice(0, colonIdx);
@@ -383,7 +416,19 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
     // swept in just because HEAD happens to be on a protected branch.
     if (/^git\s+push\b/.test(segment)) {
       const tokens = segment.split(/\s+/);
-      const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
+      const rest = tokens.slice(2);
+      // --all/--mirror push every local branch (or the whole repo,
+      // including local master/main if either exists) to the remote,
+      // regardless of which branch is currently checked out — unlike an
+      // ordinary implicit push, this isn't gated on the current branch
+      // being protected at all, since it can land commits on master/main
+      // even when run from an unrelated feature branch. Blocked
+      // unconditionally whenever either flag is present, matching this
+      // hook's stated "err toward blocking" direction.
+      if (rest.includes('--all') || rest.includes('--mirror')) {
+        return `push includes --all/--mirror, which can update protected branches regardless of the current branch — matched: ${segments[i]}`;
+      }
+      const nonFlags = rest.filter((t) => !t.startsWith('-'));
       if (nonFlags.length <= 1) {
         const branch = effectiveBranch();
         if (branch && PROTECTED_BRANCHES.includes(branch)) {
