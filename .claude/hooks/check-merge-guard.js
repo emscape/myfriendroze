@@ -3,10 +3,11 @@
 // PreToolUse hook — Bash
 //
 // Unconditionally blocks any command that would merge a PR or land commits
-// on master/main from this session — `gh pr merge`, the equivalent `gh
-// api .../pulls/{n}/merge` REST call, a local `git merge` performed while
-// on (or checking out to) master/main, and a push refspec that targets
-// master/main directly from a different branch name.
+// on master/main from this session — `gh pr merge`, a PUT to the
+// equivalent `gh api .../pulls/{n}/merge` REST endpoint, a local `git
+// merge` performed while on (or checking out to) master/main, and a push
+// (refspec or plain branch name) that lands commits directly on
+// master/main.
 //
 // This exists because "CI is green and there are no open review comments"
 // was treated as implicit permission to merge two PRs that a fresh Copilot
@@ -71,36 +72,55 @@ function segmentsOf(fullCmd) {
   return fullCmd.split(/&&|\|\||[;&|]/).map((s) => s.trim()).filter(Boolean);
 }
 
-// A refspec token is `<src>:<dest>` with no spaces — so once flags are
-// filtered out and the remote (first non-flag token) is skipped, any
-// remaining non-flag token containing a colon is a candidate refspec,
-// regardless of where a flag like --force/-f/--force-with-lease sits
-// relative to it. A rigid positional regex (`git push <remote> <refspec>`
-// with nothing else) missed `git push --force origin feature:main` and
-// `git push origin --force feature:main` entirely, since neither matches
-// that fixed shape — tokenizing instead, the same approach
-// check-branch-delete-guard.js already uses for --delete, closes that gap.
+// A refspec token is `<src>:<dest>` with no spaces, and a bare branch-name
+// token (no colon) pushes a local branch of that name to a remote branch
+// of the same name. Once flags are filtered out, every remaining non-flag
+// token is checked as a candidate — not just tokens assumed to follow a
+// remote — for two reasons found in review:
+//   1. A rigid `git push <remote> <refspec>` shape (nothing else) missed
+//      `git push --force origin feature:main` and `git push origin
+//      --force feature:main` entirely, since a flag anywhere breaks a
+//      fixed-position match. Tokenizing and filtering flags, the same
+//      approach check-branch-delete-guard.js uses for --delete, closes
+//      that gap regardless of flag position.
+//   2. Requiring at least a remote + one more token missed both
+//      `git push feature:main` (remote omitted — git still resolves this
+//      via config in some setups) and, more importantly, a *plain*
+//      `git push origin master` with no colon at all, which lands commits
+//      on master just as directly as any refspec does. Checking every
+//      non-flag token — including a lone one — for either a colon-refspec
+//      or an exact match against a protected branch name closes both,
+//      erring toward blocking rather than trying to perfectly replicate
+//      git's own remote-vs-refspec argument resolution.
 function protectedRefspecPush(segment) {
   if (!/^git\s+push\b/.test(segment)) return null;
 
   const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
   const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
-  if (nonFlags.length < 2) return null; // no remote + refspec pair present
 
-  for (const token of nonFlags.slice(1)) { // [0] is the remote
+  for (const token of nonFlags) {
     const colonIdx = token.indexOf(':');
-    if (colonIdx === -1) continue;
+    if (colonIdx !== -1) {
+      let src = token.slice(0, colonIdx);
+      // An empty dest (`git push origin branch:`) means "push to a remote
+      // ref with the same name as src" — git's own default-dest behavior
+      // for a trailing-colon refspec.
+      let dest = token.slice(colonIdx + 1) || src;
+      src = src.replace(/^refs\/heads\//, '');
+      dest = dest.replace(/^refs\/heads\//, '');
+      if (PROTECTED_BRANCHES.includes(dest) && src !== dest) {
+        return { src, dest };
+      }
+      continue;
+    }
 
-    let src = token.slice(0, colonIdx);
-    // An empty dest (`git push origin branch:`) means "push to a remote ref
-    // with the same name as src" — git's own default-dest behavior for a
-    // trailing-colon refspec.
-    let dest = token.slice(colonIdx + 1) || src;
-    src = src.replace(/^refs\/heads\//, '');
-    dest = dest.replace(/^refs\/heads\//, '');
-
-    if (PROTECTED_BRANCHES.includes(dest) && src !== dest) {
-      return { src, dest };
+    // A bare protected-branch-name token only counts once at least a
+    // remote/repository has also been given (`git push origin master`) —
+    // a single lone token (`git push master`) is what git itself treats
+    // as the repository argument, not a branch, so there's no push of
+    // anything named master/main to react to yet.
+    if (nonFlags.length >= 2 && PROTECTED_BRANCHES.includes(token)) {
+      return { src: token, dest: token };
     }
   }
   return null;
@@ -113,14 +133,25 @@ function findMergeReason(fullCmd) {
     if (/^gh\s+pr\s+merge\b/.test(segment)) {
       return `\`gh pr merge\` — matched: ${segment}`;
     }
-    if (/^gh\s+api\b/.test(segment) && /\/pulls\/[^\s/]+\/merge\b/.test(segment)) {
-      return `\`gh api\` call to a PR's /merge REST endpoint — matched: ${segment}`;
+    // The merge REST endpoint only actually merges on PUT — a GET to the
+    // same path (checking merge state/method, used by ordinary read-only
+    // status tooling) doesn't merge anything and shouldn't be blocked.
+    if (
+      /^gh\s+api\b/.test(segment) &&
+      /\/pulls\/[^\s/]+\/merge\b/.test(segment) &&
+      /(?:^|\s)(?:-X|--method)(?:\s+|=)PUT\b/i.test(segment)
+    ) {
+      return `\`gh api\` PUT call to a PR's /merge REST endpoint — matched: ${segment}`;
     }
-    // Push refspec that lands a different branch directly onto master/main,
-    // bypassing PR + merge entirely (e.g. `git push origin some-branch:master`).
+    // Push (refspec or plain branch name) that lands commits directly on
+    // master/main, bypassing PR + merge entirely — e.g.
+    // `git push origin some-branch:master` or a plain `git push origin master`.
     const refspec = protectedRefspecPush(segment);
     if (refspec) {
-      return `push refspec targets protected branch "${refspec.dest}" directly from "${refspec.src}" — matched: ${segment}`;
+      const detail = refspec.src === refspec.dest
+        ? `pushes directly to protected branch "${refspec.dest}"`
+        : `push refspec targets protected branch "${refspec.dest}" directly from "${refspec.src}"`;
+      return `${detail} — matched: ${segment}`;
     }
   }
 
