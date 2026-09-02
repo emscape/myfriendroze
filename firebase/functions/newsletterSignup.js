@@ -1,5 +1,6 @@
 
 const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const logger = require("firebase-functions/logger");
@@ -8,12 +9,24 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Brevo API config
-const BREVO_API_KEY = process.env.BREVO_API_KEY;
+// BREVO_API_KEY is Secret Manager-backed (same as stripeWebhook.js,
+// orderConfirmation.js, eventNotification.js, orderShipped.js) — it used
+// to be read as a plain process.env value here, which required a
+// plaintext BREVO_API_KEY line in firebase/functions/.env. Firebase loads
+// .env into every function in the codebase, so that plain declaration
+// collided with this same variable name being declared as a secret
+// elsewhere, and Cloud Run refused to deploy any function that declared
+// both. BREVO_SENDER/BREVO_TEMPLATE_ID aren't secrets anywhere else in
+// this codebase, so they're untouched.
+const brevoApiKey = defineSecret("BREVO_API_KEY");
 const BREVO_SENDER = process.env.BREVO_SENDER;
 const BREVO_TEMPLATE_ID = process.env.BREVO_TEMPLATE_ID;
 
-exports.newsletterSignup = onRequest(async (req, res) => {
+exports.newsletterSignup = onRequest({ secrets: [brevoApiKey] }, async (req, res) => {
+  // A secret's value is only resolved per-invocation, not at module load,
+  // so this can't be hoisted to module scope the way the old
+  // process.env read was.
+  const BREVO_API_KEY = brevoApiKey.value();
   logger.info("Newsletter signup function triggered.");
 
   // Log environment variable status
