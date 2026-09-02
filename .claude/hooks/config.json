@@ -42,6 +42,11 @@
     "_note": "Blocks `git push <remote> --delete <branch>` when an open PR still bases off that branch (deleting a stacked PR's base auto-closes it instead of merging it, and a closed PR's base can't be retargeted — see myfriendroze#22/#23 incident, 2026-09-02). Fails open if gh CLI is unavailable/unauthenticated."
   },
 
+  "merge_guard": {
+    "enabled": true,
+    "_note": "Unconditionally blocks `gh pr merge`, a PUT to the `gh api .../pulls/{n}/merge` REST equivalent, a local `git merge` on master/main, and any push (refspec or plain branch name) that lands commits directly on master/main. Merging must happen on the GitHub PR page after explicit go-ahead is given in the conversation — this hook can't verify that from inside a Bash call, so it always blocks rather than trying. See myfriendroze#25 incident, 2026-09-02 (two PRs got merged from a session after a fresh Copilot review pass had explicitly been requested for both first)."
+  },
+
   "ci_status_check": {
     "enabled": true,
     "poll_interval_seconds": 5,

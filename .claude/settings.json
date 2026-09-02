@@ -47,6 +47,10 @@
           {
             "type": "command",
             "command": "node .claude/hooks/check-branch-delete-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-merge-guard.js"
           }
         ]
       },
