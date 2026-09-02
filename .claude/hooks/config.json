@@ -44,7 +44,7 @@
 
   "merge_guard": {
     "enabled": true,
-    "_note": "Unconditionally blocks `gh pr merge`, the `gh api .../pulls/{n}/merge` REST equivalent, a local `git merge` on master/main, and a push refspec that lands a branch directly on master/main. Merging must happen via Emily on the GitHub PR page after she explicitly says go-ahead in the conversation — this hook can't verify that from inside a Bash call, so it always blocks rather than trying. See myfriendroze#25 incident, 2026-09-02 (merged two PRs she'd asked for a fresh Copilot review pass on first)."
+    "_note": "Unconditionally blocks `gh pr merge`, a PUT to the `gh api .../pulls/{n}/merge` REST equivalent, a local `git merge` on master/main, and any push (refspec or plain branch name) that lands commits directly on master/main. Merging must happen on the GitHub PR page after explicit go-ahead is given in the conversation — this hook can't verify that from inside a Bash call, so it always blocks rather than trying. See myfriendroze#25 incident, 2026-09-02 (two PRs got merged from a session after a fresh Copilot review pass had explicitly been requested for both first)."
   },
 
   "ci_status_check": {

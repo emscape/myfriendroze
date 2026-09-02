@@ -72,6 +72,54 @@ function segmentsOf(fullCmd) {
   return fullCmd.split(/&&|\|\||[;&|]/).map((s) => s.trim()).filter(Boolean);
 }
 
+// Env-var-prefix stripping, duplicated from check-branch-delete-guard.js
+// rather than shared — each hook is a standalone script Claude Code
+// invokes independently, and the two files are small enough that a shared
+// module would add more indirection than it saves. Kept in sync by hand;
+// see that file's more heavily-commented version for the full rationale
+// per pattern.
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s*/;
+const ENV_NO_ARG_FLAG = /^(?:-i|--ignore-environment|-0|--null|-v|--debug)\s*/;
+const ENV_ARG_FLAG_SEPARATE = /^(?:-u|--unset|-C|--chdir|-S|--split-string)\s+(?:"[^"]*"|'[^']*'|\S*)\s*/;
+const ENV_ARG_FLAG_COMBINED = /^(?:--unset|--chdir|--split-string)=(?:"[^"]*"|'[^']*'|\S*)\s*/;
+const ENV_END_OPTIONS = /^--\s+/;
+
+function stripLeadingEnvPrefix(segment) {
+  let s = segment.replace(/^env(?=\s|$)\s*/, '');
+  let prev;
+  do {
+    prev = s;
+    s = s
+      .replace(ENV_END_OPTIONS, '')
+      .replace(ENV_ARG_FLAG_COMBINED, '')
+      .replace(ENV_ARG_FLAG_SEPARATE, '')
+      .replace(ENV_NO_ARG_FLAG, '')
+      .replace(ENV_ASSIGNMENT, '');
+  } while (s !== prev);
+  return s;
+}
+
+// Strips a leading path component off the command name itself, so
+// `/usr/bin/gh pr merge 27` or `./bin/git push ...` are recognized the
+// same as a bare `gh`/`git` invocation — invoking the same binary by an
+// explicit path instead of relying on $PATH isn't a different, unwatched
+// command, and every check below is anchored on the bare command name.
+function stripCommandPathPrefix(segment) {
+  return segment.replace(/^(\S*[\\/])(gh|git)\b/, '$2');
+}
+
+// Normalizes a segment before any anchored gh/git pattern is tested
+// against it — strips a leading env-var prefix (plus env's own flags),
+// then a leading path prefix on the command name. Every pattern in this
+// file is anchored on a bare `gh `/`git ` start, so without this, `GH_
+// TOKEN=... gh pr merge 27` or `/usr/bin/git merge ...` would silently
+// bypass every check here — the exact same class of gap already fixed
+// once for --delete in check-branch-delete-guard.js, just not yet applied
+// to this file's own anchored patterns.
+function normalizeSegment(segment) {
+  return stripCommandPathPrefix(stripLeadingEnvPrefix(segment));
+}
+
 // A refspec token is `<src>:<dest>` with no spaces, and a bare branch-name
 // token (no colon) pushes a local branch of that name to a remote branch
 // of the same name. Once flags are filtered out, every remaining non-flag
@@ -108,7 +156,12 @@ function protectedRefspecPush(segment) {
       let dest = token.slice(colonIdx + 1) || src;
       src = src.replace(/^refs\/heads\//, '');
       dest = dest.replace(/^refs\/heads\//, '');
-      if (PROTECTED_BRANCHES.includes(dest) && src !== dest) {
+      // No `src !== dest` requirement — `git push origin main:main` (or
+      // the trailing-colon form `main:`) lands commits on main exactly as
+      // directly as any other refspec targeting it, so there's no case
+      // where src and dest being equal makes this any less a direct push
+      // to a protected branch.
+      if (PROTECTED_BRANCHES.includes(dest)) {
         return { src, dest };
       }
       continue;
@@ -128,10 +181,17 @@ function protectedRefspecPush(segment) {
 
 function findMergeReason(fullCmd) {
   const segments = segmentsOf(fullCmd);
+  // Every anchored check below runs against the normalized form (env
+  // prefix and command-path prefix stripped) — the original, raw segment
+  // is kept only for the human-readable "matched:" text in a block
+  // report, so the reason shown still looks like what was actually typed.
+  const normalized = segments.map(normalizeSegment);
 
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = normalized[i];
+
     if (/^gh\s+pr\s+merge\b/.test(segment)) {
-      return `\`gh pr merge\` — matched: ${segment}`;
+      return `\`gh pr merge\` — matched: ${segments[i]}`;
     }
     // The merge REST endpoint only actually merges on PUT — a GET to the
     // same path (checking merge state/method, used by ordinary read-only
@@ -141,7 +201,7 @@ function findMergeReason(fullCmd) {
       /\/pulls\/[^\s/]+\/merge\b/.test(segment) &&
       /(?:^|\s)(?:-X|--method)(?:\s+|=)PUT\b/i.test(segment)
     ) {
-      return `\`gh api\` PUT call to a PR's /merge REST endpoint — matched: ${segment}`;
+      return `\`gh api\` PUT call to a PR's /merge REST endpoint — matched: ${segments[i]}`;
     }
     // Push (refspec or plain branch name) that lands commits directly on
     // master/main, bypassing PR + merge entirely — e.g.
@@ -151,7 +211,7 @@ function findMergeReason(fullCmd) {
       const detail = refspec.src === refspec.dest
         ? `pushes directly to protected branch "${refspec.dest}"`
         : `push refspec targets protected branch "${refspec.dest}" directly from "${refspec.src}"`;
-      return `${detail} — matched: ${segment}`;
+      return `${detail} — matched: ${segments[i]}`;
     }
   }
 
@@ -159,10 +219,10 @@ function findMergeReason(fullCmd) {
   // protected branch. Command-chain checkout is checked textually, since
   // the actual HEAD hasn't moved yet when this hook runs (the checkout in
   // the same chain hasn't executed).
-  const hasMerge = segments.some((s) => /^git\s+merge\b/.test(s));
+  const hasMerge = normalized.some((s) => /^git\s+merge\b/.test(s));
   if (hasMerge) {
     const checkedOutTo = PROTECTED_BRANCHES.find((b) =>
-      segments.some((s) => new RegExp(`^git\\s+checkout\\s+${b}\\b`).test(s) || new RegExp(`^git\\s+switch\\s+${b}\\b`).test(s))
+      normalized.some((s) => new RegExp(`^git\\s+checkout\\s+${b}\\b`).test(s) || new RegExp(`^git\\s+switch\\s+${b}\\b`).test(s))
     );
     const branch = checkedOutTo || currentBranch();
     if (branch && PROTECTED_BRANCHES.includes(branch)) {

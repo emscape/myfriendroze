@@ -83,6 +83,34 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git push origin main'), true);
   });
 
+  await t.test('refspec push where src and dest are both the same protected branch', () => {
+    assert.equal(blocked('git push origin main:main'), true);
+  });
+
+  await t.test('refspec push with a trailing colon (empty dest defaults to src) targeting a protected branch', () => {
+    assert.equal(blocked('git push origin main:'), true);
+  });
+
+  await t.test('gh pr merge behind an env-var prefix', () => {
+    assert.equal(blocked('GH_TOKEN=abc123 gh pr merge 27'), true);
+  });
+
+  await t.test('gh pr merge invoked via an absolute path', () => {
+    assert.equal(blocked('/usr/bin/gh pr merge 27'), true);
+  });
+
+  await t.test('git merge on a protected branch behind an env-var prefix', () => {
+    assert.equal(blocked('git checkout master && GIT_TRACE=1 git merge fix/some-branch'), true);
+  });
+
+  await t.test('git merge on a protected branch invoked via an absolute path', () => {
+    assert.equal(blocked('git checkout master && /usr/bin/git merge fix/some-branch'), true);
+  });
+
+  await t.test('a protected-branch push behind an env-var prefix', () => {
+    assert.equal(blocked('GIT_TRACE=1 git push origin master'), true);
+  });
+
   await t.test('gh pr view is not a merge', () => {
     assert.equal(blocked('gh pr view 27'), false);
   });
@@ -101,6 +129,14 @@ test('findMergeReason', async (t) => {
 
   await t.test('a single bare token is treated as the remote, not a branch push', () => {
     assert.equal(blocked('git push some-remote'), false);
+  });
+
+  await t.test('an env-prefixed command that is not a merge is not flagged', () => {
+    assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
+  });
+
+  await t.test('a refspec pushing an unrelated branch to itself is not flagged', () => {
+    assert.equal(blocked('git push origin feature:feature'), false);
   });
 
   await t.test('an unrelated command is not flagged', () => {
