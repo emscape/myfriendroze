@@ -80,11 +80,21 @@ jobs:
       group: production-deploy
       cancel-in-progress: false
     steps:
+      # persist-credentials: false — this job also handles a production
+      # service-account key, so the checkout step's own GITHUB_TOKEN
+      # shouldn't be left sitting in git config for later steps to
+      # accidentally pick up.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            astro/package-lock.json
+            firebase/functions/package-lock.json
 
       # firebase.json's predeploy hooks only *build* (astro build /
       # copy-astro-dist.js) — they don't install deps first, so that has to
