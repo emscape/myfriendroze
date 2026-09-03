@@ -61,3 +61,69 @@ jobs:
         # task. New pure-logic modules built for the Stripe payment work
         # (lib/pricing.js etc.) are held to CLAUDE.md's QS1 >85% bar.
         run: npm run test:coverage
+
+  deploy:
+    name: Deploy to Firebase (production)
+    needs: [astro, functions]
+    # pull_request runs never have github.ref == refs/heads/master (it's the
+    # PR's merge ref instead), so this only fires once a PR is actually
+    # merged and lands as a push to master.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    environment: production
+    # This job handles a production credential, so GITHUB_TOKEN is scoped
+    # to the minimum it actually needs (checkout) rather than inheriting
+    # the repo's default permissions.
+    permissions:
+      contents: read
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      # persist-credentials: false — this job also handles a production
+      # service-account key, so the checkout step's own GITHUB_TOKEN
+      # shouldn't be left sitting in git config for later steps to
+      # accidentally pick up.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            astro/package-lock.json
+            firebase/functions/package-lock.json
+
+      # firebase.json's predeploy hooks only *build* (astro build /
+      # copy-astro-dist.js) — they don't install deps first, so that has to
+      # happen here before `firebase deploy` runs them.
+      - name: Install astro dependencies
+        run: npm ci --prefix astro
+
+      - name: Install functions dependencies
+        run: npm ci --prefix firebase/functions
+
+      - name: Write service account key
+        # printf instead of echo avoids a trailing newline and any
+        # implementation-defined escaping of the JSON content; chmod locks
+        # the file down to this job's own user rather than leaving it at
+        # the runner's default (typically world-readable) permissions.
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$RUNNER_TEMP/service-account.json"
+          chmod 600 "$RUNNER_TEMP/service-account.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Deploy to Firebase Hosting + Functions
+        # Version-pinned to the firebase-tools release already confirmed
+        # working for a manual `firebase deploy` against this project, so
+        # CD isn't the first place a newer major version's behavior gets
+        # tested. --non-interactive means a function-deletion prompt (e.g. a
+        # PR that removes a Cloud Function) fails the job instead of
+        # silently confirming the deletion — that one case needs a manual
+        # `firebase deploy --only functions --force` afterward.
+        run: npx firebase-tools@15.26.0 deploy --only hosting,functions --project myfriendroze-platform --non-interactive
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
