@@ -30,10 +30,50 @@ import '../styles/global.css';
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://myfriendroze.com" />
 
-    <!-- Favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+    <!-- Favicon — a single fill color can't read against both light and
+         dark browser chrome (the near-white fill this asset started with
+         was invisible against a light tab bar; a dark-brand-color fill
+         is invisible against a dark one). Two CSS-only approaches were
+         tried and both failed in real browser testing: a media attribute
+         on separate <link> tags (silently ignored, fell through to the
+         unconditional fallback) and an SVG with prefers-color-scheme in
+         its own embedded <style> (still showed the static light-mode fill
+         in real dark mode, even under a filename no browser had ever
+         fetched before — ruling out stale favicon-cache as the cause).
+         Both point to Chrome not reliably re-evaluating a theme media
+         feature for favicon resources specifically, unlike for ordinary
+         page content. This sets the favicon via JS instead — reading the
+         real preference with matchMedia (broadly and consistently
+         supported, unlike favicon-specific CSS behavior) and setting the
+         <link>'s href directly — plus a change listener, so a live OS
+         theme toggle updates it without a reload. favicon-light-mode.png
+         is the pre-JS default in the HTML (safe first-paint value and the
+         fallback for a browser with JS disabled). -->
+    <link rel="icon" type="image/png" id="favicon-link" href="/favicon-light-mode.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png">
     <link rel="manifest" href="/site.webmanifest">
+    <script is:inline>
+      (function () {
+        var link = document.getElementById('favicon-link');
+        if (!link || !window.matchMedia) return;
+        var media = window.matchMedia('(prefers-color-scheme: dark)');
+        function applyTheme() {
+          link.href = media.matches ? '/favicon-dark-mode.png' : '/favicon-light-mode.png';
+        }
+        applyTheme();
+        // addEventListener on a MediaQueryList is only supported in newer
+        // browsers — older Safari/WebKit only has the deprecated
+        // addListener. Without this fallback, calling the unsupported
+        // method throws and the page never gets a live-toggle listener at
+        // all (the initial applyTheme() call above still runs fine
+        // either way, so the favicon is at least correct on load).
+        if (media.addEventListener) {
+          media.addEventListener('change', applyTheme);
+        } else if (media.addListener) {
+          media.addListener(applyTheme);
+        }
+      })();
+    </script>
 
     <!-- Preconnect to fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

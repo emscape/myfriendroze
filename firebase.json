@@ -22,6 +22,28 @@
         "source": "**",
         "function": { "functionId": "ssrAstro", "region": "us-west1" }
       }
+    ],
+    "headers": [
+      {
+        "source": "/shop",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/shop/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/gallery",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/gallery/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/products/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      }
     ]
   },
   "firestore": {
