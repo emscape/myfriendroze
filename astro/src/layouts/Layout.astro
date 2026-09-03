@@ -55,12 +55,23 @@ import '../styles/global.css';
     <script is:inline>
       (function () {
         var link = document.getElementById('favicon-link');
+        if (!link || !window.matchMedia) return;
         var media = window.matchMedia('(prefers-color-scheme: dark)');
         function applyTheme() {
           link.href = media.matches ? '/favicon-dark-mode.png' : '/favicon-light-mode.png';
         }
         applyTheme();
-        media.addEventListener('change', applyTheme);
+        // addEventListener on a MediaQueryList is only supported in newer
+        // browsers — older Safari/WebKit only has the deprecated
+        // addListener. Without this fallback, calling the unsupported
+        // method throws and the page never gets a live-toggle listener at
+        // all (the initial applyTheme() call above still runs fine
+        // either way, so the favicon is at least correct on load).
+        if (media.addEventListener) {
+          media.addEventListener('change', applyTheme);
+        } else if (media.addListener) {
+          media.addListener(applyTheme);
+        }
       })();
     </script>
 
