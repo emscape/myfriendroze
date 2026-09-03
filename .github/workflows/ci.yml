@@ -71,6 +71,11 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
+    # This job handles a production credential, so GITHUB_TOKEN is scoped
+    # to the minimum it actually needs (checkout) rather than inheriting
+    # the repo's default permissions.
+    permissions:
+      contents: read
     concurrency:
       group: production-deploy
       cancel-in-progress: false
@@ -91,7 +96,13 @@ jobs:
         run: npm ci --prefix firebase/functions
 
       - name: Write service account key
-        run: echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$RUNNER_TEMP/service-account.json"
+        # printf instead of echo avoids a trailing newline and any
+        # implementation-defined escaping of the JSON content; chmod locks
+        # the file down to this job's own user rather than leaving it at
+        # the runner's default (typically world-readable) permissions.
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_KEY" > "$RUNNER_TEMP/service-account.json"
+          chmod 600 "$RUNNER_TEMP/service-account.json"
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
 
