@@ -30,19 +30,39 @@ import '../styles/global.css';
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://myfriendroze.com" />
 
-    <!-- Favicon — two theme-conditional variants, since a single fill
-         color can't read against both light and dark browser chrome. The
-         near-white fill this asset started with was invisible against a
-         light tab bar; the dark-brand-color fill is invisible against a
-         dark one. apple-touch-icon/manifest icons (iOS/Android home
-         screen, both typically light backgrounds) don't support
-         per-theme swapping, so those stay on the light-mode (dark-fill)
-         variant regardless of browser theme. -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-light-mode.png" media="(prefers-color-scheme: light)">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-dark-mode.png" media="(prefers-color-scheme: dark)">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-light-mode.png">
+    <!-- Favicon — a single fill color can't read against both light and
+         dark browser chrome (the near-white fill this asset started with
+         was invisible against a light tab bar; a dark-brand-color fill
+         is invisible against a dark one). Two CSS-only approaches were
+         tried and both failed in real browser testing: a media attribute
+         on separate <link> tags (silently ignored, fell through to the
+         unconditional fallback) and an SVG with prefers-color-scheme in
+         its own embedded <style> (still showed the static light-mode fill
+         in real dark mode, even under a filename no browser had ever
+         fetched before — ruling out stale favicon-cache as the cause).
+         Both point to Chrome not reliably re-evaluating a theme media
+         feature for favicon resources specifically, unlike for ordinary
+         page content. This sets the favicon via JS instead — reading the
+         real preference with matchMedia (broadly and consistently
+         supported, unlike favicon-specific CSS behavior) and setting the
+         <link>'s href directly — plus a change listener, so a live OS
+         theme toggle updates it without a reload. favicon-light-mode.png
+         is the pre-JS default in the HTML (safe first-paint value and the
+         fallback for a browser with JS disabled). -->
+    <link rel="icon" type="image/png" id="favicon-link" href="/favicon-light-mode.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png">
     <link rel="manifest" href="/site.webmanifest">
+    <script is:inline>
+      (function () {
+        var link = document.getElementById('favicon-link');
+        var media = window.matchMedia('(prefers-color-scheme: dark)');
+        function applyTheme() {
+          link.href = media.matches ? '/favicon-dark-mode.png' : '/favicon-light-mode.png';
+        }
+        applyTheme();
+        media.addEventListener('change', applyTheme);
+      })();
+    </script>
 
     <!-- Preconnect to fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
