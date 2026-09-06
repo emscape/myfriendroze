@@ -123,15 +123,13 @@ const additionalImages = product.images.slice(1);
           </div>
 
           <!-- Specifications -->
-          <div class="product-detail__specs">
-            <div class="spec-item">
-              <dt class="spec-label">Dimensions:</dt>
-              <dd class="spec-value">{product.dimensions}</dd>
-            </div>
-            <div class="spec-item">
-              <dt class="spec-label">Weight:</dt>
-              <dd class="spec-value">{(product.weight / 453.592).toFixed(2)} lbs</dd>
-            </div>
+          <dl class="product-detail__specs">
+            {product.dimensions && (
+              <div class="spec-item">
+                <dt class="spec-label">Dimensions:</dt>
+                <dd class="spec-value">{product.dimensions}</dd>
+              </div>
+            )}
             {product.features && product.features.length > 0 && (
               <div class="spec-item">
                 <dt class="spec-label">Features:</dt>
@@ -144,7 +142,7 @@ const additionalImages = product.images.slice(1);
                 </dd>
               </div>
             )}
-          </div>
+          </dl>
 
           <!-- Add to Cart Form -->
           <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-title={product.title} data-product-price={product.price}>
@@ -419,6 +417,10 @@ const additionalImages = product.images.slice(1);
 
   /* Specifications */
   .product-detail__specs {
+    /* dl has a default browser margin div didn't — zero it so switching
+       tags (for valid dt/dd-must-be-in-a-dl semantics) doesn't shift
+       layout. */
+    margin: 0;
     display: flex;
     flex-direction: column;
     gap: 1.5rem;

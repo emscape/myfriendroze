@@ -79,21 +79,62 @@ describe('docToProduct', () => {
     expect(product.images).toEqual([]);
   });
 
-  it('defaults category, dimensions, features, tags, and compareAtPrice for fields Firestore does not store', () => {
-    // The Flutter admin app's Product model has no category/dimensions/
-    // features/tags/compareAtPrice fields today — this is a known data-
-    // completeness gap (see admin-app-web-hosting memory / project backlog),
-    // not something this script should invent data for. Everything must
-    // default to a safe, renderable empty value rather than being undefined.
+  it('defaults category, features, tags, and compareAtPrice for fields Firestore does not store', () => {
+    // The Flutter admin app's Product model has no category/features/tags/
+    // compareAtPrice fields today — this is a known data-completeness gap
+    // (see admin-app-web-hosting memory / project backlog), not something
+    // this script should invent data for. Everything must default to a
+    // safe, renderable empty value rather than being undefined.
     const doc = fakeDoc('abc', { title: 'Bare Product', price: 15 });
 
     const product = docToProduct(doc);
 
     expect(product.category).toBe('');
-    expect(product.dimensions).toBe('');
     expect(product.features).toEqual([]);
     expect(product.tags).toEqual([]);
     expect(product.compareAtPrice).toBeNull();
+  });
+
+  // dimensions used to hardcode '' with a comment claiming the admin app
+  // collected no height/width/depth data at all — stale as of the
+  // lbs/oz-and-inches admin form work, which added heightIn/widthIn/
+  // depthIn to every product. This formats those into the same
+  // `W" × H"`-style string the old hand-written products.js used, so
+  // real product dimensions actually reach the site instead of always
+  // rendering a blank "Dimensions:" row.
+  it('formats dimensions from heightIn/widthIn/depthIn when present', () => {
+    const doc = fakeDoc('abc', {
+      title: 'Blue Bayou',
+      price: 110,
+      heightIn: 4.75,
+      widthIn: 4.5,
+      depthIn: 4.5,
+    });
+
+    const product = docToProduct(doc);
+
+    expect(product.dimensions).toBe('4.5" W × 4.75" H × 4.5" D');
+  });
+
+  it('omits depth from the formatted dimensions when only height/width are set', () => {
+    const doc = fakeDoc('abc', {
+      title: 'Round Planter',
+      price: 40,
+      heightIn: 5,
+      widthIn: 5,
+    });
+
+    const product = docToProduct(doc);
+
+    expect(product.dimensions).toBe('5" W × 5" H');
+  });
+
+  it('defaults dimensions to an empty string when height/width/depth are absent (legacy products predate this feature)', () => {
+    const doc = fakeDoc('abc', { title: 'Old Mug', price: 15 });
+
+    const product = docToProduct(doc);
+
+    expect(product.dimensions).toBe('');
   });
 
   it('defaults price and weight to 0 when missing, never undefined', () => {
