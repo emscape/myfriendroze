@@ -124,14 +124,12 @@ const additionalImages = product.images.slice(1);
 
           <!-- Specifications -->
           <div class="product-detail__specs">
-            <div class="spec-item">
-              <dt class="spec-label">Dimensions:</dt>
-              <dd class="spec-value">{product.dimensions}</dd>
-            </div>
-            <div class="spec-item">
-              <dt class="spec-label">Weight:</dt>
-              <dd class="spec-value">{(product.weight / 453.592).toFixed(2)} lbs</dd>
-            </div>
+            {product.dimensions && (
+              <div class="spec-item">
+                <dt class="spec-label">Dimensions:</dt>
+                <dd class="spec-value">{product.dimensions}</dd>
+              </div>
+            )}
             {product.features && product.features.length > 0 && (
               <div class="spec-item">
                 <dt class="spec-label">Features:</dt>

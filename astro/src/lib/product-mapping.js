@@ -22,14 +22,34 @@ export function slugify(title) {
 }
 
 /**
+ * Formats a product's height/width/depth (inches) into the same
+ * `W" × H"`-style string the old hand-written products.js used, e.g.
+ * `4.5" W × 4.75" H`. Depth is appended only when present, since most
+ * pieces are round enough that width/height alone is the useful spec.
+ * Returns '' when no dimension is set (legacy products predate this
+ * admin-app field, or the piece was never measured).
+ * @param {{ widthIn?: number, heightIn?: number, depthIn?: number }} dims
+ * @returns {string}
+ */
+export function formatDimensions({ widthIn, heightIn, depthIn }) {
+  const parts = [];
+  if (widthIn) parts.push(`${widthIn}" W`);
+  if (heightIn) parts.push(`${heightIn}" H`);
+  if (depthIn) parts.push(`${depthIn}" D`);
+  return parts.join(' × ');
+}
+
+/**
  * Pure transform from a Firestore product document to the shape
  * astro/src/data/products.js's Product typedef expects. No Firestore calls
  * here — unit-testable without a live database.
  *
- * category/dimensions/features/tags/compareAtPrice default to safe empty
- * values rather than being invented — the Flutter admin app's Product model
+ * category/features/tags/compareAtPrice default to safe empty values
+ * rather than being invented — the Flutter admin app's Product model
  * doesn't collect those fields today, a known gap tracked separately, not
- * something to paper over with guessed data here.
+ * something to paper over with guessed data here. dimensions IS collected
+ * (heightIn/widthIn/depthIn, added for shipping estimates) and is formatted
+ * via formatDimensions above.
  * @param {{ id: string, data: () => Record<string, any> }} doc
  */
 export function docToProduct(doc) {
@@ -39,6 +59,9 @@ export function docToProduct(doc) {
     : data.imageUrl
       ? [data.imageUrl]
       : [];
+  const heightIn = typeof data.heightIn === 'number' ? data.heightIn : 0;
+  const widthIn = typeof data.widthIn === 'number' ? data.widthIn : 0;
+  const depthIn = typeof data.depthIn === 'number' ? data.depthIn : 0;
 
   return {
     id: doc.id,
@@ -64,7 +87,7 @@ export function docToProduct(doc) {
     // real caller queries where('isActive', '==', true) first.)
     inStock: data.inStock === undefined ? true : data.inStock === true,
     category: '',
-    dimensions: '',
+    dimensions: formatDimensions({ widthIn, heightIn, depthIn }),
     features: [],
     weight: typeof data.weight === 'number' ? data.weight : 0,
     seoTitle: '',
