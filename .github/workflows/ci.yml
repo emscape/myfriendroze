@@ -116,6 +116,20 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
 
+      - name: Build Astro
+        # Built once, explicitly, here — both hosting.predeploy and
+        # functions.predeploy in firebase.json independently declare
+        # "npm --prefix astro run build" (each needs it when its own target
+        # is deployed alone), which would otherwise build astro twice for
+        # this single combined deploy: once per predeploy hook. Beyond
+        # wasted time, the two builds aren't guaranteed identical (the
+        # prebuild scripts read live Firestore data), so Hosting and the
+        # ssrAstro Function could ship from two different snapshots.
+        # SKIP_ASTRO_BUILD=1 on the deploy step below makes both predeploy
+        # hooks no-op instead of rebuilding — see astro/scripts/build.mjs
+        # and astro/scripts/prebuild.mjs.
+        run: npm run build --prefix astro
+
       - name: Deploy to Firebase Hosting + Functions
         # Version-pinned to the firebase-tools release already confirmed
         # working for a manual `firebase deploy` against this project, so
@@ -127,3 +141,12 @@ jobs:
         run: npx firebase-tools@15.26.0 deploy --only hosting,functions --project myfriendroze-platform --non-interactive
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/service-account.json
+          SKIP_ASTRO_BUILD: "1"
+
+      - name: Remove service account key
+        # Runs even if the deploy step above failed — the runner is
+        # ephemeral and destroyed after the job either way, but this
+        # closes the window if a future step is ever added after deploy,
+        # or if logs/artifacts ever capture $RUNNER_TEMP.
+        if: always()
+        run: rm -f "$RUNNER_TEMP/service-account.json"
