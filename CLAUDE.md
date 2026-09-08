@@ -159,19 +159,19 @@ Use `/test-driven-development` skill for RED→GREEN→COMMIT→REFACTOR cycle.
 
 ## Deployment
 
+**Master auto-deploys.** Merging a PR to `master` automatically deploys Hosting + Functions to production via GitHub Actions (the `deploy` job in `.github/workflows/ci.yml`) — no manual step needed for those two targets. **Firestore/Storage rules are deliberately excluded from CD** (highest-blast-radius files in the repo, no rules-validation CI exists yet) and always need a manual deploy, whether or not CD is otherwise in use.
+
 ```bash
-# Build the Astro site
+# Build the Astro site (only needed for a manual deploy — CD builds it itself)
 cd astro && npm run build
 
-# Deploy to Firebase Hosting (from repo root)
+# Manual deploy — e.g. to verify a fix before merging, or to redeploy without a new commit
 firebase deploy --only hosting
-
-# Deploy Functions only
 firebase deploy --only functions
 
-# Deploy everything
-firebase deploy
+# Firestore/Storage rules — always manual, never covered by CD
+firebase deploy --only firestore,storage
 ```
 
-Requires: Firebase CLI authenticated (`firebase login`), correct project selected (`firebase use myfriendroze-platform`).  
+Requires: Firebase CLI authenticated. `firebase login`'s personal session expires unusually fast on this account (likely a Workspace policy) — prefer `GOOGLE_APPLICATION_CREDENTIALS=firebase/functions/secrets/serviceAccountKey.json` over relying on it; run `firebase logout` first if a stale personal login is already cached, since the CLI tries that before falling back to the service account. Correct project selected either way (`firebase use myfriendroze-platform`).  
 Never deploy without a clean build and passing tests.
