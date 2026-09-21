@@ -43,6 +43,14 @@
       {
         "source": "/products/**",
         "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/events",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
+        "source": "/events/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
       }
     ]
   },

@@ -2,11 +2,37 @@
 // from the template so it's unit-testable — the same reason
 // product-mapping.js/gallery-mapping.js live outside their .astro pages.
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
-const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+// Every venue this site lists events for is in the LA area — fixed rather
+// than read from the event doc, since nothing today collects a per-event
+// timezone. Without an explicit timeZone, Intl.DateTimeFormat uses the SSR
+// process's own timezone, which defaults to UTC on Cloud Functions — an
+// event stored as "5:00 PM Pacific" would otherwise display as a different
+// time, and sometimes the wrong date entirely (see event-schedule.test.mjs
+// for a concrete case).
+const EVENT_TIMEZONE = 'America/Los_Angeles';
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', {
+  month: 'numeric',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: EVENT_TIMEZONE,
+});
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: EVENT_TIMEZONE,
+});
+// en-CA gives a sortable/comparable YYYY-MM-DD string — used only to
+// compare calendar days, never displayed.
+const calendarDayFormatter = new Intl.DateTimeFormat('en-CA', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  timeZone: EVENT_TIMEZONE,
+});
 
 function isSameCalendarDay(a, b) {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return calendarDayFormatter.format(a) === calendarDayFormatter.format(b);
 }
 
 /**

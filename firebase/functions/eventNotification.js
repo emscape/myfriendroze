@@ -46,9 +46,26 @@ exports.sendEventNotification = onCall({
     const subscribers = subscribersSnapshot.docs.map(doc => doc.data().email);
     logger.info(`Found ${subscribers.length} subscribers for event notifications`);
 
-    // Save event to Firestore
+    // Save event to Firestore.
+    //
+    // isActive: true makes this doc match the `/events` page's live query
+    // (astro/src/lib/events-live.js), which filters on isActive — without
+    // it, an event created here would silently never appear on the site.
+    //
+    // KNOWN GAP: eventDetails here is caller-supplied and, going by the
+    // EVENT_DATE/EVENT_TIME fields used below for the Brevo email, is
+    // expected to carry legacy `date`/`time` strings, not a Firestore
+    // Timestamp `eventDate` field. astro/src/lib/event-mapping.js requires
+    // a real `eventDate` Timestamp and drops any doc without one, so an
+    // event created through this function still won't appear on the site
+    // even with isActive set. This function has no current callers (see
+    // the Brevo Transactional Emails Session notes) — needs a real design
+    // pass to collect a structured eventDate before it's wired up to
+    // anything, rather than guessing a caller contract that doesn't exist
+    // yet.
     const eventRef = await admin.firestore().collection("events").add({
       ...eventDetails,
+      isActive: true,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       notificationSent: true,
       recipientCount: subscribers.length
