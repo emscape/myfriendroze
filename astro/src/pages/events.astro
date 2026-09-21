@@ -1,11 +1,35 @@
 ---
-export const prerender = true;
+// Rendered on demand (not prerendered) so "is this event still upcoming"
+// is evaluated against the real current date on every request — a
+// prerendered page only re-ran that check at the last build/deploy, which
+// is how the Pasadena Artwalk stayed listed days after it had already
+// happened. See src/lib/events-live.js.
+export const prerender = false;
 
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
-import { getUpcomingEvents } from '../data/events.js';
+import { events as recurringEvents, getUpcomingEvents } from '../data/events.js';
+import { fetchLiveEvents } from '../lib/events-live.js';
+import { getFirestoreDb } from '../lib/firestore-admin.js';
+import { formatEventSchedule } from '../lib/event-schedule.js';
 
-const upcomingEvents = getUpcomingEvents();
+// A transient Firestore/credentials failure here must not take the whole
+// page down — falling back to just the hardcoded recurring extras keeps
+// /events serving instead of a 500 for every visitor until Firestore
+// recovers.
+let liveEvents: Awaited<ReturnType<typeof fetchLiveEvents>> = [];
+try {
+  liveEvents = await fetchLiveEvents(getFirestoreDb());
+} catch (error) {
+  console.error('[events] Failed to fetch live events from Firestore — showing only the hardcoded recurring events.', error);
+}
+
+const sortedLiveEvents = [...liveEvents].sort(
+  (a, b) => (a.startDate?.getTime() ?? 0) - (b.startDate?.getTime() ?? 0)
+);
+// Hardcoded recurring extras (e.g. the Facebook Sunday sale) stay pinned
+// first, ahead of dated Firestore events sorted soonest-first.
+const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvents]);
 ---
 
 <Layout
@@ -31,10 +55,7 @@ const upcomingEvents = getUpcomingEvents();
               <strong class="event-item__title">{event.title}</strong>
               {event.startDate && (
                 <span class="event-item__date">
-                  {event.startDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}
-                  {event.endDate && event.endDate.getTime() !== event.startDate.getTime() && (
-                    <> – {event.endDate.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })}</>
-                  )}
+                  {formatEventSchedule(event.startDate, event.endDate)}
                 </span>
               )}
               {event.description && <span class="event-item__desc">{event.description}</span>}

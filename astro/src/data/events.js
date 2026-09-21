@@ -1,5 +1,9 @@
-// Upcoming and recurring events for myfriendroze
-// Add new events here; past events are automatically hidden on the site.
+// Hardcoded recurring/no-date event extras for myfriendroze — things that
+// don't fit the Firestore-backed Event model the admin app manages (see
+// astro/src/lib/events-live.js), namely a standing recurring listing with
+// no specific date. Dated, one-off events belong in the admin app now, not
+// here — see events.astro, which merges this list with the live Firestore
+// events before filtering to what's upcoming.
 
 /**
  * @typedef {{
@@ -27,41 +31,18 @@ export const events = [
     startDate: null,
     endDate: null,
   },
-  {
-    id: 'mezcala-2026',
-    title: 'Mezcala',
-    description: '9a - 2p',
-    link: null,
-    linkLabel: null,
-    location: '6901 Orange Ave, Long Beach, CA',
-    startDate: new Date('2026-08-22'),
-    endDate: new Date('2026-08-22'),
-  },
-  {
-    id: 'prickly-monster-cactus-succulent-festival-2026',
-    title: 'Prickly Monster Cactus & Succulent Festival',
-    description: '12p - 5p, at Common Space Brewing',
-    link: null,
-    linkLabel: null,
-    location: '3411 El Segundo Blvd, Hawthorne, CA',
-    startDate: new Date('2026-09-06'),
-    endDate: new Date('2026-09-06'),
-  },
-  {
-    id: 'pasadena-artwalk-2026',
-    title: 'Pasadena Artwalk',
-    description: '11a - 6p',
-    link: null,
-    linkLabel: null,
-    location: 'Green St, Pasadena CA - Between Los Robles & El Molino',
-    startDate: new Date('2026-09-19'),
-    endDate: new Date('2026-09-20'),
-  },
 ];
 
-/** @returns {SiteEvent[]} */
-export function getUpcomingEvents() {
-  const today = new Date();
+/**
+ * Filters a list of SiteEvents down to ones still worth showing: a null
+ * endDate is a recurring/no-expiry entry (always kept), otherwise the event
+ * is kept through the end of its endDate day.
+ * @param {SiteEvent[]} eventList
+ * @param {Date} [referenceDate]
+ * @returns {SiteEvent[]}
+ */
+export function getUpcomingEvents(eventList, referenceDate = new Date()) {
+  const today = new Date(referenceDate);
   today.setHours(0, 0, 0, 0);
-  return events.filter(e => e.endDate === null || e.endDate >= today);
+  return eventList.filter((e) => e.endDate === null || e.endDate >= today);
 }
