@@ -64,7 +64,13 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
               {event.description && <span class="event-item__desc">{event.description}</span>}
               {event.location && <span class="event-item__location">{event.location}</span>}
               {event.link && (
-                <a href={event.link} class="event-item__link" target="_blank" rel="noopener">{event.linkLabel ?? 'event link'}</a>
+                <a
+                  href={event.link}
+                  class="event-item__link"
+                  target="_blank"
+                  rel="noopener"
+                  aria-label={event.linkLabel ?? `${event.title} event link`}
+                >{event.linkLabel ?? 'event link'}</a>
               )}
             </li>
           ))}
