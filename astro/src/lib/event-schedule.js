@@ -2,14 +2,15 @@
 // from the template so it's unit-testable — the same reason
 // product-mapping.js/gallery-mapping.js live outside their .astro pages.
 
-// Every venue this site lists events for is in the LA area — fixed rather
-// than read from the event doc, since nothing today collects a per-event
-// timezone. Without an explicit timeZone, Intl.DateTimeFormat uses the SSR
-// process's own timezone, which defaults to UTC on Cloud Functions — an
-// event stored as "5:00 PM Pacific" would otherwise display as a different
-// time, and sometimes the wrong date entirely (see event-schedule.test.mjs
-// for a concrete case).
-const EVENT_TIMEZONE = 'America/Los_Angeles';
+// Without an explicit timeZone, Intl.DateTimeFormat uses the SSR process's
+// own timezone, which defaults to UTC on Cloud Functions — an event stored
+// as "5:00 PM Pacific" would otherwise display as a different time, and
+// sometimes the wrong date entirely (see event-schedule.test.mjs for a
+// concrete case). EVENT_TIMEZONE/toEventCalendarDayKey live in
+// event-timezone.js, shared with data/events.js's upcoming-events filter —
+// the two disagreeing about where a calendar day starts is its own bug
+// class (see events.test.mjs).
+import { EVENT_TIMEZONE, toEventCalendarDayKey } from './event-timezone.js';
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'numeric',
@@ -22,17 +23,9 @@ const timeFormatter = new Intl.DateTimeFormat('en-US', {
   minute: '2-digit',
   timeZone: EVENT_TIMEZONE,
 });
-// en-CA gives a sortable/comparable YYYY-MM-DD string — used only to
-// compare calendar days, never displayed.
-const calendarDayFormatter = new Intl.DateTimeFormat('en-CA', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  timeZone: EVENT_TIMEZONE,
-});
 
 function isSameCalendarDay(a, b) {
-  return calendarDayFormatter.format(a) === calendarDayFormatter.format(b);
+  return toEventCalendarDayKey(a) === toEventCalendarDayKey(b);
 }
 
 /**
