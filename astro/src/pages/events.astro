@@ -53,6 +53,9 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
           {upcomingEvents.map((event) => (
             <li class="event-item">
               <strong class="event-item__title">{event.title}</strong>
+              {event.imageUrl && (
+                <img src={event.imageUrl} alt={event.title} class="event-item__image" loading="lazy" />
+              )}
               {event.startDate && (
                 <span class="event-item__date">
                   {formatEventSchedule(event.startDate, event.endDate)}
@@ -61,7 +64,13 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
               {event.description && <span class="event-item__desc">{event.description}</span>}
               {event.location && <span class="event-item__location">{event.location}</span>}
               {event.link && (
-                <a href={event.link} class="event-item__link">{event.linkLabel ?? event.link}</a>
+                <a
+                  href={event.link}
+                  class="event-item__link"
+                  target="_blank"
+                  rel="noopener"
+                  aria-label={event.linkLabel ?? `${event.title} event link`}
+                >{event.linkLabel ?? 'event link'}</a>
               )}
             </li>
           ))}
@@ -113,6 +122,14 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
   .event-item:last-child {
     border-bottom: none;
     padding-bottom: 0;
+  }
+
+  .event-item__image {
+    width: 100%;
+    max-width: 40rem;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: 0.8rem;
   }
 
   .event-item__title {
