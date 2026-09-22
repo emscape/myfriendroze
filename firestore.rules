@@ -28,5 +28,14 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Saved venue addresses (e.g. Jackalope Pasadena, Common Space
+    // Brewing) Roze enters once in the admin app and reuses on future
+    // events. Internal admin data only — unlike products/events/gallery,
+    // the public site never reads this collection, so it doesn't need a
+    // public read rule.
+    match /savedLocations/{locationId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
