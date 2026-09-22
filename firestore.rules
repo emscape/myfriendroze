@@ -15,7 +15,20 @@ service cloud.firestore {
     }
 
     match /products/{productId} {
-      allow read: if true;
+      // Public reads are gated on isActive + publishAt so a scheduled
+      // (delayed-publish) product isn't visible to a client reading
+      // Firestore directly before its reveal time — isAdmin() still sees
+      // everything, since the admin app manages products regardless of
+      // publish state. get('publishAt', null) (rather than a plain
+      // `'publishAt' in resource.data` check) treats a field that's absent
+      // and one that's explicitly null the same way — the admin app writes
+      // an explicit null to clear a schedule (same idiom as events' link/
+      // clearLink), so both cases must mean "no publish gate".
+      allow read: if isAdmin() || (
+        resource.data.isActive == true &&
+        (resource.data.get('publishAt', null) == null ||
+         resource.data.get('publishAt', null) <= request.time)
+      );
       allow write: if isAdmin();
     }
 

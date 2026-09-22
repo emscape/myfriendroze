@@ -39,6 +39,11 @@ function fakeDoc(id, data) {
   return { id, data: () => data };
 }
 
+function fakeTimestamp(dateString) {
+  const date = new Date(dateString);
+  return { toMillis: () => date.getTime(), toDate: () => date };
+}
+
 describe('fetchLiveProducts', () => {
   it('maps active Firestore docs into products', async () => {
     const db = fakeDb([
@@ -73,6 +78,46 @@ describe('fetchLiveProducts', () => {
     const products = await fetchLiveProducts(db);
 
     expect(products.map((p) => p.handle)).toEqual(['planter', 'planter-bbbb']);
+  });
+
+  it('excludes an active product whose publishAt is still in the future', async () => {
+    const db = fakeDb([
+      fakeDoc('scheduled', {
+        title: 'Not Yet',
+        price: 25,
+        isActive: true,
+        publishAt: fakeTimestamp('2999-01-01'),
+      }),
+    ]);
+
+    const products = await fetchLiveProducts(db);
+
+    expect(products).toEqual([]);
+  });
+
+  it('includes an active product whose publishAt has already passed', async () => {
+    const db = fakeDb([
+      fakeDoc('past', {
+        title: 'Already Live',
+        price: 25,
+        isActive: true,
+        publishAt: fakeTimestamp('2000-01-01'),
+      }),
+    ]);
+
+    const products = await fetchLiveProducts(db);
+
+    expect(products).toEqual([expect.objectContaining({ id: 'past' })]);
+  });
+
+  it('includes an active product with no publishAt field at all (pre-existing docs)', async () => {
+    const db = fakeDb([
+      fakeDoc('legacy', { title: 'Legacy Product', price: 25, isActive: true }),
+    ]);
+
+    const products = await fetchLiveProducts(db);
+
+    expect(products).toEqual([expect.objectContaining({ id: 'legacy' })]);
   });
 });
 
