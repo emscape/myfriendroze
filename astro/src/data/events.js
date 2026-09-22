@@ -15,6 +15,7 @@ import { toEventCalendarDayKey } from '../lib/event-timezone.js';
  *   link: string|null,
  *   linkLabel: string|null,
  *   location: string|null,
+ *   imageUrl: string|null,
  *   startDate: Date|null,
  *   endDate: Date|null
  * }} SiteEvent
@@ -29,6 +30,7 @@ export const events = [
     link: 'https://www.facebook.com/groups/plantkillers',
     linkLabel: 'Join us there to participate!',
     location: null,
+    imageUrl: null,
     // null date = recurring / no expiry, always shown
     startDate: null,
     endDate: null,

@@ -3,6 +3,8 @@
 // product-mapping.js/gallery-mapping.js: no Firestore calls here, so this is
 // unit-testable without a live database.
 
+import { sanitizeHttpUrl } from './url-sanitize.js';
+
 /**
  * @param {unknown} value
  * @returns {Date | null}
@@ -25,7 +27,7 @@ function toDate(value) {
  * throwing — fetchLiveEvents filters those out before they'd otherwise be
  * misread as a recurring, always-shown event.
  * @param {{ id: string, data: () => Record<string, any> }} doc
- * @returns {{ id: string, title: string, description: string|null, link: null, linkLabel: null, location: string|null, startDate: Date|null, endDate: Date|null }}
+ * @returns {{ id: string, title: string, description: string|null, link: string|null, linkLabel: null, location: string|null, imageUrl: string|null, startDate: Date|null, endDate: Date|null }}
  */
 export function docToEvent(doc) {
   const data = doc.data();
@@ -36,12 +38,14 @@ export function docToEvent(doc) {
     id: doc.id,
     title: typeof data.title === 'string' ? data.title : '',
     description: typeof data.description === 'string' && data.description !== '' ? data.description : null,
-    // The admin app has no concept of an external link for an event today —
-    // unlike the hardcoded recurring extras in events.js (e.g. the Facebook
-    // sale), which keep that field for their own use.
-    link: null,
+    link: sanitizeHttpUrl(data.link, null),
+    // The admin app has no concept of a separate display label for the
+    // link today, unlike the hardcoded recurring extras in events.js (e.g.
+    // the Facebook sale) — events.astro falls back to a generic label when
+    // this is null.
     linkLabel: null,
     location: typeof data.location === 'string' && data.location !== '' ? data.location : null,
+    imageUrl: sanitizeHttpUrl(data.imageUrl, null),
     startDate,
     endDate,
   };

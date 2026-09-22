@@ -29,6 +29,7 @@ describe('docToEvent', () => {
       link: null,
       linkLabel: null,
       location: '6901 Orange Ave, Long Beach, CA',
+      imageUrl: null,
       startDate: new Date('2026-08-22'),
       endDate: new Date('2026-08-22'),
     });
@@ -66,5 +67,53 @@ describe('docToEvent', () => {
 
     expect(event.startDate).toBeNull();
     expect(event.endDate).toBeNull();
+  });
+
+  it('maps a valid http(s) link from Firestore', () => {
+    const event = docToEvent(
+      fakeDoc('abc', {
+        title: 'Mezcala',
+        eventDate: fakeTimestamp('2026-08-22'),
+        link: 'https://example.com/mezcala-market',
+      })
+    );
+
+    expect(event.link).toBe('https://example.com/mezcala-market');
+  });
+
+  it('rejects a non-http(s) link instead of passing it through to the rendered <a href>', () => {
+    const event = docToEvent(
+      fakeDoc('abc', {
+        title: 'Mezcala',
+        eventDate: fakeTimestamp('2026-08-22'),
+        link: 'javascript:alert(1)',
+      })
+    );
+
+    expect(event.link).toBeNull();
+  });
+
+  it('maps a valid http(s) imageUrl from Firestore', () => {
+    const event = docToEvent(
+      fakeDoc('abc', {
+        title: 'Mezcala',
+        eventDate: fakeTimestamp('2026-08-22'),
+        imageUrl: 'https://example.com/photo.jpg',
+      })
+    );
+
+    expect(event.imageUrl).toBe('https://example.com/photo.jpg');
+  });
+
+  it('rejects a non-http(s) imageUrl instead of passing it through to the rendered <img src>', () => {
+    const event = docToEvent(
+      fakeDoc('abc', {
+        title: 'Mezcala',
+        eventDate: fakeTimestamp('2026-08-22'),
+        imageUrl: 'javascript:alert(1)',
+      })
+    );
+
+    expect(event.imageUrl).toBeNull();
   });
 });

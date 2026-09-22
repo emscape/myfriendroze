@@ -3,21 +3,7 @@
 // Firestore reads used by gallery.astro (see gallery-live.js). Same
 // extraction rationale as product-mapping.js.
 
-/**
- * Firestore data isn't a trusted input, and both imageUrl and link get
- * rendered directly into HTML attributes (<img src>, <a href>) on the
- * gallery page — an unvalidated javascript:/data:/vbscript: URL landing in
- * either would be an XSS vector. Only http(s) URLs pass through; anything
- * else falls back to `whenInvalid`.
- * @param {unknown} url
- * @param {T} whenInvalid
- * @returns {string | T}
- * @template T
- */
-function sanitizeHttpUrl(url, whenInvalid) {
-  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return whenInvalid;
-  return url;
-}
+import { sanitizeHttpUrl } from './url-sanitize.js';
 
 /**
  * Pure transform from a Firestore gallery document to the shape
