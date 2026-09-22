@@ -24,6 +24,20 @@ service cloud.firestore {
       // and one that's explicitly null the same way — the admin app writes
       // an explicit null to clear a schedule (same idiom as events' link/
       // clearLink), so both cases must mean "no publish gate".
+      //
+      // IMPORTANT — this only protects a direct get() by document ID.
+      // Firestore rules can't prove a per-document predicate (publishAt)
+      // against an unauthenticated *list/collection query* that doesn't
+      // itself filter on that field — a public client query such as
+      // `.where('isActive', '==', true)` would get PERMISSION_DENIED
+      // outright once evaluated against this rule, not a silently
+      // isActive-only result. No public (non-admin) client query exists
+      // anywhere in this codebase today (the site reads via the Admin SDK,
+      // which bypasses rules entirely — see firestore-admin.js), so nothing
+      // currently breaks. But if a public collection-query reader is ever
+      // added, it must either authenticate as admin or add a matching
+      // publishAt filter of its own — it will not work unmodified against
+      // this rule. (Caught in review on PR #38.)
       allow read: if isAdmin() || (
         resource.data.isActive == true &&
         (resource.data.get('publishAt', null) == null ||
