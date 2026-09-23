@@ -3,11 +3,17 @@
 // unit-testable without live infrastructure, same pattern as the other
 // lib/ modules.
 
+const { escapeHtml } = require('./escapeHtml');
+
+// Customer-supplied free text (from Stripe Checkout's address collection)
+// gets interpolated as-is into the order-confirmation template body, so it
+// must be escaped here before it ever reaches Brevo.
 function formatAddress(address) {
   if (!address) return '';
-  const lines = [address.line1, address.line2, address.city].filter(Boolean);
-  const stateZip = [address.state, address.postalCode].filter(Boolean).join(' ');
-  const tail = [stateZip, address.country].filter(Boolean);
+  const esc = (value) => (value ? escapeHtml(value) : value);
+  const lines = [esc(address.line1), esc(address.line2), esc(address.city)].filter(Boolean);
+  const stateZip = [esc(address.state), esc(address.postalCode)].filter(Boolean).join(' ');
+  const tail = [stateZip, esc(address.country)].filter(Boolean);
   return [...lines, ...tail].join(', ');
 }
 
@@ -19,7 +25,7 @@ function formatAddress(address) {
 // space in HTML rendering — it needs a real line-break tag to show up.
 function formatItemsText(items) {
   return items
-    .map((item) => `${item.name} (x${item.qty}) — $${item.amountTotal.toFixed(2)}`)
+    .map((item) => `${escapeHtml(item.name)} (x${item.qty}) — $${item.amountTotal.toFixed(2)}`)
     .join('<br>');
 }
 
@@ -31,7 +37,7 @@ function orderDataToConfirmationEmailParams(order) {
     EMAIL: order.customer.email,
     ORDER_NUMBER: order.stripeSessionId,
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
-    CUSTOMER_NAME: order.customer.name || '',
+    CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,
     ITEMS_TEXT: formatItemsText(order.items),
     SHIPPING_ADDRESS: formatAddress(order.shippingAddress),

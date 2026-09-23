@@ -1,0 +1,93 @@
+<!--
+  Event-notification body — pushed to a Brevo template via
+  scripts/brevo-template.js (see eventNotification.js for the params below).
+  Same table-based/inline-style approach as order-confirmation.html — see
+  that file's header comment for the full compatibility rationale.
+
+  Params (see firebase/functions/eventNotification.js):
+    EVENT_TITLE, EVENT_DATE, EVENT_TIME, EVENT_LOCATION, EVENT_DESCRIPTION,
+    EVENT_PRICE, REGISTRATION_URL, UNSUBSCRIBE_EVENTS, UNSUBSCRIBE_ALL
+
+  REGISTRATION_URL is shown as plain text, not wrapped in <a href="">,
+  because plenty of "in the wild" events (a market stall, an open house)
+  have no registration link at all (eventDetails.registrationUrl || '') —
+  an empty-href button would be worse than a line that's just blank.
+
+  UNSUBSCRIBE_EVENTS / UNSUBSCRIBE_ALL are always populated by the sending
+  function (real HMAC-signed URLs, never empty), so those ARE real <a> tags —
+  required for basic anti-spam hygiene on a bulk/marketing-style send.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f2efdd; padding:32px 16px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#faf9e1; border-radius:8px; overflow:hidden;">
+
+        <!-- Header -->
+        <tr>
+          <td align="center" style="padding:32px 24px 16px 24px;">
+            <div style="font-size:24px; font-weight:700; letter-spacing:0.02em; color:#3d081b;">myfriendroze</div>
+          </td>
+        </tr>
+
+        <!-- Divider -->
+        <tr>
+          <td style="padding:0 24px;">
+            <div style="height:3px; background-color:#acdc9e; border-radius:2px;"></div>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:24px 24px 8px 24px; color:#3d081b; font-size:16px; line-height:1.5;">
+            <p style="margin:0 0 16px 0; font-size:20px; font-weight:700;">{{ params.EVENT_TITLE }}</p>
+            <p style="margin:0 0 16px 0;">Come find us in the wild!</p>
+          </td>
+        </tr>
+
+        <!-- Event details card -->
+        <tr>
+          <td style="padding:8px 24px 24px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; border:1px solid rgba(61,8,27,0.12);">
+              <tr>
+                <td style="padding:20px; color:#3d081b; font-size:15px; line-height:1.8;">
+                  📅 {{ params.EVENT_DATE }}<br>
+                  🕒 {{ params.EVENT_TIME }}<br>
+                  📍 {{ params.EVENT_LOCATION }}<br>
+                  💵 {{ params.EVENT_PRICE }}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Description -->
+        <tr>
+          <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
+            <p style="margin:0 0 16px 0;">{{ params.EVENT_DESCRIPTION }}</p>
+            <p style="margin:0;">More info / RSVP: {{ params.REGISTRATION_URL }}</p>
+          </td>
+        </tr>
+
+        <!-- Sign-off -->
+        <tr>
+          <td style="padding:0 24px 32px 24px; color:#3d081b; font-size:15px;">
+            <p style="margin:0;">~ myfriendroze</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 24px; background-color:#f2efdd; border-top:1px solid rgba(61,8,27,0.12); color:#3d081b; font-size:12px; line-height:1.6;" align="center">
+            <p style="margin:0 0 4px 0;">
+              <a href="{{ params.UNSUBSCRIBE_EVENTS }}" style="color:#3d081b;">Unsubscribe from event alerts</a>
+              &nbsp;·&nbsp;
+              <a href="{{ params.UNSUBSCRIBE_ALL }}" style="color:#3d081b;">Unsubscribe from everything</a>
+            </p>
+            <p style="margin:0;">myfriendroze · <a href="https://myfriendroze.com" style="color:#3d081b;">myfriendroze.com</a></p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>

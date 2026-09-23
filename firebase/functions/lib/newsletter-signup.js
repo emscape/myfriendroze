@@ -2,6 +2,8 @@
 // email personalization are unit-testable without Firestore/Brevo, same
 // pattern as lib/pricing.js.
 
+const { escapeHtml } = require('./escapeHtml');
+
 /**
  * Firestore fields for a new newsletter_signups doc (timestamp is added by
  * the caller via admin.firestore.FieldValue.serverTimestamp(), which isn't
@@ -24,23 +26,6 @@ function buildSignupRecord({ email, firstName, lastName }) {
     record.lastName = lastName.trim();
   }
   return record;
-}
-
-/**
- * Escapes the five HTML-significant characters -- firstName is
- * request-controlled and gets interpolated straight into an email Brevo
- * actually sends, so an unescaped value could inject arbitrary markup into
- * a message delivered under this site's trusted sender identity.
- * @param {string} value
- * @returns {string}
- */
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 /**
