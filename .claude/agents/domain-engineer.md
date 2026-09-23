@@ -13,7 +13,7 @@ Data logic, Firebase Functions business logic, Astro API routes, and data utilit
 ## Files This Agent May Touch
 - `firebase/functions/src/**` — Cloud Function implementations
 - `astro/src/pages/api/**` — Astro API route handlers
-- `astro/src/data/events.js`, `astro/src/data/products.js` — data files
+- `astro/src/data/events.js` — recurring/hardcoded event entries (products are read live from Firestore, see `astro/src/lib/products-live.js`)
 - `firestore.rules` — security rules
 - `firebase/functions/package.json` — function dependencies only
 
