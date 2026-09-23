@@ -24,6 +24,7 @@ describe('POST /api/checkout', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('forwards a valid request to createCheckoutSession and returns its url', async () => {
