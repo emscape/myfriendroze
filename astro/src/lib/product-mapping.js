@@ -1,9 +1,7 @@
-// Pure Firestore-doc -> Product transforms, shared by both the build-time
-// snapshot script (scripts/fetch-products.mjs) and the live/on-demand
-// Firestore reads used by shop.astro and products/[handle].astro. Moved
-// here (out of fetch-products.mjs, which re-exports these for backward
-// compatibility with its existing tests) so both paths use one definition
-// instead of two copies drifting apart.
+// Pure Firestore-doc -> Product transforms used by the live, on-demand
+// Firestore reads shop.astro and products/[handle].astro do on every
+// request (see products-live.js). Extracted from the transform logic so
+// it's unit-testable without a live database.
 
 /**
  * Lowercases, strips punctuation, and hyphenates a title into a URL-safe
