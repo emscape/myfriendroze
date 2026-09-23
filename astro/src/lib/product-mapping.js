@@ -40,9 +40,10 @@ export function formatDimensions({ widthIn, heightIn, depthIn }) {
 }
 
 /**
- * Pure transform from a Firestore product document to the shape
- * astro/src/data/products.js's Product typedef expects. No Firestore calls
- * here — unit-testable without a live database.
+ * Pure transform from a Firestore product document into the Product shape
+ * shop.astro/[handle].astro expect (the object literal this function
+ * returns, below). No Firestore calls here — unit-testable without a live
+ * database.
  *
  * category/features/tags/compareAtPrice default to safe empty values
  * rather than being invented — the Flutter admin app's Product model
