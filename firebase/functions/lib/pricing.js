@@ -68,6 +68,16 @@ function buildLineItemsFromCatalog(items, catalog) {
     if (product.inStock === false || (product.inStock !== undefined && typeof product.inStock !== 'boolean')) {
       throw new CatalogValidationError('OUT_OF_STOCK', `Product is out of stock: ${sku}`);
     }
+    // Delayed/scheduled publish (see astro/src/lib/products-live.js and
+    // firestore.rules) hides a product from the shop and blocks direct
+    // Firestore reads before its reveal time, but this function fetches
+    // the doc straight by sku with no query filter of its own — a caller
+    // who already knows/guesses a scheduled sku could otherwise still
+    // check out with it while isActive: true. Same fail-closed reasoning
+    // as isActive/inStock above.
+    if (product.publishAt && product.publishAt.toMillis() > Date.now()) {
+      throw new CatalogValidationError('NOT_YET_PUBLISHED', `Product is not yet published: ${sku}`);
+    }
     if (!Number.isInteger(qty) || qty < MIN_QTY || qty > MAX_QTY) {
       throw new CatalogValidationError(
         'INVALID_QTY',

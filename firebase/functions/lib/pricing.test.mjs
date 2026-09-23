@@ -12,6 +12,11 @@ function catalogWith(entries) {
   return new Map(Object.entries(entries));
 }
 
+function fakeTimestamp(dateString) {
+  const date = new Date(dateString);
+  return { toMillis: () => date.getTime() };
+}
+
 describe('buildLineItemsFromCatalog', () => {
   it('builds a Stripe line item from the catalog-sourced price, in cents', () => {
     const catalog = catalogWith({
@@ -179,6 +184,53 @@ describe('buildLineItemsFromCatalog', () => {
 
     expect(() =>
       buildLineItemsFromCatalog([{ sku: 'sku-1', qty }], catalog)
+    ).not.toThrow();
+  });
+
+  // Checkout security boundary, same reasoning as the isActive/inStock
+  // checks above: createCheckoutSession.js fetches a product doc directly
+  // by sku (no isActive/publishAt query filter of its own), so this is the
+  // only thing standing between a request and buying a scheduled product
+  // before its public reveal — a client that already knows/guesses a
+  // scheduled sku must not be able to check out with it just because the
+  // product is isActive: true.
+  it('throws for a product whose publishAt is still in the future', () => {
+    const catalog = catalogWith({
+      'sku-1': {
+        title: 'Not Yet Revealed',
+        price: 70,
+        isActive: true,
+        publishAt: fakeTimestamp('2999-01-01'),
+      },
+    });
+
+    expect(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)).toThrow(
+      CatalogValidationError
+    );
+  });
+
+  it('allows a product whose publishAt has already passed', () => {
+    const catalog = catalogWith({
+      'sku-1': {
+        title: 'Already Live',
+        price: 70,
+        isActive: true,
+        publishAt: fakeTimestamp('2000-01-01'),
+      },
+    });
+
+    expect(() =>
+      buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)
+    ).not.toThrow();
+  });
+
+  it('allows a product with no publishAt field at all (pre-existing docs)', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Legacy Product', price: 70, isActive: true },
+    });
+
+    expect(() =>
+      buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)
     ).not.toThrow();
   });
 

@@ -21,7 +21,18 @@ export async function fetchLiveProducts(db) {
     .where('isActive', '==', true)
     .get();
 
-  return dedupeHandles(snapshot.docs.map(docToProduct));
+  // publishAt lets an active product stay hidden until a chosen future
+  // moment (scheduled/delayed publish). No composite Firestore index is
+  // needed since this filters the already-fetched isActive docs in memory,
+  // same as dedupeHandles below. Absent publishAt (every pre-existing doc)
+  // is treated as "already published".
+  const now = Date.now();
+  const visibleDocs = snapshot.docs.filter((doc) => {
+    const publishAt = doc.data().publishAt;
+    return !publishAt || publishAt.toMillis() <= now;
+  });
+
+  return dedupeHandles(visibleDocs.map(docToProduct));
 }
 
 /**
