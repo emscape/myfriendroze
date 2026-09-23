@@ -4,7 +4,8 @@ import { createRequire } from 'node:module';
 // require(), not a static ESM import — same reasoning as pricing.test.mjs:
 // this module is also require()'d by newsletterSignup.js.
 const require = createRequire(import.meta.url);
-const { buildSignupRecord, buildWelcomeEmailHtml } = require('./newsletter-signup.js');
+const { buildSignupRecord, buildWelcomeEmailHtml, buildExistingDocUpdate, validateNameLengths } =
+  require('./newsletter-signup.js');
 
 describe('buildSignupRecord', () => {
   it('lowercases and trims the email', () => {
@@ -83,5 +84,77 @@ describe('buildWelcomeEmailHtml', () => {
   it('escapes ampersands and quotes too', () => {
     const html = buildWelcomeEmailHtml({ firstName: `Rose & "Bud"` });
     expect(html).toContain('Hi Rose &amp; &quot;Bud&quot;,');
+  });
+});
+
+describe('buildExistingDocUpdate', () => {
+  // unsubscribe.js's "all" type sets preferences to
+  // { newsletter: false, events: false, orders: true } -- orders: true is
+  // deliberately preserved there for legal/record-keeping reasons. A
+  // resubscribe (or any other existing-doc touch) must only flip
+  // `newsletter`, never replace the whole preferences map wholesale, or it
+  // would silently re-enable event notifications and drop the preserved
+  // orders preference.
+  it('flips preferences.newsletter to true without touching other preference fields', () => {
+    const existingData = {
+      email: 'roze@example.com',
+      preferences: { newsletter: false, events: false, orders: true },
+    };
+
+    const update = buildExistingDocUpdate(existingData, { email: 'roze@example.com' });
+
+    expect(update.preferences).toEqual({ newsletter: true, events: false, orders: true });
+  });
+
+  it('still sets preferences.newsletter to true when the existing doc has no preferences at all', () => {
+    const existingData = { email: 'roze@example.com' };
+
+    const update = buildExistingDocUpdate(existingData, { email: 'roze@example.com' });
+
+    expect(update.preferences).toEqual({ newsletter: true });
+  });
+
+  it('updates email/firstName/lastName from the current request, same as buildSignupRecord', () => {
+    const existingData = { email: 'roze@example.com', preferences: { newsletter: false } };
+
+    const update = buildExistingDocUpdate(existingData, {
+      email: 'roze@example.com',
+      firstName: 'Roze',
+      lastName: 'Smith',
+    });
+
+    expect(update.email).toBe('roze@example.com');
+    expect(update.firstName).toBe('Roze');
+    expect(update.lastName).toBe('Smith');
+  });
+});
+
+describe('validateNameLengths', () => {
+  it('accepts names within the 50-character limit', () => {
+    expect(validateNameLengths({ firstName: 'Roze', lastName: 'Smith' })).toEqual({ valid: true });
+  });
+
+  it('accepts missing names entirely', () => {
+    expect(validateNameLengths({})).toEqual({ valid: true });
+  });
+
+  // This handler is directly publicly callable (invoker: 'public'), not
+  // only reachable through the astro proxy -- a caller that bypasses the
+  // proxy could otherwise submit an arbitrarily long name that gets
+  // persisted to Firestore and interpolated into the Brevo email with no
+  // boundary check. The removed subscribe.js/createSubscription capped
+  // each name at 50 characters; this restores an equivalent limit here.
+  it('rejects a firstName longer than 50 characters', () => {
+    const result = validateNameLengths({ firstName: 'a'.repeat(51) });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects a lastName longer than 50 characters', () => {
+    const result = validateNameLengths({ lastName: 'a'.repeat(51) });
+    expect(result.valid).toBe(false);
+  });
+
+  it('accepts a name exactly at the 50-character boundary', () => {
+    expect(validateNameLengths({ firstName: 'a'.repeat(50) })).toEqual({ valid: true });
   });
 });

@@ -71,4 +71,43 @@ function buildWelcomeEmailHtml({ firstName }) {
         `;
 }
 
-module.exports = { buildSignupRecord, buildWelcomeEmailHtml };
+/**
+ * Update payload for an existing newsletter_signups doc (resubscribe,
+ * delivery retry, or legacy backfill) -- merges the existing preferences
+ * map instead of replacing it wholesale, since unsubscribe.js's "all" type
+ * sets preferences to { newsletter: false, events: false, orders: true },
+ * and orders: true is deliberately preserved there for legal/record-
+ * keeping reasons. Only `newsletter` should ever flip here.
+ * @param {{ preferences?: Record<string, boolean> }} existingData
+ * @param {{ email: string, firstName?: string, lastName?: string }} input
+ */
+function buildExistingDocUpdate(existingData, { email, firstName, lastName }) {
+  const { preferences, ...rest } = buildSignupRecord({ email, firstName, lastName });
+  return {
+    ...rest,
+    preferences: { ...(existingData.preferences || {}), ...preferences },
+  };
+}
+
+const MAX_NAME_LENGTH = 50;
+
+/**
+ * This handler is directly publicly callable (invoker: 'public'), not only
+ * reachable through the astro proxy -- a caller bypassing the proxy could
+ * otherwise submit an arbitrarily long name with no boundary check. The
+ * removed subscribe.js/createSubscription capped each name at 50
+ * characters; this restores an equivalent limit.
+ * @param {{ firstName?: string, lastName?: string }} input
+ * @returns {{ valid: boolean, error?: string }}
+ */
+function validateNameLengths({ firstName, lastName }) {
+  if (typeof firstName === 'string' && firstName.length > MAX_NAME_LENGTH) {
+    return { valid: false, error: `First name must be ${MAX_NAME_LENGTH} characters or fewer.` };
+  }
+  if (typeof lastName === 'string' && lastName.length > MAX_NAME_LENGTH) {
+    return { valid: false, error: `Last name must be ${MAX_NAME_LENGTH} characters or fewer.` };
+  }
+  return { valid: true };
+}
+
+module.exports = { buildSignupRecord, buildWelcomeEmailHtml, buildExistingDocUpdate, validateNameLengths };

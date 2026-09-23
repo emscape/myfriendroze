@@ -5,7 +5,12 @@ const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const crypto = require("crypto");
 const logger = require("firebase-functions/logger");
-const { buildSignupRecord, buildWelcomeEmailHtml } = require("./lib/newsletter-signup");
+const {
+  buildSignupRecord,
+  buildWelcomeEmailHtml,
+  buildExistingDocUpdate,
+  validateNameLengths,
+} = require("./lib/newsletter-signup");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -63,6 +68,12 @@ exports.newsletterSignup = onRequest(
   if (!email || !isValidEmail(email)) {
     logger.error("Invalid email address provided.");
     return res.status(400).json({ error: "Valid email address required." });
+  }
+
+  const nameLengthCheck = validateNameLengths({ firstName, lastName });
+  if (!nameLengthCheck.valid) {
+    logger.error("Name too long.");
+    return res.status(400).json({ error: nameLengthCheck.error });
   }
 
   try {
@@ -125,13 +136,15 @@ exports.newsletterSignup = onRequest(
       const data = snap.data();
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
-        // Merges the full current signup shape, not just the preferences
-        // flag -- a legacy doc (pre-existing this fix) may have no
-        // preferences field at all, and this request's firstName/lastName
-        // (if given) should overwrite stale/missing values rather than be
-        // silently dropped.
+        // buildExistingDocUpdate merges the existing preferences map
+        // (rather than replacing it wholesale) and the current
+        // firstName/lastName -- a legacy doc (pre-existing this fix) may
+        // have no preferences field at all, and unsubscribe.js's "all"
+        // type sets preferences.orders: true deliberately (legal/
+        // record-keeping), which a full-object replace would silently
+        // drop.
         tx.update(docRef, {
-          ...buildSignupRecord({ email, firstName, lastName }),
+          ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: true, action: "resubscribed" };
@@ -149,7 +162,7 @@ exports.newsletterSignup = onRequest(
       const hasDeliveryState = Object.prototype.hasOwnProperty.call(data, "welcomeEmailSentAt");
       if (hasDeliveryState && !data.welcomeEmailSentAt) {
         tx.update(docRef, {
-          ...buildSignupRecord({ email, firstName, lastName }),
+          ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: true, action: "retry-delivery" };
@@ -160,7 +173,7 @@ exports.newsletterSignup = onRequest(
         // than risk re-emailing an existing subscriber on a technicality
         // of when their record happened to be created.
         tx.update(docRef, {
-          ...buildSignupRecord({ email, firstName, lastName }),
+          ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: false, action: "legacy-backfilled" };
