@@ -110,4 +110,32 @@ function validateNameLengths({ firstName, lastName }) {
   return { valid: true };
 }
 
-module.exports = { buildSignupRecord, buildWelcomeEmailHtml, buildExistingDocUpdate, validateNameLengths };
+/**
+ * Pure sliding-window rate limit decision -- separated from the Firestore
+ * read/transaction that actually persists the counter so the window/reset
+ * math is unit-testable without live infrastructure.
+ * @param {{ windowStart: number, count: number } | null} existing
+ * @param {number} now epoch ms
+ * @param {{ maxRequests: number, windowMs: number }} config
+ * @returns {{ allowed: boolean, newState: { windowStart: number, count: number } }}
+ */
+function evaluateRateLimit(existing, now, { maxRequests, windowMs }) {
+  const windowExpired = !existing || now - existing.windowStart > windowMs;
+  const windowStart = windowExpired ? now : existing.windowStart;
+  const count = windowExpired ? 0 : existing.count;
+
+  if (count >= maxRequests) {
+    // Denial leaves state untouched -- a rejected request shouldn't reset
+    // or extend the window for whoever tries next.
+    return { allowed: false, newState: existing };
+  }
+  return { allowed: true, newState: { windowStart, count: count + 1 } };
+}
+
+module.exports = {
+  buildSignupRecord,
+  buildWelcomeEmailHtml,
+  buildExistingDocUpdate,
+  validateNameLengths,
+  evaluateRateLimit,
+};

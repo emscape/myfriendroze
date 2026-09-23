@@ -4,8 +4,13 @@ import { createRequire } from 'node:module';
 // require(), not a static ESM import — same reasoning as pricing.test.mjs:
 // this module is also require()'d by newsletterSignup.js.
 const require = createRequire(import.meta.url);
-const { buildSignupRecord, buildWelcomeEmailHtml, buildExistingDocUpdate, validateNameLengths } =
-  require('./newsletter-signup.js');
+const {
+  buildSignupRecord,
+  buildWelcomeEmailHtml,
+  buildExistingDocUpdate,
+  validateNameLengths,
+  evaluateRateLimit,
+} = require('./newsletter-signup.js');
 
 describe('buildSignupRecord', () => {
   it('lowercases and trims the email', () => {
@@ -156,5 +161,39 @@ describe('validateNameLengths', () => {
 
   it('accepts a name exactly at the 50-character boundary', () => {
     expect(validateNameLengths({ firstName: 'a'.repeat(50) })).toEqual({ valid: true });
+  });
+});
+
+describe('evaluateRateLimit', () => {
+  const config = { maxRequests: 10, windowMs: 10 * 60 * 1000 };
+
+  it('allows the first request when no prior state exists', () => {
+    const result = evaluateRateLimit(null, 1_000_000, config);
+    expect(result.allowed).toBe(true);
+    expect(result.newState).toEqual({ windowStart: 1_000_000, count: 1 });
+  });
+
+  it('allows and increments while under the limit within the same window', () => {
+    const existing = { windowStart: 1_000_000, count: 5 };
+    const result = evaluateRateLimit(existing, 1_000_500, config);
+    expect(result.allowed).toBe(true);
+    expect(result.newState).toEqual({ windowStart: 1_000_000, count: 6 });
+  });
+
+  it('denies once the limit is reached within the same window', () => {
+    const existing = { windowStart: 1_000_000, count: 10 };
+    const result = evaluateRateLimit(existing, 1_000_500, config);
+    expect(result.allowed).toBe(false);
+    // State is unchanged on denial -- a rejected request shouldn't extend
+    // or reset the window for the next legitimate attempt.
+    expect(result.newState).toEqual(existing);
+  });
+
+  it('resets the window (and allows) once windowMs has elapsed since windowStart', () => {
+    const existing = { windowStart: 1_000_000, count: 10 };
+    const now = 1_000_000 + config.windowMs + 1;
+    const result = evaluateRateLimit(existing, now, config);
+    expect(result.allowed).toBe(true);
+    expect(result.newState).toEqual({ windowStart: now, count: 1 });
   });
 });

@@ -10,10 +10,42 @@ const {
   buildWelcomeEmailHtml,
   buildExistingDocUpdate,
   validateNameLengths,
+  evaluateRateLimit,
 } = require("./lib/newsletter-signup");
 
 if (!admin.apps.length) {
   admin.initializeApp();
+}
+
+// Generous on purpose: this only needs to stop a burst of automated abuse
+// (this function is invoker: 'public', reachable directly by anyone who
+// bypasses the astro proxy), not throttle legitimate traffic through the
+// real site. IMPORTANT CAVEAT: req.ip below is GFE's own determination of
+// the connecting client, which is correct and meaningful for a *direct*
+// call (the abuse case this actually guards against) -- but a call
+// proxied through ssrAstro (the legitimate site path) shows ssrAstro's own
+// Cloud Run egress identity, not the original browser's IP, since
+// astro/src/pages/api/newsletter.js doesn't forward the original client IP
+// today. Real distinct site visitors could therefore theoretically share a
+// bucket; the threshold is set high enough that normal traffic for this
+// site shouldn't realistically hit it. A stronger fix (Firebase App
+// Check, or forwarding + verifying the real client IP through the proxy)
+// is a bigger change than this fix warrants -- worth revisiting if this
+// ever proves insufficient in practice.
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+
+async function checkRateLimit(ip) {
+  const rateLimitRef = admin.firestore().collection("newsletter_signup_rate_limits").doc(ip);
+  return admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(rateLimitRef);
+    const { allowed, newState } = evaluateRateLimit(snap.exists ? snap.data() : null, Date.now(), {
+      maxRequests: RATE_LIMIT_MAX_REQUESTS,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
+    tx.set(rateLimitRef, newState);
+    return allowed;
+  });
 }
 
 // BREVO_API_KEY is Secret Manager-backed (same as stripeWebhook.js,
@@ -58,6 +90,13 @@ exports.newsletterSignup = onRequest(
   if (req.method !== "POST") {
     logger.warn("Received non-POST request.");
     return res.status(405).send("Method Not Allowed");
+  }
+
+  const clientIp = req.ip || "unknown";
+  const withinRateLimit = await checkRateLimit(clientIp);
+  if (!withinRateLimit) {
+    logger.warn("Newsletter signup rate limit exceeded.");
+    return res.status(429).json({ error: "Too many requests. Please try again later." });
   }
 
   // `|| {}` guards a null/omitted body -- a client can send a JSON `null`
@@ -135,6 +174,18 @@ exports.newsletterSignup = onRequest(
       }
       const data = snap.data();
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
+      // KNOWN, ACCEPTED RISK (caught in review, deliberately not fixed):
+      // unsubscribe.js reads-then-updates this same doc non-transactionally.
+      // If its write commits between this transaction's read and commit,
+      // Firestore retries this function against the now-unsubscribed doc,
+      // and this branch resubscribes -- so an unsubscribe that lands in
+      // that narrow window can get silently overwritten by a signup
+      // request. The window is a Firestore transaction retry, which
+      // resolves in milliseconds, not a realistic human-timescale gap;
+      // coordinating unsubscribe.js and this function transactionally
+      // (or adding a re-check after commit) would close it fully, but
+      // that's a bigger cross-file change than this fix warrants for how
+      // narrow the window actually is.
       if (wasUnsubscribed) {
         // buildExistingDocUpdate merges the existing preferences map
         // (rather than replacing it wholesale) and the current
