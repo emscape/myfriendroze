@@ -12,8 +12,15 @@ function generateUnsubscribeToken(email, type, secret) {
 // crypto.timingSafeEqual throws (rather than returning false) when its two
 // buffers differ in length, so any malformed/short token query param would
 // otherwise crash the caller as an unhandled error instead of failing
-// verification cleanly.
+// verification cleanly. Buffer.from(token, 'utf8') has the same problem for
+// a non-string token -- Express parses a repeated query param like
+// ?token=a&token=b into an array, not a string, and Buffer.from rejects
+// that before timingSafeEqual is ever reached.
 function verifyUnsubscribeToken(email, type, token, secret) {
+  if (typeof token !== 'string') {
+    return false;
+  }
+
   const expected = generateUnsubscribeToken(email, type, secret);
   const tokenBuffer = Buffer.from(token, 'utf8');
   const expectedBuffer = Buffer.from(expected, 'utf8');

@@ -56,4 +56,16 @@ describe('verifyUnsubscribeToken', () => {
   it('returns false for an empty token', () => {
     expect(verifyUnsubscribeToken('buyer@example.com', 'newsletter', '', 'test-secret')).toBe(false);
   });
+
+  // Regression guard: Buffer.from(token, 'utf8') throws for a non-string
+  // token -- Express parses a repeated query param (?token=a&token=b) into
+  // an array, which used to crash verification as an unhandled error
+  // instead of just failing it.
+  it('returns false instead of throwing when the token is not a string', () => {
+    expect(() =>
+      verifyUnsubscribeToken('buyer@example.com', 'newsletter', ['a', 'b'], 'test-secret')
+    ).not.toThrow();
+    expect(verifyUnsubscribeToken('buyer@example.com', 'newsletter', ['a', 'b'], 'test-secret')).toBe(false);
+    expect(verifyUnsubscribeToken('buyer@example.com', 'newsletter', undefined, 'test-secret')).toBe(false);
+  });
 });

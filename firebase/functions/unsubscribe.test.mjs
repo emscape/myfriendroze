@@ -72,6 +72,22 @@ describe('handleUnsubscribe', () => {
     expect(body).toContain('&lt;script&gt;');
   });
 
+  // Regression guard: Express parses a repeated query param
+  // (?token=a&token=b) into an array, not a string. verifyUnsubscribeToken
+  // used to throw on that (Buffer.from rejects a non-string), escaping as
+  // an unhandled 500 instead of the intended 403.
+  it('returns 403 (not a 500) when the token query param is an array', async () => {
+    const res = fakeRes();
+
+    await handleUnsubscribe(
+      { query: { email: 'buyer@example.com', type: 'newsletter', token: ['a', 'b'] } },
+      res,
+      { db: fakeDb(), secret: SECRET, serverTimestamp }
+    );
+
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
   it('unsubscribes from newsletter only, preserving other preference fields', async () => {
     const email = 'buyer@example.com';
     const token = generateUnsubscribeToken(email, 'newsletter', SECRET);
