@@ -87,4 +87,27 @@ describe('POST /api/checkout', () => {
 
     expect(response.status).toBe(500);
   });
+
+  // import.meta.env.DEV is a build-time flag baked into the bundle -- it's
+  // false in the production-mode SSR artifact regardless of where that
+  // artifact actually runs. Running that same built artifact locally
+  // against the Firebase emulator would otherwise take the production URL
+  // branch and create a REAL production Stripe checkout session instead of
+  // calling the local Functions emulator. FUNCTIONS_EMULATOR is set at
+  // runtime by the emulator itself, so it must be checked even when DEV
+  // reads false (same fix as astro/src/pages/api/newsletter.js).
+  it('targets the local Functions emulator when FUNCTIONS_EMULATOR is set, even if DEV reads false', async () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('FUNCTIONS_EMULATOR', 'true');
+    fetchSpy.mockResolvedValue(
+      new Response(JSON.stringify({ url: 'https://checkout.stripe.com/pay/cs_test_1' }), {
+        status: 200,
+      })
+    );
+
+    await POST({ request: requestWith(validBody) });
+
+    const [url] = fetchSpy.mock.calls[0];
+    expect(url).toContain('127.0.0.1:5001');
+  });
 });
