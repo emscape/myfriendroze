@@ -1,0 +1,100 @@
+<!--
+  Order-shipped notification body — pushed to a Brevo template via
+  scripts/brevo-template.js (see orderShipped.js for the params below).
+  Same table-based/inline-style approach as order-confirmation.html, for
+  the same Outlook-desktop-compatibility reason — see that file's header
+  comment for the full rationale, not repeated here.
+
+  Params (see firebase/functions/orderShipped.js):
+    ORDER_NUMBER, CUSTOMER_NAME, TRACKING_NUMBER, CARRIER, TRACKING_URL,
+    ESTIMATED_DELIVERY, SHIPPING_ADDRESS
+
+  TRACKING_URL is shown as plain text rather than wrapped in <a href="">
+  deliberately: it can be empty (shippingDetails.trackingUrl || ''), and an
+  <a> with an empty href is worse than a raw URL string, which most mail
+  clients auto-link anyway when present and is just blank when not.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f2efdd; padding:32px 16px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background-color:#faf9e1; border-radius:8px; overflow:hidden;">
+
+        <!-- Header -->
+        <tr>
+          <td align="center" style="padding:32px 24px 16px 24px;">
+            <div style="font-size:24px; font-weight:700; letter-spacing:0.02em; color:#3d081b;">myfriendroze</div>
+          </td>
+        </tr>
+
+        <!-- Divider -->
+        <tr>
+          <td style="padding:0 24px;">
+            <div style="height:3px; background-color:#acdc9e; border-radius:2px;"></div>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:24px 24px 8px 24px; color:#3d081b; font-size:16px; line-height:1.5;">
+            <p style="margin:0 0 16px 0; font-size:20px; font-weight:700;">The miracle occurred — it's on its way! 📦</p>
+            <p style="margin:0 0 16px 0;">Your order is boxed up and headed to you.</p>
+          </td>
+        </tr>
+
+        <!-- Shipping details card -->
+        <tr>
+          <td style="padding:8px 24px 24px 24px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; border:1px solid rgba(61,8,27,0.12);">
+              <tr>
+                <td style="padding:20px 20px 4px 20px; color:#3d081b; font-size:14px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;">
+                  Order #{{ params.ORDER_NUMBER }}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px; color:#3d081b; font-size:15px; line-height:1.7;">
+                  Carrier: {{ params.CARRIER }}<br>
+                  Tracking number: {{ params.TRACKING_NUMBER }}<br>
+                  Track it: {{ params.TRACKING_URL }}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px 4px 20px;">
+                  <div style="height:1px; background-color:rgba(61,8,27,0.12);"></div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px 20px 20px; color:#3d081b; font-size:16px; font-weight:700;">
+                  Estimated delivery: {{ params.ESTIMATED_DELIVERY }}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Shipping address -->
+        <tr>
+          <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
+            <p style="margin:0 0 4px 0; font-weight:700;">Shipping to:</p>
+            <p style="margin:0;">{{ params.SHIPPING_ADDRESS }}</p>
+          </td>
+        </tr>
+
+        <!-- Sign-off -->
+        <tr>
+          <td style="padding:0 24px 32px 24px; color:#3d081b; font-size:15px;">
+            <p style="margin:0;">~ myfriendroze</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 24px; background-color:#f2efdd; border-top:1px solid rgba(61,8,27,0.12); color:#3d081b; font-size:12px; line-height:1.6;" align="center">
+            <p style="margin:0 0 4px 0;">Questions about your order? Reply to this email or write to <a href="mailto:myfriendroze@gmail.com" style="color:#3d081b;">myfriendroze@gmail.com</a>.</p>
+            <p style="margin:0;"><a href="https://myfriendroze.com/small-print" style="color:#3d081b;">Shipping &amp; returns info</a></p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
