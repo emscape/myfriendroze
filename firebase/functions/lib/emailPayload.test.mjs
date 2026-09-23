@@ -98,4 +98,29 @@ describe('orderDataToConfirmationEmailParams', () => {
 
     expect(params.ORDER_TOTAL).toBe('$45.50');
   });
+
+  it('escapes HTML in CUSTOMER_NAME, item names, and SHIPPING_ADDRESS, since these are '
+    + 'customer-supplied text interpolated unescaped into the Brevo template body', () => {
+    const order = fullOrder({
+      customer: { email: 'buyer@example.com', name: '<b>Buyer</b>', phone: null },
+      items: [{ name: '<img src=x onerror=alert(1)>', qty: 1, amountTotal: 70 }],
+      shippingAddress: {
+        name: 'Buyer',
+        line1: '<script>alert(1)</script>',
+        line2: null,
+        city: 'Springfield',
+        state: 'CA',
+        postalCode: '90210',
+        country: 'US',
+      },
+    });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.CUSTOMER_NAME).toBe('&lt;b&gt;Buyer&lt;/b&gt;');
+    expect(params.ITEMS_TEXT).toBe('&lt;img src=x onerror=alert(1)&gt; (x1) — $70.00');
+    expect(params.SHIPPING_ADDRESS).toBe(
+      '&lt;script&gt;alert(1)&lt;/script&gt;, Springfield, CA 90210, US'
+    );
+  });
 });

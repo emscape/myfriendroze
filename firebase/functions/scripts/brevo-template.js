@@ -8,11 +8,15 @@
 //   node scripts/brevo-template.js list
 //   node scripts/brevo-template.js check --id 2
 //   node scripts/brevo-template.js push --id 2 --file scripts/templates/order-confirmation.html
-//   node scripts/brevo-template.js push --id 2 --file <path> --no-activate
+//   node scripts/brevo-template.js push --id 2 --file <path> --activate
 //   node scripts/brevo-template.js push --id 3 --file <path> --name "Order Shipped" \
 //     --subject "Your order is on its way!" --sender-email orders@myfriendroze.com --sender-name myfriendroze
 //   node scripts/brevo-template.js create --file <path> --name "Event Notification" \
 //     --subject "{{ params.EVENT_TITLE }}" --sender-email events@myfriendroze.com --sender-name myfriendroze
+//
+// push/create default isActive to false unless --activate is passed -- a
+// push against a template Brevo may already be using in production should
+// not go live until reviewed, so activation must be opted into explicitly.
 
 const fs = require('fs');
 const path = require('path');
@@ -41,12 +45,12 @@ function loadEnv(envPath) {
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const args = { command, activate: true };
+  const args = { command, activate: false };
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
     if (arg === '--id') args.id = rest[++i];
     else if (arg === '--file') args.file = rest[++i];
-    else if (arg === '--no-activate') args.activate = false;
+    else if (arg === '--activate') args.activate = true;
     else if (arg === '--name') args.name = rest[++i];
     else if (arg === '--subject') args.subject = rest[++i];
     else if (arg === '--sender-email') args.senderEmail = rest[++i];
@@ -101,8 +105,8 @@ async function main() {
       'Usage:\n' +
         '  node scripts/brevo-template.js list\n' +
         '  node scripts/brevo-template.js check --id <templateId>\n' +
-        '  node scripts/brevo-template.js push --id <templateId> --file <path> [--no-activate] [--name ...] [--subject ...] [--sender-email ...] [--sender-name ...]\n' +
-        '  node scripts/brevo-template.js create --file <path> --name <name> --subject <subject> --sender-email <email> [--sender-name <name>] [--no-activate]'
+        '  node scripts/brevo-template.js push --id <templateId> --file <path> [--activate] [--name ...] [--subject ...] [--sender-email ...] [--sender-name ...]\n' +
+        '  node scripts/brevo-template.js create --file <path> --name <name> --subject <subject> --sender-email <email> [--sender-name <name>] [--activate]'
     );
     process.exit(1);
   }
