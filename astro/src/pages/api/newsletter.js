@@ -35,8 +35,16 @@ export async function POST({ request }) {
     });
   }
 
+  // import.meta.env.DEV alone is a build-time flag baked into the bundle
+  // -- it's false in the production-mode SSR artifact regardless of
+  // where that artifact is actually run. Running that same built
+  // artifact locally against the Firebase emulator (ssrAstro under
+  // `firebase emulators:start`) would otherwise take the production URL
+  // branch and create real production subscribers instead of calling the
+  // local Functions emulator. FUNCTIONS_EMULATOR is set at runtime by the
+  // emulator itself, so it correctly detects this regardless of build mode.
   const url = buildNewsletterSignupUrl({
-    isDevelopment: import.meta.env.DEV,
+    isDevelopment: import.meta.env.DEV || process.env.FUNCTIONS_EMULATOR === 'true',
     projectId: import.meta.env.FIREBASE_PROJECT_ID || 'myfriendroze-platform',
     region: import.meta.env.FIREBASE_REGION || 'us-west1',
   });
