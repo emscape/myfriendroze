@@ -1,11 +1,14 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
-const fetch = require("node-fetch");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const functions = require("firebase-functions");
 const { eventNotificationEmailParams } = require("./lib/emailPayload");
 const { generateUnsubscribeToken } = require("./lib/unsubscribeToken");
+// sendBrevoEmail required lazily inside the v8-ignored wrapper below, not
+// here — see orderConfirmation.js's identical comment for why a
+// module-scope require creates an always-present-but-never-exercised
+// instance that dilutes coverage reporting for that file.
 
 // Define secrets
 const brevoApiKey = defineSecret("BREVO_API_KEY");
@@ -147,6 +150,7 @@ exports.sendEventNotification = onCall({
   region: "us-west1",
   secrets: [brevoApiKey, brevoTemplates, unsubscribeSecret]
 }, async (request) => {
+  const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
   const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || functions.config().email?.events || '{"email":"events@myfriendroze.com","name":"MyFriendRoze Events"}');
@@ -159,25 +163,11 @@ exports.sendEventNotification = onCall({
     secret: unsubscribeSecret.value(),
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
     logger,
-    sendBrevoEmail: async (payload) => {
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-      // node-fetch resolves on HTTP 4xx/5xx and only rejects on transport
-      // errors -- without this check, a Brevo API failure response would
-      // read as a fulfilled promise to Promise.allSettled above, silently
-      // reporting a successful send.
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Brevo API request failed with status ${response.status}: ${errorBody}`);
-      }
-      return response;
-    },
+    // Response validation (including the non-2xx-is-not-a-rejection fix and
+    // the PII-safe error message) lives in lib/sendBrevoEmail.js, where it's
+    // unit tested directly -- this wrapper is just wiring, same as the rest
+    // of this v8-ignored block.
+    sendBrevoEmail: (payload) => postToBrevo({ apiKey, payload }),
   });
 });
 /* v8 ignore stop */
