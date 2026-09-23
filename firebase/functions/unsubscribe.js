@@ -1,88 +1,65 @@
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
-const crypto = require("crypto");
+const { defineSecret } = require("firebase-functions/params");
+const { verifyUnsubscribeToken } = require("./lib/unsubscribeToken");
+const { escapeHtml } = require("./lib/escapeHtml");
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
-// Generate unsubscribe token
-function generateUnsubscribeToken(email, type) {
-  const secret = process.env.UNSUBSCRIBE_SECRET || 'default-secret-change-me';
-  return crypto.createHmac('sha256', secret)
-    .update(`${email}:${type}`)
-    .digest('hex');
+const unsubscribeSecret = defineSecret("UNSUBSCRIBE_SECRET");
+
+function page(title, titleColor, bodyHtml) {
+  return `
+      <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
+          <h2 style="color: ${titleColor};">${title}</h2>
+          ${bodyHtml}
+        </body>
+      </html>
+    `;
 }
 
-// Verify unsubscribe token
-function verifyUnsubscribeToken(email, type, token) {
-  const expectedToken = generateUnsubscribeToken(email, type);
-  return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expectedToken));
-}
-
-// Generate unsubscribe URLs
-exports.generateUnsubscribeUrls = onCall({
-  region: "us-west1"
-}, async (request) => {
-  const { email } = request.data;
-  
-  if (!email) {
-    throw new Error("Email is required");
-  }
-
-  const baseUrl = "https://us-west1-myfriendroze-platform.cloudfunctions.net/unsubscribe";
-  
-  return {
-    newsletter: `${baseUrl}?email=${encodeURIComponent(email)}&type=newsletter&token=${generateUnsubscribeToken(email, 'newsletter')}`,
-    events: `${baseUrl}?email=${encodeURIComponent(email)}&type=events&token=${generateUnsubscribeToken(email, 'events')}`,
-    all: `${baseUrl}?email=${encodeURIComponent(email)}&type=all&token=${generateUnsubscribeToken(email, 'all')}`
-  };
-});
-
-// Handle unsubscribe requests
-exports.unsubscribe = onRequest({
-  region: "us-west1"
-}, async (req, res) => {
+/**
+ * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
+ * for why dependencies are passed as parameters.
+ */
+async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
   const { email, type, token } = req.query;
 
-  if (!email || !type || !token) {
-    return res.status(400).send(`
-      <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h2 style="color: #e74c3c;">Invalid Unsubscribe Link</h2>
-          <p>This unsubscribe link is invalid or incomplete.</p>
-        </body>
-      </html>
-    `);
+  // A repeated query param (e.g. ?email=a@example.com&email=b@example.com)
+  // parses as an array, not a string. A single-element array stringifies
+  // identically to its one element via template-literal coercion, so a
+  // legitimately-issued token for a plain-string email still verifies
+  // against the array form -- without the typeof checks here, that would
+  // pass verification and then crash on email.toLowerCase() downstream.
+  const isMissingOrNonString = (value) => typeof value !== 'string' || !value;
+  if (isMissingOrNonString(email) || isMissingOrNonString(type) || isMissingOrNonString(token)) {
+    return res.status(400).send(page(
+      'Invalid Unsubscribe Link', '#e74c3c',
+      '<p>This unsubscribe link is invalid or incomplete.</p>'
+    ));
   }
 
-  // Verify token
-  if (!verifyUnsubscribeToken(email, type, token)) {
-    return res.status(403).send(`
-      <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h2 style="color: #e74c3c;">Invalid Token</h2>
-          <p>This unsubscribe link is invalid or has expired.</p>
-        </body>
-      </html>
-    `);
+  if (!verifyUnsubscribeToken(email, type, token, secret)) {
+    return res.status(403).send(page(
+      'Invalid Token', '#e74c3c',
+      '<p>This unsubscribe link is invalid or has expired.</p>'
+    ));
   }
 
   try {
     // Find the subscriber
-    const subscribersRef = admin.firestore().collection("newsletter_signups");
+    const subscribersRef = db.collection("newsletter_signups");
     const snapshot = await subscribersRef.where("email", "==", email.toLowerCase().trim()).get();
 
     if (snapshot.empty) {
-      return res.status(404).send(`
-        <html>
-          <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-            <h2 style="color: #f39c12;">Email Not Found</h2>
-            <p>We couldn't find ${email} in our subscriber list.</p>
-          </body>
-        </html>
-      `);
+      return res.status(404).send(page(
+        'Email Not Found', '#f39c12',
+        `<p>We couldn't find ${escapeHtml(email)} in our subscriber list.</p>`
+      ));
     }
 
     const subscriberDoc = snapshot.docs[0];
@@ -112,7 +89,7 @@ exports.unsubscribe = onRequest({
     // Update the subscriber's preferences
     await subscriberDoc.ref.update({
       preferences: newPreferences,
-      unsubscribedAt: admin.firestore.FieldValue.serverTimestamp(),
+      unsubscribedAt: serverTimestamp(),
       unsubscribeType: type
     });
 
@@ -142,13 +119,24 @@ exports.unsubscribe = onRequest({
 
   } catch (error) {
     logger.error("Unsubscribe error:", error);
-    res.status(500).send(`
-      <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h2 style="color: #e74c3c;">Error</h2>
-          <p>Sorry, there was an error processing your unsubscribe request. Please try again later.</p>
-        </body>
-      </html>
-    `);
+    res.status(500).send(page(
+      'Error', '#e74c3c',
+      '<p>Sorry, there was an error processing your unsubscribe request. Please try again later.</p>'
+    ));
   }
-});
+}
+
+/* v8 ignore start -- thin wiring, same rationale as createCheckoutSession.js
+   and orderConfirmation.js's wrappers. */
+exports.unsubscribe = onRequest(
+  { region: "us-west1", secrets: [unsubscribeSecret] },
+  async (req, res) => handleUnsubscribe(req, res, {
+    db: admin.firestore(),
+    secret: unsubscribeSecret.value(),
+    serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+  })
+);
+/* v8 ignore stop */
+
+// Exported separately for testing.
+exports.handleUnsubscribe = handleUnsubscribe;
