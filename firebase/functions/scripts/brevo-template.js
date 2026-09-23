@@ -31,7 +31,7 @@ const path = require('path');
 
 // Minimal .env loader — no dotenv dependency needed for a one-off script.
 // Only understands simple KEY=VALUE lines; good enough for this file's
-// single BREVO_API_KEY entry.
+// single BREVO_TEMPLATE_CLI_API_KEY entry.
 function loadEnv(envPath) {
   if (!fs.existsSync(envPath)) return;
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
