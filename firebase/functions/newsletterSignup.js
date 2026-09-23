@@ -68,18 +68,21 @@ async function checkRateLimit(ip) {
 // .env into every function in the codebase, so that plain declaration
 // collided with this same variable name being declared as a secret
 // elsewhere, and Cloud Run refused to deploy any function that declared
-// both. BREVO_SENDER/BREVO_TEMPLATE_ID aren't secrets anywhere else in
-// this codebase, so they're untouched.
+// both. BREVO_SENDER isn't a secret anywhere else in this codebase, so
+// it's untouched.
 const brevoApiKey = defineSecret("BREVO_API_KEY");
 const BREVO_SENDER = process.env.BREVO_SENDER;
-const BREVO_TEMPLATE_ID = process.env.BREVO_TEMPLATE_ID;
 
-// invoker: 'public' matches ssrAstro.js/stripeWebhook.js/
-// createCheckoutSession.js -- this project's domain-restricted-sharing org
-// policy blocks anonymous Cloud Run invocation by default (see
-// astro-ssr-stripe-golive-session memory), so a function meant to be
-// called by the public site needs this declared explicitly or every call
-// 403s regardless of how correct the request/response handling is.
+// invoker: 'public' matches ssrAstro.js, the only other function in this
+// codebase that actually declares it in code (stripeWebhook.js and
+// createCheckoutSession.js are also publicly invokable in production, but
+// via a manual Cloud Run "Allow public access" grant made through the
+// Console, never codified as invoker: 'public' in their own onRequest
+// options -- see astro-ssr-stripe-golive-session memory). This project's
+// domain-restricted-sharing org policy blocks anonymous Cloud Run
+// invocation by default, so a function meant to be called by the public
+// site needs this declared (or the equivalent manual grant) or every
+// call 403s regardless of how correct the request/response handling is.
 // region: 'us-west1' matches astro/src/lib/newsletter-signup-url.js's
 // hardcoded target region -- Functions v2 defaults to us-central1 when
 // unspecified, which would silently 404 every real call in production
@@ -98,7 +101,6 @@ exports.newsletterSignup = onRequest(
   // Log environment variable status
   logger.debug(`BREVO_API_KEY set: ${!!BREVO_API_KEY}`);
   logger.debug(`BREVO_SENDER set: ${!!BREVO_SENDER}`);
-  logger.debug(`BREVO_TEMPLATE_ID set: ${!!BREVO_TEMPLATE_ID}`);
 
   if (req.method !== "POST") {
     logger.warn("Received non-POST request.");
@@ -273,15 +275,22 @@ exports.newsletterSignup = onRequest(
       // try would otherwise skip the rollback and permanently strand the
       // doc as "already-delivered" despite no email ever having sent.
       try {
+        // No templateId here on purpose -- Brevo's own "Welcome Newsletter"
+        // template (#1) is confirmed inactive/unused (checked directly in
+        // the Brevo dashboard), and this function was deliberately built to
+        // send ad hoc htmlContent instead of depending on a stored
+        // template's content. Brevo ignores htmlContent entirely once a
+        // templateId is supplied, so combining the two (as this code
+        // previously allowed via an unused BREVO_TEMPLATE_ID env var) would
+        // silently make the firstName personalization below inert the
+        // moment a template ID was ever configured, with no params wired
+        // up for a template to use instead.
         const brevoPayload = {
           sender: JSON.parse(BREVO_SENDER),
           to: [{ email: email }],
           subject: "Welcome to MyFriendRoze Newsletter!",
           htmlContent: buildWelcomeEmailHtml({ firstName }),
         };
-        if (BREVO_TEMPLATE_ID) {
-          brevoPayload.templateId = Number(BREVO_TEMPLATE_ID);
-        }
         const response = await fetch("https://api.brevo.com/v3/smtp/email", {
           method: "POST",
           headers: {

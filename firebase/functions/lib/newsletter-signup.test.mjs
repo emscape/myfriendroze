@@ -196,4 +196,15 @@ describe('evaluateRateLimit', () => {
     expect(result.allowed).toBe(true);
     expect(result.newState).toEqual({ windowStart: now, count: 1 });
   });
+
+  // Exact-boundary case: at precisely windowMs elapsed, a strict
+  // greater-than comparison would still treat the window as active and
+  // incorrectly deny a request that should see a fresh window.
+  it('resets the window at exactly windowMs elapsed (inclusive boundary)', () => {
+    const existing = { windowStart: 1_000_000, count: 10 };
+    const now = 1_000_000 + config.windowMs;
+    const result = evaluateRateLimit(existing, now, config);
+    expect(result.allowed).toBe(true);
+    expect(result.newState).toEqual({ windowStart: now, count: 1 });
+  });
 });

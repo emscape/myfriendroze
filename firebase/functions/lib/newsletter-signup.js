@@ -120,7 +120,7 @@ function validateNameLengths({ firstName, lastName }) {
  * @returns {{ allowed: boolean, newState: { windowStart: number, count: number } }}
  */
 function evaluateRateLimit(existing, now, { maxRequests, windowMs }) {
-  const windowExpired = !existing || now - existing.windowStart > windowMs;
+  const windowExpired = !existing || now - existing.windowStart >= windowMs;
   const windowStart = windowExpired ? now : existing.windowStart;
   const count = windowExpired ? 0 : existing.count;
 
