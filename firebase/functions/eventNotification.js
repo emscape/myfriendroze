@@ -106,12 +106,16 @@ async function handleSendEventNotification(request, {
       const responses = await Promise.allSettled(emailPromises);
 
       // Check for any failed sends -- deliberately logs the subscriber's
-      // position, not their email address (PII), in the failure log.
-      const failedSends = responses.filter(result => result.status === 'rejected');
-      if (failedSends.length > 0) {
-        logger.warn(`${failedSends.length} event notification emails failed to send`);
-        failedSends.forEach((failure, index) => {
-          logger.error(`Event notification send failed for subscriber ${index + 1}/${subscribers.length}:`, failure.reason);
+      // position, not their email address (PII), in the failure log. Walks
+      // the original `responses` array (not a filtered copy) so `index`
+      // stays the subscriber's real position even when some sends succeed.
+      const failedCount = responses.filter(result => result.status === 'rejected').length;
+      if (failedCount > 0) {
+        logger.warn(`${failedCount} event notification emails failed to send`);
+        responses.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            logger.error(`Event notification send failed for subscriber ${index + 1}/${subscribers.length}:`, result.reason);
+          }
         });
       }
 
@@ -155,14 +159,25 @@ exports.sendEventNotification = onCall({
     secret: unsubscribeSecret.value(),
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
     logger,
-    sendBrevoEmail: (payload) => fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: {
-        "api-key": apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    }),
+    sendBrevoEmail: async (payload) => {
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      // node-fetch resolves on HTTP 4xx/5xx and only rejects on transport
+      // errors -- without this check, a Brevo API failure response would
+      // read as a fulfilled promise to Promise.allSettled above, silently
+      // reporting a successful send.
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Brevo API request failed with status ${response.status}: ${errorBody}`);
+      }
+      return response;
+    },
   });
 });
 /* v8 ignore stop */

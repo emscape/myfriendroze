@@ -145,6 +145,24 @@ describe('handleSendEventNotification', () => {
     }
   });
 
+  // Regression guard: the failure log used to index into the *filtered*
+  // list of failures rather than the original subscriber list, so a later
+  // subscriber's failure could misreport an earlier position.
+  it('logs the correct 1-based subscriber position when an earlier send succeeded and a later one failed', async () => {
+    const db = fakeDb({ subscribers: ['ok@example.com', 'fails@example.com'] });
+    const sendBrevoEmail = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network down'));
+    const logger = silentLogger();
+
+    await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps(), logger });
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('subscriber 2/2'),
+      expect.any(Error)
+    );
+  });
+
   it('wraps an unexpected error (e.g. a Firestore failure) as an internal HttpsError', async () => {
     const db = {
       collection: () => ({ where: () => ({ get: () => Promise.reject(new Error('firestore down')) }) }),

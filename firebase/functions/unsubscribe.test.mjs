@@ -2,12 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const {
-  handleUnsubscribe,
-  handleGenerateUnsubscribeUrls,
-  buildUnsubscribeUrls,
-  HttpsError,
-} = require('./unsubscribe.js');
+const { handleUnsubscribe } = require('./unsubscribe.js');
 const { generateUnsubscribeToken } = require('./lib/unsubscribeToken.js');
 
 const SECRET = 'test-secret';
@@ -35,36 +30,6 @@ function fakeDb({ subscriber } = {}) {
     }),
   };
 }
-
-describe('buildUnsubscribeUrls', () => {
-  it('builds newsletter/events/all links, each carrying its own valid token', () => {
-    const urls = buildUnsubscribeUrls('buyer@example.com', SECRET);
-
-    expect(urls.newsletter).toContain('type=newsletter');
-    expect(urls.events).toContain('type=events');
-    expect(urls.all).toContain('type=all');
-    expect(urls.newsletter).toContain(
-      `token=${generateUnsubscribeToken('buyer@example.com', 'newsletter', SECRET)}`
-    );
-  });
-});
-
-describe('handleGenerateUnsubscribeUrls', () => {
-  it('rejects a request with no email', async () => {
-    await expect(
-      handleGenerateUnsubscribeUrls({ data: {} }, { secret: SECRET })
-    ).rejects.toThrow(HttpsError);
-  });
-
-  it('returns unsubscribe URLs for a given email', async () => {
-    const result = await handleGenerateUnsubscribeUrls(
-      { data: { email: 'buyer@example.com' } },
-      { secret: SECRET }
-    );
-
-    expect(result.newsletter).toContain('email=buyer%40example.com');
-  });
-});
 
 describe('handleUnsubscribe', () => {
   it('returns 400 when email, type, or token is missing', async () => {

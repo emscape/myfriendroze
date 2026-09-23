@@ -1,8 +1,8 @@
-const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
-const { generateUnsubscribeToken, verifyUnsubscribeToken } = require("./lib/unsubscribeToken");
+const { verifyUnsubscribeToken } = require("./lib/unsubscribeToken");
 const { escapeHtml } = require("./lib/escapeHtml");
 
 if (!admin.apps.length) {
@@ -10,8 +10,6 @@ if (!admin.apps.length) {
 }
 
 const unsubscribeSecret = defineSecret("UNSUBSCRIBE_SECRET");
-
-const UNSUBSCRIBE_BASE_URL = "https://us-west1-myfriendroze-platform.cloudfunctions.net/unsubscribe";
 
 function page(title, titleColor, bodyHtml) {
   return `
@@ -28,24 +26,6 @@ function page(title, titleColor, bodyHtml) {
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
  * for why dependencies are passed as parameters.
  */
-function buildUnsubscribeUrls(email, secret) {
-  return {
-    newsletter: `${UNSUBSCRIBE_BASE_URL}?email=${encodeURIComponent(email)}&type=newsletter&token=${generateUnsubscribeToken(email, 'newsletter', secret)}`,
-    events: `${UNSUBSCRIBE_BASE_URL}?email=${encodeURIComponent(email)}&type=events&token=${generateUnsubscribeToken(email, 'events', secret)}`,
-    all: `${UNSUBSCRIBE_BASE_URL}?email=${encodeURIComponent(email)}&type=all&token=${generateUnsubscribeToken(email, 'all', secret)}`,
-  };
-}
-
-async function handleGenerateUnsubscribeUrls(request, { secret }) {
-  const { email } = request.data || {};
-
-  if (!email) {
-    throw new HttpsError('invalid-argument', 'Email is required');
-  }
-
-  return buildUnsubscribeUrls(email, secret);
-}
-
 async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
   const { email, type, token } = req.query;
 
@@ -141,11 +121,6 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
 
 /* v8 ignore start -- thin wiring, same rationale as createCheckoutSession.js
    and orderConfirmation.js's wrappers. */
-exports.generateUnsubscribeUrls = onCall(
-  { region: "us-west1", secrets: [unsubscribeSecret] },
-  async (request) => handleGenerateUnsubscribeUrls(request, { secret: unsubscribeSecret.value() })
-);
-
 exports.unsubscribe = onRequest(
   { region: "us-west1", secrets: [unsubscribeSecret] },
   async (req, res) => handleUnsubscribe(req, res, {
@@ -157,7 +132,4 @@ exports.unsubscribe = onRequest(
 /* v8 ignore stop */
 
 // Exported separately for testing.
-exports.handleGenerateUnsubscribeUrls = handleGenerateUnsubscribeUrls;
 exports.handleUnsubscribe = handleUnsubscribe;
-exports.buildUnsubscribeUrls = buildUnsubscribeUrls;
-exports.HttpsError = HttpsError;
