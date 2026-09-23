@@ -66,31 +66,49 @@ exports.newsletterSignup = onRequest(
 
   try {
     const normalizedEmail = email.toLowerCase().trim();
-    // Idempotency: Firestore doesn't enforce uniqueness on its own, and
-    // unsubscribe.js only ever updates the *first* matching document for a
-    // given email -- without this check, a resubmitted signup (double
-    // click, retry) would create a duplicate newsletter_signups doc and
-    // send a second welcome email, and a resubscribe after unsubscribing
-    // would leave stray duplicate docs unsubscribe.js can't fully clean up.
-    // Same query pattern unsubscribe.js already uses against this
-    // collection. Treated as a silent success (not an error) -- a repeat
-    // signup attempt isn't a mistake worth surfacing to the visitor.
-    const existing = await admin
-      .firestore()
-      .collection("newsletter_signups")
-      .where("email", "==", normalizedEmail)
-      .get();
+    // Keying the doc on the normalized email (instead of add()'s random
+    // ID) plus a transaction makes the existence check and the write
+    // atomic -- a plain query-then-add has a race where two concurrent
+    // submissions can both observe "no existing doc" and both proceed,
+    // each sending its own welcome email. welcomeEmailSentAt separately
+    // distinguishes "a doc exists" from "the email was actually
+    // delivered": a prior attempt that created the doc but then failed to
+    // reach Brevo (network error, Brevo API error) would otherwise be
+    // treated as fully complete on every retry, permanently. A prior
+    // unsubscribe (preferences.newsletter === false, set by
+    // unsubscribe.js) is treated as a resubscribe rather than a silent
+    // no-op -- otherwise someone who explicitly re-signs-up after
+    // unsubscribing would stay unsubscribed with no error shown to them.
+    const docRef = admin.firestore().collection("newsletter_signups").doc(normalizedEmail);
+    const { shouldSendEmail, action } = await admin.firestore().runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      if (!snap.exists) {
+        tx.set(docRef, {
+          ...buildSignupRecord({ email, firstName, lastName }),
+          welcomeEmailSentAt: null,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { shouldSendEmail: true, action: "created" };
+      }
+      const data = snap.data();
+      const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
+      if (wasUnsubscribed) {
+        tx.update(docRef, { "preferences.newsletter": true });
+        return { shouldSendEmail: true, action: "resubscribed" };
+      }
+      return {
+        shouldSendEmail: !data.welcomeEmailSentAt,
+        action: data.welcomeEmailSentAt ? "already-delivered" : "retry-delivery",
+      };
+    });
 
-    if (!existing.empty) {
-      logger.info(`${normalizedEmail} is already subscribed -- skipping duplicate signup/email.`);
+    // Never log the email/name themselves (CL9 -- no PII in logs); the
+    // transaction outcome alone is enough to debug/monitor this endpoint.
+    logger.info(`Newsletter signup: ${action}.`);
+
+    if (!shouldSendEmail) {
       return res.status(200).json({ success: true, message: "Signed up successfully!" });
     }
-
-    await admin.firestore().collection("newsletter_signups").add({
-      ...buildSignupRecord({ email, firstName, lastName }),
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    logger.info(`Successfully added ${email} to Firestore.`);
 
     if (BREVO_API_KEY && BREVO_SENDER) {
       const brevoPayload = {
@@ -115,7 +133,8 @@ exports.newsletterSignup = onRequest(
         logger.error(`Brevo API error: ${response.statusText}`, { errorBody });
         throw new Error(`Brevo API request failed with status ${response.status}`);
       }
-      logger.info(`Successfully sent welcome email to ${email} via Brevo.`);
+      await docRef.update({ welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp() });
+      logger.info("Successfully sent welcome email via Brevo.");
     } else {
       logger.warn("Brevo API key or sender not configured. Skipping email.");
     }
@@ -128,6 +147,12 @@ exports.newsletterSignup = onRequest(
 });
 
 function isValidEmail(email) {
+  // This function is directly publicly callable (invoker: 'public'), not
+  // only reachable through the astro proxy's own validation -- typeof
+  // must be checked here too, since RegExp.test() coerces its argument to
+  // a string, so e.g. the single-element array ['a@b.com'] would
+  // otherwise pass, then throw downstream where buildSignupRecord calls
+  // .toLowerCase() on the array itself.
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
+  return typeof email === "string" && emailRegex.test(email);
 }

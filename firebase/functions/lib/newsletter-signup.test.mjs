@@ -10,25 +10,45 @@ describe('buildSignupRecord', () => {
   it('lowercases and trims the email', () => {
     expect(buildSignupRecord({ email: '  Roze@Example.com  ' })).toEqual({
       email: 'roze@example.com',
+      preferences: { newsletter: true },
     });
   });
 
   it('includes firstName/lastName when given', () => {
     expect(
       buildSignupRecord({ email: 'roze@example.com', firstName: 'Roze', lastName: 'Smith' })
-    ).toEqual({ email: 'roze@example.com', firstName: 'Roze', lastName: 'Smith' });
+    ).toEqual({
+      email: 'roze@example.com',
+      firstName: 'Roze',
+      lastName: 'Smith',
+      preferences: { newsletter: true },
+    });
   });
 
   it('omits firstName/lastName entirely when not given, rather than storing empty strings', () => {
     expect(buildSignupRecord({ email: 'roze@example.com' })).toEqual({
       email: 'roze@example.com',
+      preferences: { newsletter: true },
     });
   });
 
   it('trims firstName/lastName and omits them when blank after trimming', () => {
     expect(
       buildSignupRecord({ email: 'roze@example.com', firstName: '  Roze  ', lastName: '   ' })
-    ).toEqual({ email: 'roze@example.com', firstName: 'Roze' });
+    ).toEqual({
+      email: 'roze@example.com',
+      firstName: 'Roze',
+      preferences: { newsletter: true },
+    });
+  });
+
+  // A new signup always opts in -- unsubscribe.js flips preferences.newsletter
+  // to false later, and newsletterSignup.js checks this same field to tell
+  // a genuine resubscribe apart from an already-active subscriber.
+  it('always sets preferences.newsletter to true for a new signup', () => {
+    expect(buildSignupRecord({ email: 'roze@example.com' }).preferences).toEqual({
+      newsletter: true,
+    });
   });
 });
 

@@ -10,7 +10,13 @@
  * @returns {{ email: string, firstName?: string, lastName?: string }}
  */
 function buildSignupRecord({ email, firstName, lastName }) {
-  const record = { email: email.toLowerCase().trim() };
+  const record = {
+    email: email.toLowerCase().trim(),
+    // A new signup always opts in -- unsubscribe.js flips this to false
+    // later, and newsletterSignup.js checks this same field to tell a
+    // genuine resubscribe apart from an already-active subscriber.
+    preferences: { newsletter: true },
+  };
   if (typeof firstName === 'string' && firstName.trim()) {
     record.firstName = firstName.trim();
   }
