@@ -125,15 +125,45 @@ exports.newsletterSignup = onRequest(
       const data = snap.data();
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
+        // Merges the full current signup shape, not just the preferences
+        // flag -- a legacy doc (pre-existing this fix) may have no
+        // preferences field at all, and this request's firstName/lastName
+        // (if given) should overwrite stale/missing values rather than be
+        // silently dropped.
         tx.update(docRef, {
-          "preferences.newsletter": true,
+          ...buildSignupRecord({ email, firstName, lastName }),
           welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: true, action: "resubscribed" };
       }
-      if (!data.welcomeEmailSentAt) {
-        tx.update(docRef, { welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp() });
+      // Distinguishes "the field is absent" from "the field is explicitly
+      // null" -- the pre-this-fix code never wrote welcomeEmailSentAt at
+      // all, so every legacy doc has it absent, not null. Treating absent
+      // the same as an explicit null (the rollback path actually writes
+      // below) would mean the very first time any pre-existing subscriber
+      // touches this code path, they'd be treated as never-delivered and
+      // get a fresh welcome email blasted to them -- even though we have
+      // no idea whether they already received one under the old code.
+      // Only an explicit null (this same mechanism claimed a send and
+      // then genuinely rolled it back after failing) is safe to retry.
+      const hasDeliveryState = Object.prototype.hasOwnProperty.call(data, "welcomeEmailSentAt");
+      if (hasDeliveryState && !data.welcomeEmailSentAt) {
+        tx.update(docRef, {
+          ...buildSignupRecord({ email, firstName, lastName }),
+          welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         return { shouldSendEmail: true, action: "retry-delivery" };
+      }
+      if (!hasDeliveryState) {
+        // Legacy doc predating this tracking field entirely -- backfill it
+        // (so future lookups have a real answer) without sending, rather
+        // than risk re-emailing an existing subscriber on a technicality
+        // of when their record happened to be created.
+        tx.update(docRef, {
+          ...buildSignupRecord({ email, firstName, lastName }),
+          welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { shouldSendEmail: false, action: "legacy-backfilled" };
       }
       return { shouldSendEmail: false, action: "already-delivered" };
     });
@@ -147,16 +177,22 @@ exports.newsletterSignup = onRequest(
     }
 
     if (BREVO_API_KEY && BREVO_SENDER) {
-      const brevoPayload = {
-        sender: JSON.parse(BREVO_SENDER),
-        to: [{ email: email }],
-        subject: "Welcome to MyFriendRoze Newsletter!",
-        htmlContent: buildWelcomeEmailHtml({ firstName }),
-      };
-      if (BREVO_TEMPLATE_ID) {
-        brevoPayload.templateId = Number(BREVO_TEMPLATE_ID);
-      }
+      // Payload construction (including JSON.parse(BREVO_SENDER), which
+      // throws on a malformed sender setting) is inside this same
+      // try/catch specifically so any failure before or during the
+      // network call rolls back the claim -- a throw before entering the
+      // try would otherwise skip the rollback and permanently strand the
+      // doc as "already-delivered" despite no email ever having sent.
       try {
+        const brevoPayload = {
+          sender: JSON.parse(BREVO_SENDER),
+          to: [{ email: email }],
+          subject: "Welcome to MyFriendRoze Newsletter!",
+          htmlContent: buildWelcomeEmailHtml({ firstName }),
+        };
+        if (BREVO_TEMPLATE_ID) {
+          brevoPayload.templateId = Number(BREVO_TEMPLATE_ID);
+        }
         const response = await fetch("https://api.brevo.com/v3/smtp/email", {
           method: "POST",
           headers: {
@@ -179,6 +215,12 @@ exports.newsletterSignup = onRequest(
         throw brevoError;
       }
     } else {
+      // Same rollback as the catch block above -- config being absent
+      // (e.g. local/dev) means no email was actually sent either, so the
+      // claim must not stick. Otherwise, once BREVO_API_KEY/BREVO_SENDER
+      // are eventually configured, a retry would see "already-delivered"
+      // and this signup would never actually get its welcome email.
+      await docRef.update({ welcomeEmailSentAt: null });
       logger.warn("Brevo API key or sender not configured. Skipping email.");
     }
 
