@@ -73,10 +73,11 @@ describe('handleUnsubscribe', () => {
   });
 
   // Regression guard: Express parses a repeated query param
-  // (?token=a&token=b) into an array, not a string. verifyUnsubscribeToken
-  // used to throw on that (Buffer.from rejects a non-string), escaping as
-  // an unhandled 500 instead of the intended 403.
-  it('returns 403 (not a 500) when the token query param is an array', async () => {
+  // (?token=a&token=b) into an array, not a string. Caught by the upfront
+  // typeof check as an invalid link (400) before ever reaching
+  // verifyUnsubscribeToken (which independently also rejects a non-string
+  // token, for any other caller that skips this handler's own check).
+  it('returns 400 (not a 500) when the token query param is an array', async () => {
     const res = fakeRes();
 
     await handleUnsubscribe(
@@ -85,7 +86,28 @@ describe('handleUnsubscribe', () => {
       { db: fakeDb(), secret: SECRET, serverTimestamp }
     );
 
-    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  // Regression guard: a single-element array stringifies identically to its
+  // one element via template-literal coercion (${['a@example.com']} ===
+  // 'a@example.com'), so a token legitimately issued for a plain-string
+  // email would still verify against the array-wrapped form -- and then
+  // crash on email.toLowerCase() downstream, since arrays don't have that
+  // method. The upfront typeof check rejects the array before either can
+  // happen.
+  it('returns 400 (not a 500) when email is a single-element array carrying an otherwise-valid token', async () => {
+    const email = 'buyer@example.com';
+    const token = generateUnsubscribeToken(email, 'newsletter', SECRET);
+    const res = fakeRes();
+
+    await handleUnsubscribe(
+      { query: { email: [email], type: 'newsletter', token } },
+      res,
+      { db: fakeDb(), secret: SECRET, serverTimestamp }
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   it('unsubscribes from newsletter only, preserving other preference fields', async () => {

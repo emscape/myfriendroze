@@ -29,7 +29,14 @@ function page(title, titleColor, bodyHtml) {
 async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
   const { email, type, token } = req.query;
 
-  if (!email || !type || !token) {
+  // A repeated query param (e.g. ?email=a@example.com&email=b@example.com)
+  // parses as an array, not a string. A single-element array stringifies
+  // identically to its one element via template-literal coercion, so a
+  // legitimately-issued token for a plain-string email still verifies
+  // against the array form -- without the typeof checks here, that would
+  // pass verification and then crash on email.toLowerCase() downstream.
+  const isMissingOrNonString = (value) => typeof value !== 'string' || !value;
+  if (isMissingOrNonString(email) || isMissingOrNonString(type) || isMissingOrNonString(token)) {
     return res.status(400).send(page(
       'Invalid Unsubscribe Link', '#e74c3c',
       '<p>This unsubscribe link is invalid or incomplete.</p>'
