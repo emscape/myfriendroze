@@ -4,6 +4,7 @@ const fetch = require("node-fetch");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const functions = require("firebase-functions");
+const { eventNotificationEmailParams } = require("./lib/emailPayload");
 
 // Define secrets
 const brevoApiKey = defineSecret("BREVO_API_KEY");
@@ -91,18 +92,7 @@ exports.sendEventNotification = onCall({
           sender: eventsSender,
           to: [{ email: subscriberEmail }],
           templateId: templates.eventNotification,
-          params: {
-            EMAIL: subscriberEmail,
-            EVENT_TITLE: eventDetails.title || 'Special Event',
-            EVENT_DATE: eventDetails.date || '',
-            EVENT_TIME: eventDetails.time || '',
-            EVENT_LOCATION: eventDetails.location || '',
-            EVENT_DESCRIPTION: eventDetails.description || '',
-            EVENT_PRICE: eventDetails.price || '',
-            REGISTRATION_URL: eventDetails.registrationUrl || '',
-            UNSUBSCRIBE_EVENTS: unsubscribeEvents,
-            UNSUBSCRIBE_ALL: unsubscribeAll
-          }
+          params: eventNotificationEmailParams(eventDetails, subscriberEmail, unsubscribeEvents, unsubscribeAll)
         };
 
         return fetch("https://api.brevo.com/v3/smtp/email", {
