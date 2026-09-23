@@ -4,6 +4,7 @@ const fetch = require("node-fetch");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const functions = require("firebase-functions");
+const { orderShippedEmailParams } = require("./lib/emailPayload");
 
 // Define secrets
 const brevoApiKey = defineSecret("BREVO_API_KEY");
@@ -59,16 +60,7 @@ exports.sendOrderShippedNotification = onCall({
         sender: ordersSender,
         to: [{ email: email }],
         templateId: templates.orderShipped,
-        params: {
-          EMAIL: email,
-          ORDER_NUMBER: orderDetails.orderNumber || 'N/A',
-          CUSTOMER_NAME: orderDetails.customerName || '',
-          TRACKING_NUMBER: shippingDetails.trackingNumber || '',
-          CARRIER: shippingDetails.carrier || '',
-          TRACKING_URL: shippingDetails.trackingUrl || '',
-          ESTIMATED_DELIVERY: shippingDetails.estimatedDelivery || '',
-          SHIPPING_ADDRESS: orderDetails.shippingAddress || ''
-        }
+        params: orderShippedEmailParams(email, orderDetails, shippingDetails)
       };
 
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {

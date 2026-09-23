@@ -44,4 +44,54 @@ function orderDataToConfirmationEmailParams(order) {
   };
 }
 
-module.exports = { orderDataToConfirmationEmailParams };
+// Escapes only when truthy -- preserves each field's existing '' / 'N/A'
+// fallback instead of turning a missing value into the escaped string
+// '' or 'N/A' (a no-op either way, but keeps the fallback logic in one place).
+// Coerces to a string first: these are onCall inputs with no type
+// validation at the boundary, and escapeHtml's .replace() throws on a
+// non-string, e.g. a numeric orderNumber or price.
+function esc(value) {
+  return value ? escapeHtml(String(value)) : value;
+}
+
+// orderDetails/shippingDetails are supplied directly by the caller (the
+// admin app, via onCall), not derived from a Stripe-validated session like
+// orderDataToConfirmationEmailParams's `order` is -- every free-text field
+// here gets interpolated unescaped into the Brevo template body otherwise.
+function orderShippedEmailParams(email, orderDetails, shippingDetails) {
+  return {
+    EMAIL: email,
+    ORDER_NUMBER: esc(orderDetails.orderNumber) || 'N/A',
+    CUSTOMER_NAME: esc(orderDetails.customerName) || '',
+    TRACKING_NUMBER: esc(shippingDetails.trackingNumber) || '',
+    CARRIER: esc(shippingDetails.carrier) || '',
+    TRACKING_URL: esc(shippingDetails.trackingUrl) || '',
+    ESTIMATED_DELIVERY: esc(shippingDetails.estimatedDelivery) || '',
+    SHIPPING_ADDRESS: esc(orderDetails.shippingAddress) || '',
+  };
+}
+
+// eventDetails is caller-supplied (onCall), same concern as
+// orderShippedEmailParams above. subscriberEmail and the unsubscribe URLs
+// come from Firestore/HMAC generation, not free text, so they're passed
+// through unescaped.
+function eventNotificationEmailParams(eventDetails, subscriberEmail, unsubscribeEvents, unsubscribeAll) {
+  return {
+    EMAIL: subscriberEmail,
+    EVENT_TITLE: esc(eventDetails.title) || 'Special Event',
+    EVENT_DATE: esc(eventDetails.date) || '',
+    EVENT_TIME: esc(eventDetails.time) || '',
+    EVENT_LOCATION: esc(eventDetails.location) || '',
+    EVENT_DESCRIPTION: esc(eventDetails.description) || '',
+    EVENT_PRICE: esc(eventDetails.price) || '',
+    REGISTRATION_URL: esc(eventDetails.registrationUrl) || '',
+    UNSUBSCRIBE_EVENTS: unsubscribeEvents,
+    UNSUBSCRIBE_ALL: unsubscribeAll,
+  };
+}
+
+module.exports = {
+  orderDataToConfirmationEmailParams,
+  orderShippedEmailParams,
+  eventNotificationEmailParams,
+};
