@@ -29,7 +29,15 @@ const BREVO_TEMPLATE_ID = process.env.BREVO_TEMPLATE_ID;
 // astro-ssr-stripe-golive-session memory), so a function meant to be
 // called by the public site needs this declared explicitly or every call
 // 403s regardless of how correct the request/response handling is.
-exports.newsletterSignup = onRequest({ secrets: [brevoApiKey], invoker: "public" }, async (req, res) => {
+// region: 'us-west1' matches astro/src/lib/newsletter-signup-url.js's
+// hardcoded target region -- Functions v2 defaults to us-central1 when
+// unspecified, which would silently 404 every real call in production
+// despite everything else being correct (caught in review, not by any
+// test, since the proxy's tests only check the URL string it builds, not
+// where the function actually deploys to).
+exports.newsletterSignup = onRequest(
+  { region: "us-west1", secrets: [brevoApiKey], invoker: "public" },
+  async (req, res) => {
   // A secret's value is only resolved per-invocation, not at module load,
   // so this can't be hoisted to module scope the way the old
   // process.env read was.

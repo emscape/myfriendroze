@@ -21,6 +21,23 @@ function buildSignupRecord({ email, firstName, lastName }) {
 }
 
 /**
+ * Escapes the five HTML-significant characters -- firstName is
+ * request-controlled and gets interpolated straight into an email Brevo
+ * actually sends, so an unescaped value could inject arbitrary markup into
+ * a message delivered under this site's trusted sender identity.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Personalizes the welcome email greeting when a first name was given,
  * falling back to the original generic greeting otherwise.
  * @param {{ firstName?: string }} input
@@ -28,7 +45,9 @@ function buildSignupRecord({ email, firstName, lastName }) {
  */
 function buildWelcomeEmailHtml({ firstName }) {
   const greeting =
-    typeof firstName === 'string' && firstName.trim() ? `Hi ${firstName.trim()},` : 'Hi there,';
+    typeof firstName === 'string' && firstName.trim()
+      ? `Hi ${escapeHtml(firstName.trim())},`
+      : 'Hi there,';
 
   return `
           <div style="font-family: Arial, sans-serif; background: #f9f9f9; padding: 32px;">

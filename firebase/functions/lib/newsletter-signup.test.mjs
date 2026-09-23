@@ -47,4 +47,21 @@ describe('buildWelcomeEmailHtml', () => {
     const html = buildWelcomeEmailHtml({ firstName: '   ' });
     expect(html).toContain('Hi there,');
   });
+
+  // firstName is request-controlled (astro/src/pages/api/newsletter.js
+  // passes it straight through from the request body) and gets
+  // interpolated into an email Brevo actually sends -- unescaped, a
+  // crafted name could inject arbitrary markup into an email delivered
+  // under this site's trusted sender identity to whatever address the
+  // same request specifies.
+  it('HTML-escapes a firstName containing markup instead of injecting it into the email', () => {
+    const html = buildWelcomeEmailHtml({ firstName: '<img src=x onerror=alert(1)>' });
+    expect(html).not.toContain('<img src=x onerror=alert(1)>');
+    expect(html).toContain('Hi &lt;img src=x onerror=alert(1)&gt;,');
+  });
+
+  it('escapes ampersands and quotes too', () => {
+    const html = buildWelcomeEmailHtml({ firstName: `Rose & "Bud"` });
+    expect(html).toContain('Hi Rose &amp; &quot;Bud&quot;,');
+  });
 });
