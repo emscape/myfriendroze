@@ -4,6 +4,12 @@
 // the deployed Cloud Functions — run locally by a human with a Brevo API
 // key in a gitignored .env file (see .env.example).
 //
+// Uses BREVO_TEMPLATE_CLI_API_KEY, not BREVO_API_KEY -- the deployed
+// Functions already bind BREVO_API_KEY as a secret via defineSecret(), and
+// Firebase Functions refuses to deploy when the same name exists in both a
+// local .env file and a bound secret. A separate name avoids that collision
+// even though this script and the Functions may hold the same key value.
+//
 // Usage:
 //   node scripts/brevo-template.js list
 //   node scripts/brevo-template.js check --id 2
@@ -14,9 +20,11 @@
 //   node scripts/brevo-template.js create --file <path> --name "Event Notification" \
 //     --subject "{{ params.EVENT_TITLE }}" --sender-email events@myfriendroze.com --sender-name myfriendroze
 //
-// push/create default isActive to false unless --activate is passed -- a
-// push against a template Brevo may already be using in production should
-// not go live until reviewed, so activation must be opted into explicitly.
+// create defaults isActive to false unless --activate is passed. push omits
+// isActive entirely unless --activate is passed, leaving Brevo's existing
+// active state untouched -- a push against a template Brevo may already be
+// using in production should not go live (or be taken down) as a side
+// effect of a content update; activation must be opted into explicitly.
 
 const fs = require('fs');
 const path = require('path');
@@ -90,10 +98,10 @@ function brevoListTemplates(apiKey) {
 
 async function main() {
   loadEnv(path.join(__dirname, '..', '.env'));
-  const apiKey = process.env.BREVO_API_KEY;
+  const apiKey = process.env.BREVO_TEMPLATE_CLI_API_KEY;
   if (!apiKey) {
     console.error(
-      'BREVO_API_KEY not set. Copy .env.example to .env in firebase/functions/ and fill in the key.'
+      'BREVO_TEMPLATE_CLI_API_KEY not set. Copy .env.example to .env in firebase/functions/ and fill in the key.'
     );
     process.exit(1);
   }
@@ -139,7 +147,12 @@ async function main() {
       process.exit(1);
     }
     const htmlContent = fs.readFileSync(args.file, 'utf8');
-    const body = { htmlContent, isActive: args.activate };
+    const body = { htmlContent };
+    // isActive is deliberately omitted unless --activate is passed, so a
+    // plain content push to an already-active production template doesn't
+    // send isActive: false and deactivate it. Brevo leaves the template's
+    // current active state untouched when the key isn't in the request body.
+    if (args.activate) body.isActive = true;
     // Metadata flags are optional — lets push double as "repurpose this
     // blank template for a new purpose" (rename + subject + sender + content
     // in one call) as well as the plain "just update the body" case.
