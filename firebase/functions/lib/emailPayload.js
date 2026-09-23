@@ -47,8 +47,11 @@ function orderDataToConfirmationEmailParams(order) {
 // Escapes only when truthy -- preserves each field's existing '' / 'N/A'
 // fallback instead of turning a missing value into the escaped string
 // '' or 'N/A' (a no-op either way, but keeps the fallback logic in one place).
+// Coerces to a string first: these are onCall inputs with no type
+// validation at the boundary, and escapeHtml's .replace() throws on a
+// non-string, e.g. a numeric orderNumber or price.
 function esc(value) {
-  return value ? escapeHtml(value) : value;
+  return value ? escapeHtml(String(value)) : value;
 }
 
 // orderDetails/shippingDetails are supplied directly by the caller (the

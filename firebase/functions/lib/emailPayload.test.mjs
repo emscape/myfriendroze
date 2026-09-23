@@ -202,6 +202,17 @@ describe('orderShippedEmailParams', () => {
     expect(params.SHIPPING_ADDRESS).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(params.CARRIER).toBe('&lt;img src=x onerror=alert(1)&gt;');
   });
+
+  it('coerces a numeric ORDER_NUMBER to a string instead of throwing, since these are '
+    + 'onCall inputs with no type validation at the boundary', () => {
+    const params = orderShippedEmailParams(
+      'buyer@example.com',
+      fullOrderDetails({ orderNumber: 1001 }),
+      fullShippingDetails()
+    );
+
+    expect(params.ORDER_NUMBER).toBe('1001');
+  });
 });
 
 describe('eventNotificationEmailParams', () => {
@@ -295,5 +306,17 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EMAIL).toBe('subscriber@example.com');
     expect(params.UNSUBSCRIBE_EVENTS).toBe('https://example.com/unsub?type=events&token=abc&x=1');
     expect(params.UNSUBSCRIBE_ALL).toBe('https://example.com/unsub?type=all&token=def&x=2');
+  });
+
+  it('coerces a numeric EVENT_PRICE to a string instead of throwing, since these are '
+    + 'onCall inputs with no type validation at the boundary', () => {
+    const params = eventNotificationEmailParams(
+      fullEventDetails({ price: 25 }),
+      'subscriber@example.com',
+      'https://example.com/unsub?type=events',
+      'https://example.com/unsub?type=all'
+    );
+
+    expect(params.EVENT_PRICE).toBe('25');
   });
 });
