@@ -54,13 +54,38 @@ exports.newsletterSignup = onRequest(
     return res.status(405).send("Method Not Allowed");
   }
 
-  const { email, firstName, lastName } = req.body;
+  // `|| {}` guards a null/omitted body -- a client can send a JSON `null`
+  // body (or none at all) and reach this line before the try block below,
+  // where destructuring a null req.body would throw and surface as a 500
+  // instead of the intended 400. Same pattern as createCheckoutSession.js.
+  const { email, firstName, lastName } = req.body || {};
   if (!email || !isValidEmail(email)) {
     logger.error("Invalid email address provided.");
     return res.status(400).json({ error: "Valid email address required." });
   }
 
   try {
+    const normalizedEmail = email.toLowerCase().trim();
+    // Idempotency: Firestore doesn't enforce uniqueness on its own, and
+    // unsubscribe.js only ever updates the *first* matching document for a
+    // given email -- without this check, a resubmitted signup (double
+    // click, retry) would create a duplicate newsletter_signups doc and
+    // send a second welcome email, and a resubscribe after unsubscribing
+    // would leave stray duplicate docs unsubscribe.js can't fully clean up.
+    // Same query pattern unsubscribe.js already uses against this
+    // collection. Treated as a silent success (not an error) -- a repeat
+    // signup attempt isn't a mistake worth surfacing to the visitor.
+    const existing = await admin
+      .firestore()
+      .collection("newsletter_signups")
+      .where("email", "==", normalizedEmail)
+      .get();
+
+    if (!existing.empty) {
+      logger.info(`${normalizedEmail} is already subscribed -- skipping duplicate signup/email.`);
+      return res.status(200).json({ success: true, message: "Signed up successfully!" });
+    }
+
     await admin.firestore().collection("newsletter_signups").add({
       ...buildSignupRecord({ email, firstName, lastName }),
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
