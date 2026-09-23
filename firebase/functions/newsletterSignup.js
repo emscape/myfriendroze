@@ -43,7 +43,20 @@ async function checkRateLimit(ip) {
       maxRequests: RATE_LIMIT_MAX_REQUESTS,
       windowMs: RATE_LIMIT_WINDOW_MS,
     });
-    tx.set(rateLimitRef, newState);
+    // expiresAt marks this doc for automatic deletion via a Firestore TTL
+    // policy -- without it, a public endpoint keyed on caller-controlled
+    // IPs (rotating proxies/bots) grows this collection unbounded, with
+    // no cleanup mechanism in this codebase (no scheduled/cron Cloud
+    // Function exists anywhere here to build a custom sweep job instead).
+    // REQUIRES A ONE-TIME MANUAL STEP: configure a Firestore TTL policy on
+    // newsletter_signup_rate_limits.expiresAt (Console: Firestore ->
+    // TTL tab -> Create policy, or `gcloud firestore fields ttls update
+    // expiresAt --collection-group=newsletter_signup_rate_limits
+    // --enable-ttl`) -- the field alone does nothing without that policy.
+    tx.set(rateLimitRef, {
+      ...newState,
+      expiresAt: admin.firestore.Timestamp.fromMillis(newState.windowStart + RATE_LIMIT_WINDOW_MS),
+    });
     return allowed;
   });
 }
@@ -228,6 +241,18 @@ exports.newsletterSignup = onRequest(
           welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: false, action: "legacy-backfilled" };
+      }
+      // Still worth capturing a fresh name even though nothing needs
+      // (re)sending -- otherwise someone who originally signed up with
+      // just an email and later submits their name (e.g. resubmitting
+      // the form) gets a success response with the name silently
+      // dropped. Skipped when no new name is actually given, so a plain
+      // repeat email-only submission doesn't write on every visit.
+      const hasNewName =
+        (typeof firstName === "string" && firstName.trim()) ||
+        (typeof lastName === "string" && lastName.trim());
+      if (hasNewName) {
+        tx.update(docRef, buildExistingDocUpdate(data, { email, firstName, lastName }));
       }
       return { shouldSendEmail: false, action: "already-delivered" };
     });
