@@ -1,140 +1,79 @@
-// Newsletter signup API endpoint using Firebase Functions
+// Proxies to the newsletterSignup Cloud Function, same
+// browser-never-calls-Firebase-directly pattern as api/checkout.js and
+// api/shipping.js.
+//
+// Previously called createSubscription (firebase/functions/subscribe.js),
+// a function that was never actually exported/deployed -- every real
+// signup attempt failed silently in production. createSubscription was
+// also an onCall function expecting a {data: ...}-wrapped body, so even a
+// deployed version wouldn't have worked against a plain fetch() like this
+// one. newsletterSignup is a plain onRequest function that's actually
+// live, already sends a Brevo welcome email, and matches this proxy's
+// simple request/response shape.
+
+import { validateNewsletterRequest } from '../../lib/newsletter-validation.js';
+import { buildNewsletterSignupUrl } from '../../lib/newsletter-signup-url.js';
+
+export const prerender = false;
+
 export async function POST({ request }) {
+  let body;
   try {
-    const { email, firstName, lastName } = await request.json();
+    body = await request.json();
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON in request body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
-    // Validate email
-    if (!email || !isValidEmail(email)) {
-      return new Response(
-        JSON.stringify({ error: 'Valid email address is required' }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
+  const validation = validateNewsletterRequest(body);
+  if (!validation.valid) {
+    return new Response(JSON.stringify({ error: validation.error }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
-    // Prepare subscription data according to OpenAPI contract
-    const subscriptionData = {
-      email: email.toLowerCase().trim(),
-      source: 'website',
-      preferences: {
-        newsletter: true,
-        promotions: false,
-        productUpdates: false
-      },
-      tags: ['website-signup']
-    };
+  // import.meta.env.DEV alone is a build-time flag baked into the bundle
+  // -- it's false in the production-mode SSR artifact regardless of
+  // where that artifact is actually run. Running that same built
+  // artifact locally against the Firebase emulator (ssrAstro under
+  // `firebase emulators:start`) would otherwise take the production URL
+  // branch and create real production subscribers instead of calling the
+  // local Functions emulator. FUNCTIONS_EMULATOR is set at runtime by the
+  // emulator itself, so it correctly detects this regardless of build mode.
+  const url = buildNewsletterSignupUrl({
+    isDevelopment: import.meta.env.DEV || process.env.FUNCTIONS_EMULATOR === 'true',
+    projectId: import.meta.env.FIREBASE_PROJECT_ID || 'myfriendroze-platform',
+    region: import.meta.env.FIREBASE_REGION || 'us-west1',
+  });
 
-    // Add optional fields if provided
-    if (firstName && firstName.trim()) {
-      subscriptionData.firstName = firstName.trim();
-    }
-    if (lastName && lastName.trim()) {
-      subscriptionData.lastName = lastName.trim();
-    }
+  try {
+    const cloudFunctionResponse = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
 
-    // Call Firebase Functions API for subscription
-    // In development, we'll use the MCP bridge for testing
-    // In production, we'll call Firebase Functions directly
-    const isDevelopment = import.meta.env.DEV;
+    const data = await cloudFunctionResponse.json();
 
-    let apiResponse;
-
-    if (isDevelopment) {
-      // For development, we would use the MCP bridge, but since we can't access it directly
-      // from the Astro API route, we'll simulate the call for now
-      console.log('Development mode: Would call Firebase Functions via MCP bridge');
-      console.log('Subscription data:', subscriptionData);
-
-      // Simulate successful response for development
-      apiResponse = {
-        ok: true,
-        status: 201,
-        json: async () => ({
-          id: 'dev-' + Date.now(),
-          email: subscriptionData.email,
-          status: 'active',
-          createdAt: new Date().toISOString()
-        })
-      };
-    } else {
-      // Production: Call Firebase Functions directly
-      const FIREBASE_PROJECT_ID = import.meta.env.FIREBASE_PROJECT_ID || 'myfriendroze-platform';
-      const FIREBASE_REGION = import.meta.env.FIREBASE_REGION || 'us-west1';
-
-      apiResponse = await fetch(`https://${FIREBASE_REGION}-${FIREBASE_PROJECT_ID}.cloudfunctions.net/createSubscription`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(subscriptionData)
-      });
-    }
-
-    const responseData = await apiResponse.json();
-
-    if (apiResponse.ok) {
-      console.log('New newsletter subscriber:', email);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Successfully subscribed to newsletter!',
-          data: responseData
-        }),
-        {
-          status: 201,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    } else {
-      // Handle API errors
-      let errorMessage = 'Failed to subscribe. Please try again.';
-
-      if (responseData.error && responseData.error.includes('already subscribed')) {
-        errorMessage = 'This email is already subscribed to our newsletter.';
-      } else if (responseData.message) {
-        errorMessage = responseData.message;
-      }
-
-      console.error('Firebase Functions API error:', responseData);
-
-      return new Response(
-        JSON.stringify({ error: errorMessage }),
-        {
-          status: apiResponse.status,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
+    return new Response(JSON.stringify(data), {
+      status: cloudFunctionResponse.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Newsletter signup error:', error);
-
-    return new Response(
-      JSON.stringify({ error: 'Failed to subscribe. Please try again.' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    );
+    return new Response(JSON.stringify({ error: 'Failed to subscribe. Please try again.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }
 
-// Email validation function
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-// Handle non-POST requests
 export async function GET() {
-  return new Response(
-    JSON.stringify({ error: 'Method not allowed' }),
-    { 
-      status: 405,
-      headers: { 'Content-Type': 'application/json' }
-    }
-  );
+  return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    status: 405,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
