@@ -4,6 +4,7 @@ const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const logger = require("firebase-functions/logger");
+const { buildSignupRecord, buildWelcomeEmailHtml } = require("./lib/newsletter-signup");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -22,7 +23,13 @@ const brevoApiKey = defineSecret("BREVO_API_KEY");
 const BREVO_SENDER = process.env.BREVO_SENDER;
 const BREVO_TEMPLATE_ID = process.env.BREVO_TEMPLATE_ID;
 
-exports.newsletterSignup = onRequest({ secrets: [brevoApiKey] }, async (req, res) => {
+// invoker: 'public' matches ssrAstro.js/stripeWebhook.js/
+// createCheckoutSession.js -- this project's domain-restricted-sharing org
+// policy blocks anonymous Cloud Run invocation by default (see
+// astro-ssr-stripe-golive-session memory), so a function meant to be
+// called by the public site needs this declared explicitly or every call
+// 403s regardless of how correct the request/response handling is.
+exports.newsletterSignup = onRequest({ secrets: [brevoApiKey], invoker: "public" }, async (req, res) => {
   // A secret's value is only resolved per-invocation, not at module load,
   // so this can't be hoisted to module scope the way the old
   // process.env read was.
@@ -39,7 +46,7 @@ exports.newsletterSignup = onRequest({ secrets: [brevoApiKey] }, async (req, res
     return res.status(405).send("Method Not Allowed");
   }
 
-  const { email } = req.body;
+  const { email, firstName, lastName } = req.body;
   if (!email || !isValidEmail(email)) {
     logger.error("Invalid email address provided.");
     return res.status(400).json({ error: "Valid email address required." });
@@ -47,7 +54,7 @@ exports.newsletterSignup = onRequest({ secrets: [brevoApiKey] }, async (req, res
 
   try {
     await admin.firestore().collection("newsletter_signups").add({
-      email: email.toLowerCase().trim(),
+      ...buildSignupRecord({ email, firstName, lastName }),
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
     });
     logger.info(`Successfully added ${email} to Firestore.`);
@@ -57,20 +64,7 @@ exports.newsletterSignup = onRequest({ secrets: [brevoApiKey] }, async (req, res
         sender: JSON.parse(BREVO_SENDER),
         to: [{ email: email }],
         subject: "Welcome to MyFriendRoze Newsletter!",
-        htmlContent: `
-          <div style="font-family: Arial, sans-serif; background: #f9f9f9; padding: 32px;">
-            <h2 style="color: #4CAF50;">Welcome to MyFriendRoze!</h2>
-            <p>Hi there,</p>
-            <p>Thank you for signing up for our newsletter. We're excited to have you join our community of plant lovers and creative souls!</p>
-            <ul>
-              <li>🌱 Get exclusive updates and offers</li>
-              <li>🌸 Be the first to know about new products and events</li>
-              <li>💌 Tips, inspiration, and more delivered to your inbox</li>
-            </ul>
-            <p>If you have any questions, just reply to this email—we love hearing from you!</p>
-            <p style="margin-top:32px; color:#888; font-size:12px;">You are receiving this email because you signed up at myfriendroze.com.</p>
-          </div>
-        `,
+        htmlContent: buildWelcomeEmailHtml({ firstName }),
       };
       if (BREVO_TEMPLATE_ID) {
         brevoPayload.templateId = Number(BREVO_TEMPLATE_ID);
