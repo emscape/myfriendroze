@@ -1,13 +1,12 @@
-// Pure Firestore-doc -> GalleryPhoto transform, shared by both the
-// build-time snapshot script (scripts/fetch-gallery.mjs) and the live
-// Firestore reads used by gallery.astro (see gallery-live.js). Same
+// Pure Firestore-doc -> GalleryPhoto transform used by the live Firestore
+// reads gallery.astro does on every request (see gallery-live.js). Same
 // extraction rationale as product-mapping.js.
 
 import { sanitizeHttpUrl } from './url-sanitize.js';
 
 /**
- * Pure transform from a Firestore gallery document to the shape
- * astro/src/data/gallery.js's GalleryPhoto typedef expects. No Firestore
+ * Pure transform from a Firestore gallery document into the GalleryPhoto
+ * shape gallery.astro expects (see the @returns type below). No Firestore
  * calls here — this is what makes it unit-testable without a live/emulated
  * database.
  * @param {{ id: string, data: () => Record<string, any> }} doc

@@ -17,8 +17,8 @@
   - `astro/src/pages/shop.astro` — shop / product listing
   - `astro/src/pages/events.astro` — events listing page
   - `astro/src/components/Header.astro` — site navigation (nav array is the source of truth for menu items)
-  - `astro/src/data/events.js` — event data with dates (add future events here; past events auto-hidden)
-  - `astro/src/data/syncedProducts.js` — product data synced from Firestore via Flutter admin app
+  - `astro/src/data/events.js` — recurring/hardcoded event entries, merged with live Firestore events (see `events.astro`)
+  - `astro/src/lib/product-mapping.js` / `products-live.js` — live per-request Firestore reads for shop products (no build-time snapshot)
   - `firebase/functions/` — Cloud Functions (order emails, newsletter, shipping calc)
   - `firestore.rules` — Firestore security rules
 
@@ -82,7 +82,7 @@ myfriendroze/
 │   ├── src/
 │   │   ├── pages/          ← Routes (index, shop, events, products/[handle])
 │   │   ├── components/     ← Header, ProductCard, ShippingCalculator, Footer
-│   │   ├── data/           ← events.js, products.js, syncedProducts.js
+│   │   ├── data/           ← events.js (recurring/hardcoded event entries)
 │   │   ├── layouts/        ← Layout.astro (wraps all pages)
 │   │   └── styles/         ← Global CSS variables and base styles
 │   └── public/             ← Static assets (images, fonts, SVGs)
@@ -96,7 +96,7 @@ myfriendroze/
 **Key conventions**:
 - Navigation menu items live in `astro/src/components/Header.astro` `navigation` array — the single source of truth
 - Events with a past `endDate` are automatically hidden; `endDate: null` = recurring/always shown
-- Products come from Firestore via the Flutter admin app; `syncedProducts.js` is the in-memory cache
+- Products come from Firestore via the Flutter admin app; the site reads them live on every request (`astro/src/lib/products-live.js`) — no build-time snapshot or sync API
 
 ---
 

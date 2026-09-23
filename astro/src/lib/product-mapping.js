@@ -1,9 +1,7 @@
-// Pure Firestore-doc -> Product transforms, shared by both the build-time
-// snapshot script (scripts/fetch-products.mjs) and the live/on-demand
-// Firestore reads used by shop.astro and products/[handle].astro. Moved
-// here (out of fetch-products.mjs, which re-exports these for backward
-// compatibility with its existing tests) so both paths use one definition
-// instead of two copies drifting apart.
+// Pure Firestore-doc -> Product transforms used by the live, on-demand
+// Firestore reads shop.astro and products/[handle].astro do on every
+// request (see products-live.js). Extracted from the transform logic so
+// it's unit-testable without a live database.
 
 /**
  * Lowercases, strips punctuation, and hyphenates a title into a URL-safe
@@ -40,9 +38,10 @@ export function formatDimensions({ widthIn, heightIn, depthIn }) {
 }
 
 /**
- * Pure transform from a Firestore product document to the shape
- * astro/src/data/products.js's Product typedef expects. No Firestore calls
- * here — unit-testable without a live database.
+ * Pure transform from a Firestore product document into the Product shape
+ * shop.astro/[handle].astro expect (the object literal this function
+ * returns, below). No Firestore calls here — unit-testable without a live
+ * database.
  *
  * category/features/tags/compareAtPrice default to safe empty values
  * rather than being invented — the Flutter admin app's Product model

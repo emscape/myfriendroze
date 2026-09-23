@@ -27,13 +27,12 @@ jobs:
         run: npm test
 
       - name: Build
-        # Exercises the full build pipeline, including the prebuild Firestore
-        # fetch (scripts/fetch-gallery.mjs) and the Astro adapter — this is
+        # Exercises the full build pipeline and the Astro adapter — this is
         # exactly the class of break (missing adapter, misconfigured output
         # mode) that shipped to production silently before CI existed.
-        # No Firestore credentials are available here; fetch-gallery.mjs is
-        # designed to fail non-fatally and fall back to the committed
-        # syncedGallery.js placeholder, so this step needs no secrets.
+        # Products/events/gallery are all read live from Firestore at
+        # request time now (no build-time snapshot fetch left to run), so
+        # this step needs no Firestore credentials/secrets either way.
         run: npm run build
 
   functions:
@@ -121,13 +120,10 @@ jobs:
         # functions.predeploy in firebase.json independently declare
         # "npm --prefix astro run build" (each needs it when its own target
         # is deployed alone), which would otherwise build astro twice for
-        # this single combined deploy: once per predeploy hook. Beyond
-        # wasted time, the two builds aren't guaranteed identical (the
-        # prebuild scripts read live Firestore data), so Hosting and the
-        # ssrAstro Function could ship from two different snapshots.
-        # SKIP_ASTRO_BUILD=1 on the deploy step below makes both predeploy
-        # hooks no-op instead of rebuilding — see astro/scripts/build.mjs
-        # and astro/scripts/prebuild.mjs.
+        # this single combined deploy: once per predeploy hook, wasting
+        # time for no benefit. SKIP_ASTRO_BUILD=1 on the deploy step below
+        # makes both predeploy hooks no-op instead of rebuilding — see
+        # astro/scripts/build.mjs.
         run: npm run build --prefix astro
 
       - name: Deploy to Firebase Hosting + Functions

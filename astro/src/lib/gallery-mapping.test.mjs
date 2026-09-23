@@ -1,5 +1,13 @@
+// Regression coverage for docToGalleryPhoto, migrated from the now-deleted
+// scripts/fetch-gallery.test.mjs (Copilot review on PR #39 caught that
+// deleting fetch-gallery.mjs's test alongside it silently dropped the
+// only direct coverage for this function's URL sanitization and
+// field-shape handling -- it's still production code, imported by
+// gallery-live.js, not part of the dead build-time snapshot path that PR
+// actually removed).
+
 import { describe, it, expect } from 'vitest';
-import { docToGalleryPhoto } from './fetch-gallery.mjs';
+import { docToGalleryPhoto } from './gallery-mapping.js';
 
 function fakeDoc(id, data) {
   return { id, data: () => data };
@@ -42,8 +50,9 @@ describe('docToGalleryPhoto', () => {
 
     expect(photo.caption).toBeNull();
     expect(photo.link).toBeNull();
-    // Explicitly not undefined, since JSON.stringify drops undefined keys
-    // and the generated file needs a stable shape.
+    // Explicitly not undefined, since a stable object shape matters for
+    // any consumer that serializes this (JSON.stringify drops undefined
+    // keys).
     expect('caption' in photo).toBe(true);
     expect('link' in photo).toBe(true);
   });
@@ -60,7 +69,7 @@ describe('docToGalleryPhoto', () => {
 
   // Firestore data isn't trusted to actually match the declared shape —
   // a non-string altText/caption (e.g. a stray number) must not leak
-  // through into rendered HTML/the build snapshot as-is.
+  // through into rendered HTML as-is.
   it.each([42, { nested: true }, ['a', 'b'], true])(
     'falls back to an empty string when altText is a non-string value (%j)',
     (badAlt) => {

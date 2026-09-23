@@ -1,5 +1,14 @@
+// Regression coverage for docToProduct/dedupeHandles, migrated from the
+// now-deleted scripts/fetch-products.test.mjs (Copilot review on PR #39
+// caught that deleting fetch-products.mjs's test alongside it silently
+// dropped coverage for these two functions -- they're still production
+// code, imported by products-live.js, not part of the dead build-time
+// snapshot path that PR actually removed). products-live.test.mjs only
+// exercises a small subset of this behavior through the live-fetch
+// wrapper; this file covers the pure mapping functions directly.
+
 import { describe, it, expect } from 'vitest';
-import { docToProduct, dedupeHandles } from './fetch-products.mjs';
+import { docToProduct, dedupeHandles } from './product-mapping.js';
 
 function fakeDoc(id, data) {
   return { id, data: () => data };
@@ -81,10 +90,10 @@ describe('docToProduct', () => {
 
   it('defaults category, features, tags, and compareAtPrice for fields Firestore does not store', () => {
     // The Flutter admin app's Product model has no category/features/tags/
-    // compareAtPrice fields today — this is a known data-completeness gap
-    // (see admin-app-web-hosting memory / project backlog), not something
-    // this script should invent data for. Everything must default to a
-    // safe, renderable empty value rather than being undefined.
+    // compareAtPrice fields today — this is a known data-completeness gap,
+    // not something this transform should invent data for. Everything
+    // must default to a safe, renderable empty value rather than being
+    // undefined.
     const doc = fakeDoc('abc', { title: 'Bare Product', price: 15 });
 
     const product = docToProduct(doc);
@@ -95,13 +104,6 @@ describe('docToProduct', () => {
     expect(product.compareAtPrice).toBeNull();
   });
 
-  // dimensions used to hardcode '' with a comment claiming the admin app
-  // collected no height/width/depth data at all — stale as of the
-  // lbs/oz-and-inches admin form work, which added heightIn/widthIn/
-  // depthIn to every product. This formats those into the same
-  // `W" × H"`-style string the old hand-written products.js used, so
-  // real product dimensions actually reach the site instead of always
-  // rendering a blank "Dimensions:" row.
   it('formats dimensions from heightIn/widthIn/depthIn when present', () => {
     const doc = fakeDoc('abc', {
       title: 'Blue Bayou',
@@ -147,12 +149,10 @@ describe('docToProduct', () => {
   });
 
   // inStock is a distinct concept from isActive: isActive controls whether
-  // a product is fetched/shown on the site at all (see the isActive==true
-  // Firestore query in main()); inStock controls whether a *visible*
+  // a product is fetched/shown on the site at all (the Firestore query in
+  // products-live.js filters on it); inStock controls whether a *visible*
   // product can be purchased (shows a "Sold Out" badge/disabled button
-  // instead of disappearing entirely). Conflating them (inStock derived
-  // from isActive) was the bug — it made "visible but sold out" not
-  // representable at all.
+  // instead of disappearing entirely).
   it('defaults inStock to true when the field is absent', () => {
     const doc = fakeDoc('abc', { title: 'No Stock Field Product', price: 10, isActive: true });
 
