@@ -3,6 +3,7 @@ const { onRequest } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
+const crypto = require("crypto");
 const logger = require("firebase-functions/logger");
 const { buildSignupRecord, buildWelcomeEmailHtml } = require("./lib/newsletter-signup");
 
@@ -66,26 +67,57 @@ exports.newsletterSignup = onRequest(
 
   try {
     const normalizedEmail = email.toLowerCase().trim();
-    // Keying the doc on the normalized email (instead of add()'s random
-    // ID) plus a transaction makes the existence check and the write
-    // atomic -- a plain query-then-add has a race where two concurrent
-    // submissions can both observe "no existing doc" and both proceed,
-    // each sending its own welcome email. welcomeEmailSentAt separately
-    // distinguishes "a doc exists" from "the email was actually
-    // delivered": a prior attempt that created the doc but then failed to
-    // reach Brevo (network error, Brevo API error) would otherwise be
-    // treated as fully complete on every retry, permanently. A prior
-    // unsubscribe (preferences.newsletter === false, set by
-    // unsubscribe.js) is treated as a resubscribe rather than a silent
-    // no-op -- otherwise someone who explicitly re-signs-up after
-    // unsubscribing would stay unsubscribed with no error shown to them.
-    const docRef = admin.firestore().collection("newsletter_signups").doc(normalizedEmail);
+    const signupsCollection = admin.firestore().collection("newsletter_signups");
+
+    // Firestore document IDs can't contain "/" (it's a path separator) --
+    // the local part of an email address legally can (e.g. "a/b@x.com"),
+    // which would otherwise make doc() throw and turn a valid signup into
+    // a 500. A hash of the normalized email is always Firestore-safe and
+    // still fully deterministic per email, which is what the atomicity
+    // fix below actually needs.
+    const emailHash = crypto.createHash("sha256").update(normalizedEmail).digest("hex");
+
+    // Before this fix, newsletterSignup wrote via .add() with a random
+    // ID, so pre-existing subscribers' docs aren't at this deterministic
+    // ID at all. Looking up only the hashed-ID doc would miss them
+    // entirely, creating a duplicate record (and a duplicate email) on
+    // any repeat signup, and unsubscribe.js's own first-match query would
+    // keep updating their original legacy doc while this one drifts.
+    // Finding any pre-existing doc by the email field first, and
+    // operating on THAT doc's ref when one exists, keeps every code path
+    // (this function and unsubscribe.js) pointed at the same record.
+    const legacyMatch = await signupsCollection
+      .where("email", "==", normalizedEmail)
+      .limit(1)
+      .get();
+    const docRef = !legacyMatch.empty
+      ? legacyMatch.docs[0].ref
+      : signupsCollection.doc(emailHash);
+
+    // Keying the write on a single doc ref inside a transaction makes the
+    // existence check and the write atomic -- a plain query-then-add has
+    // a race where two concurrent submissions can both observe "no
+    // existing doc" and both proceed, each sending its own welcome email.
+    // welcomeEmailSentAt is claimed *inside this same transaction*, at
+    // decision time, rather than after Brevo succeeds -- claiming it only
+    // after a successful send would leave a window where a concurrent
+    // duplicate request's transaction retry still observes null and also
+    // decides to send. Firestore transactions are serializable, so the
+    // loser of that retry always sees the winner's already-committed
+    // claim. If Brevo then actually fails, the claim is rolled back
+    // below so a legitimate retry can still go through -- otherwise a
+    // prior attempt that created the doc but never reached Brevo would be
+    // treated as fully complete forever. A prior unsubscribe
+    // (preferences.newsletter === false, set by unsubscribe.js) is
+    // treated as a resubscribe rather than a silent no-op -- otherwise
+    // someone who explicitly re-signs-up after unsubscribing would stay
+    // unsubscribed with no error shown to them.
     const { shouldSendEmail, action } = await admin.firestore().runTransaction(async (tx) => {
       const snap = await tx.get(docRef);
       if (!snap.exists) {
         tx.set(docRef, {
           ...buildSignupRecord({ email, firstName, lastName }),
-          welcomeEmailSentAt: null,
+          welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
         });
         return { shouldSendEmail: true, action: "created" };
@@ -93,13 +125,17 @@ exports.newsletterSignup = onRequest(
       const data = snap.data();
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
-        tx.update(docRef, { "preferences.newsletter": true });
+        tx.update(docRef, {
+          "preferences.newsletter": true,
+          welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         return { shouldSendEmail: true, action: "resubscribed" };
       }
-      return {
-        shouldSendEmail: !data.welcomeEmailSentAt,
-        action: data.welcomeEmailSentAt ? "already-delivered" : "retry-delivery",
-      };
+      if (!data.welcomeEmailSentAt) {
+        tx.update(docRef, { welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp() });
+        return { shouldSendEmail: true, action: "retry-delivery" };
+      }
+      return { shouldSendEmail: false, action: "already-delivered" };
     });
 
     // Never log the email/name themselves (CL9 -- no PII in logs); the
@@ -120,21 +156,28 @@ exports.newsletterSignup = onRequest(
       if (BREVO_TEMPLATE_ID) {
         brevoPayload.templateId = Number(BREVO_TEMPLATE_ID);
       }
-      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
-        method: "POST",
-        headers: {
-          "api-key": BREVO_API_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(brevoPayload),
-      });
-      if (!response.ok) {
-        const errorBody = await response.text();
-        logger.error(`Brevo API error: ${response.statusText}`, { errorBody });
-        throw new Error(`Brevo API request failed with status ${response.status}`);
+      try {
+        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": BREVO_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(brevoPayload),
+        });
+        if (!response.ok) {
+          const errorBody = await response.text();
+          logger.error(`Brevo API error: ${response.statusText}`, { errorBody });
+          throw new Error(`Brevo API request failed with status ${response.status}`);
+        }
+        logger.info("Successfully sent welcome email via Brevo.");
+      } catch (brevoError) {
+        // Roll back the optimistic claim made above so a genuine retry
+        // (not a concurrent duplicate, which never reaches this point)
+        // can still send the email instead of being treated as delivered.
+        await docRef.update({ welcomeEmailSentAt: null });
+        throw brevoError;
       }
-      await docRef.update({ welcomeEmailSentAt: admin.firestore.FieldValue.serverTimestamp() });
-      logger.info("Successfully sent welcome email via Brevo.");
     } else {
       logger.warn("Brevo API key or sender not configured. Skipping email.");
     }
