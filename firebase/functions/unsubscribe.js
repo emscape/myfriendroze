@@ -4,23 +4,13 @@ const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const { verifyUnsubscribeToken } = require("./lib/unsubscribeToken");
 const { escapeHtml } = require("./lib/escapeHtml");
+const { page } = require("./lib/htmlPage");
 
 if (!admin.apps.length) {
   admin.initializeApp();
 }
 
 const unsubscribeSecret = defineSecret("UNSUBSCRIBE_SECRET");
-
-function page(title, titleColor, bodyHtml) {
-  return `
-      <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h2 style="color: ${titleColor};">${title}</h2>
-          ${bodyHtml}
-        </body>
-      </html>
-    `;
-}
 
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession

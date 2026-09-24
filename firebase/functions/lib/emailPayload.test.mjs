@@ -1,9 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import {
+import { createRequire } from 'node:module';
+
+// require(), not a static ESM import -- eventNotification.js requires()
+// this module via CJS at the top of its file (used in its tested handler,
+// not just a v8-ignored wrapper). An ESM import and a CJS require() of the
+// same file create two separate module instances under this suite's v8
+// coverage provider, and the merged report only credits one of them --
+// matching the loading mechanism here is what makes the exercised
+// coverage actually merge (confirmed empirically while debugging the
+// identical symptom on lib/confirmationToken.js).
+const require = createRequire(import.meta.url);
+const {
   orderDataToConfirmationEmailParams,
   orderShippedEmailParams,
   eventNotificationEmailParams,
-} from './emailPayload.js';
+  newsletterConfirmationEmailParams,
+  newsletterWelcomeEmailParams,
+} = require('./emailPayload.js');
 
 function fullOrder(overrides = {}) {
   return {
@@ -318,5 +331,96 @@ describe('eventNotificationEmailParams', () => {
     );
 
     expect(params.EVENT_PRICE).toBe('25');
+  });
+});
+
+describe('newsletterConfirmationEmailParams', () => {
+  it('maps email/greeting/confirmUrl to Brevo template params', () => {
+    const params = newsletterConfirmationEmailParams({
+      email: 'buyer@example.com',
+      firstName: 'Roze',
+      confirmUrl: 'https://example.com/confirm?token=abc',
+    });
+
+    expect(params).toEqual({
+      EMAIL: 'buyer@example.com',
+      GREETING: 'Hi Roze,',
+      CONFIRM_URL: 'https://example.com/confirm?token=abc',
+    });
+  });
+
+  // Computed in code rather than left to a Brevo conditional tag (whose
+  // syntax isn't confirmed against current docs, same reasoning as
+  // order-confirmation.html) -- avoids a template ever rendering "Hi ,".
+  it('falls back to a generic greeting when no first name is given', () => {
+    const params = newsletterConfirmationEmailParams({
+      email: 'buyer@example.com',
+      confirmUrl: 'https://example.com/confirm?token=abc',
+    });
+
+    expect(params.GREETING).toBe('Hi there,');
+  });
+
+  it('falls back to a generic greeting for a blank first name', () => {
+    const params = newsletterConfirmationEmailParams({
+      email: 'buyer@example.com',
+      firstName: '   ',
+      confirmUrl: 'https://example.com/confirm?token=abc',
+    });
+
+    expect(params.GREETING).toBe('Hi there,');
+  });
+
+  // firstName is request-controlled (the signup form) and gets interpolated
+  // into an email Brevo actually sends under this site's trusted sender
+  // identity -- unescaped, a crafted name could inject markup.
+  it('HTML-escapes a firstName containing markup', () => {
+    const params = newsletterConfirmationEmailParams({
+      email: 'buyer@example.com',
+      firstName: '<img src=x onerror=alert(1)>',
+      confirmUrl: 'https://example.com/confirm?token=abc',
+    });
+
+    expect(params.GREETING).not.toContain('<img');
+    expect(params.GREETING).toBe('Hi &lt;img src=x onerror=alert(1)&gt;,');
+  });
+});
+
+describe('newsletterWelcomeEmailParams', () => {
+  it('maps email/greeting/unsubscribe links to Brevo template params', () => {
+    const params = newsletterWelcomeEmailParams({
+      email: 'buyer@example.com',
+      firstName: 'Roze',
+      unsubscribeNewsletter: 'https://example.com/unsub?type=newsletter',
+      unsubscribeAll: 'https://example.com/unsub?type=all',
+    });
+
+    expect(params).toEqual({
+      EMAIL: 'buyer@example.com',
+      GREETING: 'Hi Roze,',
+      UNSUBSCRIBE_NEWSLETTER: 'https://example.com/unsub?type=newsletter',
+      UNSUBSCRIBE_ALL: 'https://example.com/unsub?type=all',
+    });
+  });
+
+  it('falls back to a generic greeting when no first name is given', () => {
+    const params = newsletterWelcomeEmailParams({
+      email: 'buyer@example.com',
+      unsubscribeNewsletter: 'https://example.com/unsub?type=newsletter',
+      unsubscribeAll: 'https://example.com/unsub?type=all',
+    });
+
+    expect(params.GREETING).toBe('Hi there,');
+  });
+
+  it('HTML-escapes a firstName containing markup', () => {
+    const params = newsletterWelcomeEmailParams({
+      email: 'buyer@example.com',
+      firstName: '<img src=x onerror=alert(1)>',
+      unsubscribeNewsletter: 'https://example.com/unsub?type=newsletter',
+      unsubscribeAll: 'https://example.com/unsub?type=all',
+    });
+
+    expect(params.GREETING).not.toContain('<img');
   });
 });

@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { generateUnsubscribeToken, verifyUnsubscribeToken } from './unsubscribeToken.js';
+import { createRequire } from 'node:module';
+
+// require(), not a static ESM import -- unsubscribe.js and eventNotification.js
+// both require() this module via CJS at the top of their file (used in
+// their tested handlers, not just a v8-ignored wrapper). An ESM import and
+// a CJS require() of the same file create two separate module instances
+// under this suite's v8 coverage provider, and the merged report only
+// credits one of them -- matching the loading mechanism here is what makes
+// the exercised coverage actually merge (confirmed empirically while
+// debugging the identical symptom on lib/confirmationToken.js).
+const require = createRequire(import.meta.url);
+const { generateUnsubscribeToken, verifyUnsubscribeToken } = require('./unsubscribeToken.js');
 
 describe('generateUnsubscribeToken', () => {
   it('produces a deterministic HMAC-SHA256 hex digest keyed on email, type, and secret', () => {
