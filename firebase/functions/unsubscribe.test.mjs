@@ -163,13 +163,14 @@ describe('handleUnsubscribe', () => {
         preferences: { newsletter: false, events: true },
         unsubscribedAt: 'SERVER_TIMESTAMP',
         unsubscribeType: 'newsletter',
+        newsletterUnsubscribedAt: 'SERVER_TIMESTAMP',
       });
       expect(res.status).not.toHaveBeenCalledWith(404);
       expect(res.status).not.toHaveBeenCalledWith(403);
       expect(res.send).toHaveBeenCalled();
     });
 
-    it('unsubscribing from "all" keeps orders true for legal record-keeping', async () => {
+    it('unsubscribing from "all" keeps orders true for legal record-keeping, and also stamps newsletterUnsubscribedAt', async () => {
       const email = 'buyer@example.com';
       const token = generateUnsubscribeToken(email, 'all', SECRET);
       const db = fakeDb({ subscriber: { email, preferences: { newsletter: true, events: true } } });
@@ -179,7 +180,31 @@ describe('handleUnsubscribe', () => {
 
       expect(db.update).toHaveBeenCalledWith(expect.objectContaining({
         preferences: { newsletter: false, events: false, orders: true },
+        newsletterUnsubscribedAt: 'SERVER_TIMESTAMP',
       }));
+    });
+
+    // Regression guard: Copilot review on PR #45 -- unsubscribedAt is a
+    // general "last touched by any unsubscribe action" field, overwritten
+    // regardless of type. An events-only unsubscribe must NOT also stamp
+    // newsletterUnsubscribedAt, or it would wrongly make a later,
+    // legitimate newsletter resubscribe link look stale (see
+    // confirmNewsletterSignup.test.mjs's matching regression test).
+    it('does not stamp newsletterUnsubscribedAt for an events-only unsubscribe', async () => {
+      const email = 'buyer@example.com';
+      const token = generateUnsubscribeToken(email, 'events', SECRET);
+      const db = fakeDb({ subscriber: { email, preferences: { newsletter: true, events: true } } });
+      const res = fakeRes();
+
+      await handleUnsubscribe(postReq({ email, type: 'events', token }), res, baseDeps({ db }));
+
+      expect(db.update).toHaveBeenCalledWith({
+        preferences: { newsletter: true, events: false },
+        unsubscribedAt: 'SERVER_TIMESTAMP',
+        unsubscribeType: 'events',
+      });
+      const payload = db.update.mock.calls[0][0];
+      expect(payload).not.toHaveProperty('newsletterUnsubscribedAt');
     });
 
     it('returns 400 for an unrecognized unsubscribe type', async () => {

@@ -20,7 +20,7 @@ function fakeRes() {
 }
 
 // Mimics a Firestore Timestamp's .toMillis() -- the only method the
-// production code actually calls on unsubscribedAt.
+// production code actually calls on newsletterUnsubscribedAt.
 function fakeTimestamp(ms) {
   return { toMillis: () => ms };
 }
@@ -187,7 +187,7 @@ describe('handleConfirmNewsletterSignup', () => {
         subscriber: {
           email: EMAIL,
           preferences: { newsletter: false, orders: true },
-          unsubscribedAt: fakeTimestamp(NOW - 5000), // unsubscribed before this token was minted
+          newsletterUnsubscribedAt: fakeTimestamp(NOW - 5000), // unsubscribed before this token was minted
         },
       });
       const sendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
@@ -209,7 +209,7 @@ describe('handleConfirmNewsletterSignup', () => {
         subscriber: {
           email: EMAIL,
           preferences: { newsletter: false },
-          unsubscribedAt: fakeTimestamp(NOW + 1000), // unsubscribed *after* this token was minted
+          newsletterUnsubscribedAt: fakeTimestamp(NOW + 1000), // unsubscribed *after* this token was minted
         },
       });
       const sendWelcomeEmail = vi.fn();
@@ -228,7 +228,7 @@ describe('handleConfirmNewsletterSignup', () => {
         subscriber: {
           email: EMAIL,
           preferences: { newsletter: false },
-          unsubscribedAt: fakeTimestamp(NOW),
+          newsletterUnsubscribedAt: fakeTimestamp(NOW),
         },
       });
       const sendWelcomeEmail = vi.fn();
@@ -245,15 +245,15 @@ describe('handleConfirmNewsletterSignup', () => {
     // (e.g. two outstanding tokens from submitting the form twice: confirm
     // with the older one, unsubscribe, then open the newer one -- newer
     // than the mark, but still minted pre-unsubscribe). Comparing against
-    // the actual unsubscribedAt timestamp instead of a proxy closes this
-    // regardless of token ordering.
+    // the actual newsletterUnsubscribedAt timestamp instead of a proxy
+    // closes this regardless of token ordering.
     it('also refuses a newer, never-before-used token if it still predates the unsubscribe', async () => {
       const unsubscribedAt = NOW + 500; // unsubscribe happened between the two tokens' mint times
       const db = fakeDb({
         subscriber: {
           email: EMAIL,
           preferences: { newsletter: false },
-          unsubscribedAt: fakeTimestamp(unsubscribedAt),
+          newsletterUnsubscribedAt: fakeTimestamp(unsubscribedAt),
         },
       });
       const sendWelcomeEmail = vi.fn();
@@ -270,7 +270,40 @@ describe('handleConfirmNewsletterSignup', () => {
       expect(db.getCurrentData().preferences).toEqual({ newsletter: false });
     });
 
-    it('allows a resubscribe when there is no recorded unsubscribedAt (legacy doc)', async () => {
+    // Regression guard: Copilot review follow-up -- unsubscribedAt (the
+    // general field) is overwritten by *every* unsubscribe type, including
+    // one that never touches preferences.newsletter at all. A subscriber
+    // who unsubscribed from the newsletter, later unsubscribes from events
+    // only (unrelated), then clicks an otherwise-legitimate, correctly-
+    // ordered newsletter resubscribe link must not be blocked just because
+    // the unrelated events-only action happened to land after the token
+    // was minted. newsletterUnsubscribedAt (only written on 'newsletter'/
+    // 'all' unsubscribes) is what this check now compares against instead.
+    it('does not treat an unrelated events-only unsubscribe as blocking a newsletter resubscribe', async () => {
+      const db = fakeDb({
+        subscriber: {
+          email: EMAIL,
+          // Unsubscribed from newsletter at NOW-5000 (before this token),
+          // then unsubscribed from events only at NOW+1000 (after this
+          // token) -- the general unsubscribedAt reflects the later,
+          // unrelated events action; newsletterUnsubscribedAt still
+          // correctly reflects the earlier, relevant newsletter action.
+          preferences: { newsletter: false, events: false },
+          newsletterUnsubscribedAt: fakeTimestamp(NOW - 5000),
+          unsubscribedAt: fakeTimestamp(NOW + 1000),
+          unsubscribeType: 'events',
+        },
+      });
+      const sendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
+      const res = fakeRes();
+
+      await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
+
+      expect(sendWelcomeEmail).toHaveBeenCalledTimes(1);
+      expect(db.getCurrentData().preferences.newsletter).toBe(true);
+    });
+
+    it('allows a resubscribe when there is no recorded newsletterUnsubscribedAt (legacy doc)', async () => {
       // Can't determine staleness without a timestamp to compare against --
       // falls back to allowing, same as before this fix existed.
       const db = fakeDb({

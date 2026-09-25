@@ -118,12 +118,23 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp, logger
         return res.status(400).send("Invalid unsubscribe type");
     }
 
-    // Update the subscriber's preferences
-    await subscriberDoc.ref.update({
+    // Update the subscriber's preferences. unsubscribedAt is a general
+    // "last touched by any unsubscribe action" timestamp, overwritten by
+    // every type -- confirmNewsletterSignup.js's replay guard needs a
+    // timestamp that's specific to the newsletter preference alone (an
+    // events-only unsubscribe shouldn't be able to make a legitimate,
+    // later-issued newsletter confirmation token look stale), so
+    // newsletterUnsubscribedAt is only written when this action actually
+    // touches preferences.newsletter (type 'newsletter' or 'all').
+    const preferencesUpdate = {
       preferences: newPreferences,
       unsubscribedAt: serverTimestamp(),
       unsubscribeType: type
-    });
+    };
+    if (type === 'newsletter' || type === 'all') {
+      preferencesUpdate.newsletterUnsubscribedAt = serverTimestamp();
+    }
+    await subscriberDoc.ref.update(preferencesUpdate);
 
     // Never log the email itself (CL9 -- no PII in logs); the type alone
     // is enough to debug/monitor this endpoint.

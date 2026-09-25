@@ -149,13 +149,12 @@ async function handleConfirmNewsletterSignup(req, res, {
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
         // A confirmation link must not be able to silently reverse a
-        // *later* explicit unsubscribe. unsubscribe.js always records
-        // unsubscribedAt on every opt-out (see its own handleUnsubscribe);
-        // comparing the token's own mint time (issuedAt) against that
-        // timestamp answers the question that actually matters -- was
-        // this specific signup intent expressed before or after the
-        // subscriber opted out -- regardless of how many confirmation
-        // emails are outstanding or what order they're opened in.
+        // *later* explicit unsubscribe. Comparing the token's own mint
+        // time (issuedAt) against when the subscriber actually unsubscribed
+        // answers the question that matters -- was this specific signup
+        // intent expressed before or after the opt-out -- regardless of
+        // how many confirmation emails are outstanding or what order
+        // they're opened in.
         //
         // An earlier version of this check tracked only the most recent
         // token that had confirmed (a "high-water mark"), which missed a
@@ -164,9 +163,20 @@ async function handleConfirmNewsletterSignup(req, res, {
         // mark, so it would incorrectly pass. Comparing against the
         // actual unsubscribe event, rather than a proxy for it, closes
         // that gap regardless of token ordering.
+        //
+        // Uses newsletterUnsubscribedAt, NOT the general unsubscribedAt --
+        // unsubscribe.js overwrites unsubscribedAt on *every* opt-out type
+        // (newsletter, events, or all), even one that never touches
+        // preferences.newsletter at all. Comparing against the general
+        // field would let an unrelated events-only unsubscribe (which
+        // happens to land after this token was minted) wrongly block an
+        // otherwise-legitimate, correctly-ordered newsletter resubscribe
+        // (caught in review). newsletterUnsubscribedAt is only ever
+        // written when the action actually sets preferences.newsletter to
+        // false (type 'newsletter' or 'all').
         const unsubscribedAtMs =
-          data.unsubscribedAt && typeof data.unsubscribedAt.toMillis === 'function'
-            ? data.unsubscribedAt.toMillis()
+          data.newsletterUnsubscribedAt && typeof data.newsletterUnsubscribedAt.toMillis === 'function'
+            ? data.newsletterUnsubscribedAt.toMillis()
             : null;
         // KNOWN, ACCEPTED RISK (same call the original newsletterSignup.js
         // made, restored here since this file's rewrite dropped the
