@@ -20,7 +20,7 @@ let usingFallback = false;
  * @param {string} html - The HTML content of Notice 123
  * @returns {Object} - Parsed rate table
  */
-function parseRateTable(html) {
+export function parseRateTable(html) {
   const rates = {};
 
   // Find the Ground Advantage Retail section specifically
@@ -77,8 +77,16 @@ function parseRateTable(html) {
   }
 
   // Now parse the rows from the isolated table
-  // Match rows with weight and 9 price columns
-  const rowPattern = /<tr[^>]*>[\s\S]*?<td[^>]*>([^<]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<td[^>]*>\$?([\d.]+)<\/td>[\s\S]*?<\/tr>/gi;
+  // Match rows with weight and 9 price columns. Each price cell may be a
+  // bare `<td>$7.90</td>` or have its text wrapped in a `<span
+  // data-toggle='popover' ...>` (USPS added this for the price-code tooltip
+  // sometime after this parser was written, which silently broke it -- see
+  // usps-rate-fetcher.test.mjs's regression fixture).
+  const priceCell = "<td[^>]*>(?:<span[^>]*>)?\\$?([\\d.]+)(?:<\\/span>)?<\\/td>";
+  const rowPattern = new RegExp(
+    `<tr[^>]*>[\\s\\S]*?<td[^>]*>([^<]+)<\\/td>[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?${priceCell}[\\s\\S]*?<\\/tr>`,
+    'gi'
+  );
 
   let match;
   let foundRows = 0;
@@ -143,7 +151,7 @@ function parseRateTable(html) {
  * @param {string} html - The HTML content
  * @returns {string|null} - Effective date string or null
  */
-function parseEffectiveDate(html) {
+export function parseEffectiveDate(html) {
   // Look for patterns like "Effective January 18, 2026" or "effective 01/18/2026"
   const patterns = [
     /effective\s+(\w+\s+\d{1,2},?\s+\d{4})/i,
