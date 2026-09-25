@@ -1,7 +1,3 @@
-// USPS Web Tools shipping rate calculation (RateV4 API, same one PirateShip
-// uses under the hood) -- testable core lives in shippingEstimate.js.
-exports.getShippingEstimate = require('./shippingEstimate').getShippingEstimate;
-
 // Newsletter signup Cloud Function (double opt-in step 1: sends a
 // confirmation email, writes nothing to Firestore yet)
 exports.newsletterSignup = require('./newsletterSignup').newsletterSignup;
