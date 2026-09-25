@@ -44,6 +44,23 @@ describe('generateConfirmationToken', () => {
     const b = generateConfirmationToken({ email: 'buyer@example.com', firstName: '', lastName: '', issuedAt: 1 }, SECRET);
     expect(a).toBe(b);
   });
+
+  // Regression guard: Copilot review on PR #45 -- a plain colon-delimited
+  // concatenation is ambiguous when a field can itself contain a colon.
+  // These two field partitions used to hash identically, meaning a
+  // legitimately-issued token for one could be replayed against the
+  // other's (different!) email/name split.
+  it('does not collide when a colon in email shifts content into firstName, vs. a colon in lastName', () => {
+    const a = generateConfirmationToken(
+      { email: 'victim@example.com:foo', firstName: 'y', lastName: 'z', issuedAt: 1700000000000 },
+      SECRET
+    );
+    const b = generateConfirmationToken(
+      { email: 'victim@example.com', firstName: 'foo', lastName: 'y:z', issuedAt: 1700000000000 },
+      SECRET
+    );
+    expect(a).not.toBe(b);
+  });
 });
 
 describe('verifyConfirmationToken', () => {

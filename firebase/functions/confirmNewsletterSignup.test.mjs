@@ -19,6 +19,12 @@ function fakeRes() {
   return res;
 }
 
+// Mimics a Firestore Timestamp's .toMillis() -- the only method the
+// production code actually calls on unsubscribedAt.
+function fakeTimestamp(ms) {
+  return { toMillis: () => ms };
+}
+
 function fakeDb({ subscriber } = {}) {
   const rollbackUpdate = vi.fn().mockResolvedValue(undefined);
   let currentData = subscriber ? { ...subscriber } : null;
@@ -176,9 +182,13 @@ describe('handleConfirmNewsletterSignup', () => {
       expect(res.send).toHaveBeenCalled();
     });
 
-    it('treats a prior unsubscribe as a resubscribe (a fresh token, never used before) and sends the welcome email again', async () => {
+    it('treats a prior unsubscribe as a resubscribe when the token postdates it, and sends the welcome email again', async () => {
       const db = fakeDb({
-        subscriber: { email: EMAIL, preferences: { newsletter: false, orders: true }, confirmedIssuedAt: NOW - 1000 },
+        subscriber: {
+          email: EMAIL,
+          preferences: { newsletter: false, orders: true },
+          unsubscribedAt: fakeTimestamp(NOW - 5000), // unsubscribed before this token was minted
+        },
       });
       const sendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
       const res = fakeRes();
@@ -186,20 +196,21 @@ describe('handleConfirmNewsletterSignup', () => {
       await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
 
       expect(db.getCurrentData().preferences).toEqual({ newsletter: true, orders: true });
-      // issuedAt arrives as a string from the request, so that's what gets
-      // stored -- the replay check coerces both sides with Number() anyway.
-      expect(db.getCurrentData().confirmedIssuedAt).toBe(String(NOW));
       expect(sendWelcomeEmail).toHaveBeenCalledTimes(1);
     });
 
-    // Regression guard: clicking the *same* confirmation link a second
-    // time, after having explicitly unsubscribed in between, used to
+    // Regression guard: clicking the *same* (or any other still-valid)
+    // confirmation link after having explicitly unsubscribed used to
     // silently resubscribe the user and send another welcome email, with
     // no new signup ever submitted. The link is valid for up to 48h, so
     // this was a realistic replay window, not a theoretical one.
-    it('refuses to resubscribe via the exact same token that already confirmed this doc once before', async () => {
+    it('refuses to resubscribe via a token minted before the unsubscribe', async () => {
       const db = fakeDb({
-        subscriber: { email: EMAIL, preferences: { newsletter: false }, confirmedIssuedAt: NOW },
+        subscriber: {
+          email: EMAIL,
+          preferences: { newsletter: false },
+          unsubscribedAt: fakeTimestamp(NOW + 1000), // unsubscribed *after* this token was minted
+        },
       });
       const sendWelcomeEmail = vi.fn();
       const res = fakeRes();
@@ -212,25 +223,65 @@ describe('handleConfirmNewsletterSignup', () => {
       expect(res.send).toHaveBeenCalled();
     });
 
-    // Regression guard: Copilot's follow-up on the fix above -- an
-    // exact-match check alone misses an *older*, never-yet-used token.
-    // Two outstanding tokens (e.g. the visitor submitted the signup form
-    // twice): confirm with the newer one (issuedAt 2000), unsubscribe,
-    // then open the *older* one (issuedAt 1000, still valid for 48h). That
-    // older token was never the one that set confirmedIssuedAt, so an
-    // exact-match check would wrongly treat it as fresh and resubscribe.
-    it('also refuses an older, never-before-used token once a newer one has already confirmed', async () => {
+    it('refuses a token minted at the exact instant of the unsubscribe (inclusive boundary)', async () => {
       const db = fakeDb({
-        subscriber: { email: EMAIL, preferences: { newsletter: false }, confirmedIssuedAt: NOW }, // confirmed with issuedAt=NOW
+        subscriber: {
+          email: EMAIL,
+          preferences: { newsletter: false },
+          unsubscribedAt: fakeTimestamp(NOW),
+        },
       });
       const sendWelcomeEmail = vi.fn();
       const res = fakeRes();
-      const olderIssuedAt = NOW - 1000; // an older token, minted before the one that confirmed
 
-      await handleConfirmNewsletterSignup(postReq({ issuedAt: olderIssuedAt }), res, baseDeps({ db, sendWelcomeEmail }));
+      await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
+
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    });
+
+    // Regression guard: Copilot's follow-up on the original high-water-mark
+    // fix -- tracking only "the last token that confirmed" missed the case
+    // of a *newer*, never-yet-used token minted *before* the unsubscribe
+    // (e.g. two outstanding tokens from submitting the form twice: confirm
+    // with the older one, unsubscribe, then open the newer one -- newer
+    // than the mark, but still minted pre-unsubscribe). Comparing against
+    // the actual unsubscribedAt timestamp instead of a proxy closes this
+    // regardless of token ordering.
+    it('also refuses a newer, never-before-used token if it still predates the unsubscribe', async () => {
+      const unsubscribedAt = NOW + 500; // unsubscribe happened between the two tokens' mint times
+      const db = fakeDb({
+        subscriber: {
+          email: EMAIL,
+          preferences: { newsletter: false },
+          unsubscribedAt: fakeTimestamp(unsubscribedAt),
+        },
+      });
+      const sendWelcomeEmail = vi.fn();
+      const res = fakeRes();
+      const newerButStillStaleIssuedAt = NOW; // newer than some other token, but still before unsubscribedAt
+
+      await handleConfirmNewsletterSignup(
+        postReq({ issuedAt: newerButStillStaleIssuedAt }),
+        res,
+        baseDeps({ db, sendWelcomeEmail })
+      );
 
       expect(sendWelcomeEmail).not.toHaveBeenCalled();
       expect(db.getCurrentData().preferences).toEqual({ newsletter: false });
+    });
+
+    it('allows a resubscribe when there is no recorded unsubscribedAt (legacy doc)', async () => {
+      // Can't determine staleness without a timestamp to compare against --
+      // falls back to allowing, same as before this fix existed.
+      const db = fakeDb({
+        subscriber: { email: EMAIL, preferences: { newsletter: false } },
+      });
+      const sendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
+      const res = fakeRes();
+
+      await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
+
+      expect(sendWelcomeEmail).toHaveBeenCalledTimes(1);
     });
 
     it('retries delivery when a prior send was rolled back (welcomeEmailSentAt explicitly null)', async () => {
@@ -271,30 +322,6 @@ describe('handleConfirmNewsletterSignup', () => {
       expect(res.status).not.toHaveBeenCalledWith(500);
     });
 
-    // Regression guard: Copilot review follow-up -- a valid, newer token
-    // opened while the subscriber is already active used to leave
-    // confirmedIssuedAt untouched, since nothing needed (re)sending. If
-    // that subscriber later unsubscribed, the exact same "already used"
-    // token would still look unconsumed to the replay check and could
-    // resubscribe them a second time.
-    it('advances the high-water mark even when nothing needs sending, so this token cannot later replay a resubscribe', async () => {
-      const db = fakeDb({
-        subscriber: {
-          email: EMAIL,
-          preferences: { newsletter: true },
-          welcomeEmailSentAt: 'already-sent',
-          confirmedIssuedAt: String(NOW - 5000), // an older, already-recorded token
-        },
-      });
-      const sendWelcomeEmail = vi.fn();
-      const res = fakeRes();
-
-      // A newer token than the one on record, opened while still subscribed.
-      await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
-
-      expect(sendWelcomeEmail).not.toHaveBeenCalled();
-      expect(db.getCurrentData().confirmedIssuedAt).toBe(String(NOW));
-    });
 
     it('rolls back the delivery claim and returns 500 if sending the welcome email fails', async () => {
       const db = fakeDb();

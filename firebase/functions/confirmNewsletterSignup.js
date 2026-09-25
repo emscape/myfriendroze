@@ -142,7 +142,6 @@ async function handleConfirmNewsletterSignup(req, res, {
           ...buildSignupRecord({ email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
           timestamp: serverTimestamp(),
-          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "created" };
       }
@@ -150,17 +149,25 @@ async function handleConfirmNewsletterSignup(req, res, {
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
         // A confirmation link must not be able to silently reverse a
-        // *later* explicit unsubscribe. confirmedIssuedAt is tracked as a
-        // monotonic high-water mark, not just "was this the exact token
-        // that last confirmed" -- an exact-match check alone misses the
-        // case where a visitor has two outstanding tokens (e.g. submitted
-        // the form twice), confirms with the newer one, unsubscribes, then
-        // opens the *older* still-valid token: that token never matched
-        // confirmedIssuedAt, so an exact-match check would wrongly let it
-        // through. Rejecting anything at or before the high-water mark
-        // closes that gap. A genuine resubscribe mints a strictly newer
-        // token (a new issuedAt) by submitting the form again.
+        // *later* explicit unsubscribe. unsubscribe.js always records
+        // unsubscribedAt on every opt-out (see its own handleUnsubscribe);
+        // comparing the token's own mint time (issuedAt) against that
+        // timestamp answers the question that actually matters -- was
+        // this specific signup intent expressed before or after the
+        // subscriber opted out -- regardless of how many confirmation
+        // emails are outstanding or what order they're opened in.
         //
+        // An earlier version of this check tracked only the most recent
+        // token that had confirmed (a "high-water mark"), which missed a
+        // real case Copilot review caught: a *newer*, never-yet-used
+        // token minted *before* the unsubscribe is still newer than the
+        // mark, so it would incorrectly pass. Comparing against the
+        // actual unsubscribe event, rather than a proxy for it, closes
+        // that gap regardless of token ordering.
+        const unsubscribedAtMs =
+          data.unsubscribedAt && typeof data.unsubscribedAt.toMillis === 'function'
+            ? data.unsubscribedAt.toMillis()
+            : null;
         // KNOWN, ACCEPTED RISK (same call the original newsletterSignup.js
         // made, restored here since this file's rewrite dropped the
         // explanation, not the decision): unsubscribe.js updates this same
@@ -178,17 +185,14 @@ async function handleConfirmNewsletterSignup(req, res, {
         // now actually deployed (this PR wires it up for the first time),
         // so the risk is live rather than theoretical -- re-affirmed as
         // accepted rather than silently inherited.
-        const latestConfirmedIssuedAt =
-          data.confirmedIssuedAt !== undefined ? Number(data.confirmedIssuedAt) : null;
-        const tokenIsReplay =
-          latestConfirmedIssuedAt !== null && Number(issuedAt) <= latestConfirmedIssuedAt;
-        if (tokenIsReplay) {
+        const tokenPredatesUnsubscribe =
+          unsubscribedAtMs !== null && Number(issuedAt) <= unsubscribedAtMs;
+        if (tokenPredatesUnsubscribe) {
           return { shouldSendEmail: false, action: "resubscribe-blocked-stale-token" };
         }
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
-          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "resubscribed" };
       }
@@ -197,7 +201,6 @@ async function handleConfirmNewsletterSignup(req, res, {
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
-          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "retry-delivery" };
       }
@@ -205,27 +208,14 @@ async function handleConfirmNewsletterSignup(req, res, {
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
-          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: false, action: "legacy-backfilled" };
       }
-      // Even though nothing needs (re)sending here, a valid, newer-than-
-      // recorded token still needs to advance the high-water mark -- a
-      // token that's never recorded as consumed (because it happened to
-      // land on an already-delivered subscriber) would otherwise still be
-      // usable to resubscribe after a later unsubscribe, since the replay
-      // check above only rejects tokens at or before the mark.
-      const currentConfirmedIssuedAt =
-        data.confirmedIssuedAt !== undefined ? Number(data.confirmedIssuedAt) : null;
-      const isNewerToken = currentConfirmedIssuedAt === null || Number(issuedAt) > currentConfirmedIssuedAt;
       const hasNewName =
         (typeof firstName === "string" && firstName.trim()) ||
         (typeof lastName === "string" && lastName.trim());
-      if (hasNewName || isNewerToken) {
-        tx.update(docRef, {
-          ...(hasNewName ? buildExistingDocUpdate(data, { email, firstName, lastName }) : {}),
-          ...(isNewerToken ? { confirmedIssuedAt: issuedAt } : {}),
-        });
+      if (hasNewName) {
+        tx.update(docRef, buildExistingDocUpdate(data, { email, firstName, lastName }));
       }
       return { shouldSendEmail: false, action: "already-delivered" };
     });
