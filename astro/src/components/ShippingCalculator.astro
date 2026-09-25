@@ -72,16 +72,6 @@ const weightWithPackaging = productWeightLbs > 0 ? (productWeightLbs * 1.15).toF
         <span class="shipping-calculator__result-value" id="result-delivery">—</span>
       </div>
 
-      <div class="shipping-calculator__result-row">
-        <span class="shipping-calculator__result-label">base rate:</span>
-        <span class="shipping-calculator__result-value" id="result-base">—</span>
-      </div>
-
-      <div class="shipping-calculator__result-row">
-        <span class="shipping-calculator__result-label">weight charge:</span>
-        <span class="shipping-calculator__result-value" id="result-weight">—</span>
-      </div>
-
       <div class="shipping-calculator__result-row shipping-calculator__result-row--total">
         <span class="shipping-calculator__result-label">total cost:</span>
         <span class="shipping-calculator__result-value shipping-calculator__result-value--total" id="result-total">—</span>
@@ -433,8 +423,6 @@ const weightWithPackaging = productWeightLbs > 0 ? (productWeightLbs * 1.15).toF
       // Update result display
       document.getElementById('result-carrier').textContent = data.data.carrier;
       document.getElementById('result-delivery').textContent = data.data.estimatedDays;
-      document.getElementById('result-base').textContent = `$${data.data.baseRate.toFixed(2)}`;
-      document.getElementById('result-weight').textContent = `$${data.data.weightCharge.toFixed(2)}`;
       document.getElementById('result-total').textContent = `$${data.data.totalCost.toFixed(2)}`;
 
       // Show result
