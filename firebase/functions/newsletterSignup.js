@@ -29,10 +29,14 @@ function isValidEmail(email) {
 
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
- * for why dependencies are passed as parameters. No Firestore write happens
- * here at all: this is double opt-in step 1, sending only a confirmation
- * email carrying a signed token. confirmNewsletterSignup.js (step 2) is
- * where the record actually gets created, once that link is clicked.
+ * for why dependencies are passed as parameters. No newsletter_signups
+ * subscriber record gets written here: this is double opt-in step 1,
+ * sending only a confirmation email carrying a signed token.
+ * confirmNewsletterSignup.js (step 2) is where that record actually gets
+ * created, once the link is clicked. (checkRateLimit's real implementation,
+ * in the v8-ignored wrapper below, does write to the separate
+ * newsletter_signup_rate_limits collection -- unrelated to subscriber
+ * data, and already noted in that wrapper's own comment.)
  */
 async function handleNewsletterSignup(req, res, { checkRateLimit, sendConfirmationEmail, secret, now }) {
   if (req.method !== "POST") {
