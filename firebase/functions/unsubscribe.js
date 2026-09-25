@@ -144,7 +144,7 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp, logger
     res.send(`
       <html>
         <head>
-          <title>Unsubscribed - MyFriendRoze</title>
+          <title>Unsubscribed - myfriendroze</title>
         </head>
         <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; background: #f9f9f9;">
           <div style="background: white; padding: 30px; border-radius: 8px; text-align: center;">

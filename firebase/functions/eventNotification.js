@@ -153,7 +153,7 @@ exports.sendEventNotification = onCall({
   const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || functions.config().email?.events || '{"email":"events@myfriendroze.com","name":"MyFriendRoze Events"}');
+  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || functions.config().email?.events || '{"email":"events@myfriendroze.com","name":"myfriendroze Events"}');
 
   return handleSendEventNotification(request, {
     db: admin.firestore(),
