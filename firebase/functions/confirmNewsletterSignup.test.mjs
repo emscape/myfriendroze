@@ -271,6 +271,31 @@ describe('handleConfirmNewsletterSignup', () => {
       expect(res.status).not.toHaveBeenCalledWith(500);
     });
 
+    // Regression guard: Copilot review follow-up -- a valid, newer token
+    // opened while the subscriber is already active used to leave
+    // confirmedIssuedAt untouched, since nothing needed (re)sending. If
+    // that subscriber later unsubscribed, the exact same "already used"
+    // token would still look unconsumed to the replay check and could
+    // resubscribe them a second time.
+    it('advances the high-water mark even when nothing needs sending, so this token cannot later replay a resubscribe', async () => {
+      const db = fakeDb({
+        subscriber: {
+          email: EMAIL,
+          preferences: { newsletter: true },
+          welcomeEmailSentAt: 'already-sent',
+          confirmedIssuedAt: String(NOW - 5000), // an older, already-recorded token
+        },
+      });
+      const sendWelcomeEmail = vi.fn();
+      const res = fakeRes();
+
+      // A newer token than the one on record, opened while still subscribed.
+      await handleConfirmNewsletterSignup(postReq(), res, baseDeps({ db, sendWelcomeEmail }));
+
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+      expect(db.getCurrentData().confirmedIssuedAt).toBe(String(NOW));
+    });
+
     it('rolls back the delivery claim and returns 500 if sending the welcome email fails', async () => {
       const db = fakeDb();
       const res = fakeRes();

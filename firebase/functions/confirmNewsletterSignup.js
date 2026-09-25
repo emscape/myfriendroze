@@ -160,6 +160,24 @@ async function handleConfirmNewsletterSignup(req, res, {
         // through. Rejecting anything at or before the high-water mark
         // closes that gap. A genuine resubscribe mints a strictly newer
         // token (a new issuedAt) by submitting the form again.
+        //
+        // KNOWN, ACCEPTED RISK (same call the original newsletterSignup.js
+        // made, restored here since this file's rewrite dropped the
+        // explanation, not the decision): unsubscribe.js updates this same
+        // doc non-transactionally. If that write commits between this
+        // transaction's read and commit, Firestore retries this callback
+        // against the now-unsubscribed doc, and this branch resubscribes
+        // -- so an unsubscribe landing in that exact window could get
+        // overwritten by an in-flight confirm. The window is a single
+        // Firestore transaction retry (tens of milliseconds), and requires
+        // the same email to be confirming *and* unsubscribing at
+        // essentially the same instant -- not a realistic human-timescale
+        // collision. Coordinating the two functions transactionally would
+        // be a materially bigger cross-function change than this risk
+        // warrants. Unlike when this was first written, unsubscribe.js is
+        // now actually deployed (this PR wires it up for the first time),
+        // so the risk is live rather than theoretical -- re-affirmed as
+        // accepted rather than silently inherited.
         const latestConfirmedIssuedAt =
           data.confirmedIssuedAt !== undefined ? Number(data.confirmedIssuedAt) : null;
         const tokenIsReplay =
@@ -191,11 +209,23 @@ async function handleConfirmNewsletterSignup(req, res, {
         });
         return { shouldSendEmail: false, action: "legacy-backfilled" };
       }
+      // Even though nothing needs (re)sending here, a valid, newer-than-
+      // recorded token still needs to advance the high-water mark -- a
+      // token that's never recorded as consumed (because it happened to
+      // land on an already-delivered subscriber) would otherwise still be
+      // usable to resubscribe after a later unsubscribe, since the replay
+      // check above only rejects tokens at or before the mark.
+      const currentConfirmedIssuedAt =
+        data.confirmedIssuedAt !== undefined ? Number(data.confirmedIssuedAt) : null;
+      const isNewerToken = currentConfirmedIssuedAt === null || Number(issuedAt) > currentConfirmedIssuedAt;
       const hasNewName =
         (typeof firstName === "string" && firstName.trim()) ||
         (typeof lastName === "string" && lastName.trim());
-      if (hasNewName) {
-        tx.update(docRef, buildExistingDocUpdate(data, { email, firstName, lastName }));
+      if (hasNewName || isNewerToken) {
+        tx.update(docRef, {
+          ...(hasNewName ? buildExistingDocUpdate(data, { email, firstName, lastName }) : {}),
+          ...(isNewerToken ? { confirmedIssuedAt: issuedAt } : {}),
+        });
       }
       return { shouldSendEmail: false, action: "already-delivered" };
     });
