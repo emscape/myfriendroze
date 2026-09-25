@@ -134,15 +134,42 @@ describe('handleConfirmNewsletterSignup', () => {
     expect(res.send).toHaveBeenCalled();
   });
 
-  it('treats a prior unsubscribe as a resubscribe and sends the welcome email again', async () => {
-    const db = fakeDb({ subscriber: { email: EMAIL, preferences: { newsletter: false, orders: true } } });
+  it('treats a prior unsubscribe as a resubscribe (a fresh token, never used before) and sends the welcome email again', async () => {
+    const db = fakeDb({
+      subscriber: { email: EMAIL, preferences: { newsletter: false, orders: true }, confirmedIssuedAt: NOW - 1000 },
+    });
     const sendWelcomeEmail = vi.fn().mockResolvedValue(undefined);
     const res = fakeRes();
 
     await handleConfirmNewsletterSignup({ query: validQuery() }, res, baseDeps({ db, sendWelcomeEmail }));
 
     expect(db.getCurrentData().preferences).toEqual({ newsletter: true, orders: true });
+    // issuedAt arrives as a string from the query params, so that's what
+    // gets stored -- the tokenAlreadyConsumed check coerces both sides to
+    // strings for comparison regardless.
+    expect(db.getCurrentData().confirmedIssuedAt).toBe(String(NOW));
     expect(sendWelcomeEmail).toHaveBeenCalledTimes(1);
+  });
+
+  // Regression guard: Copilot review on PR #45 -- clicking the *same*
+  // confirmation link a second time, after having explicitly unsubscribed
+  // in between, used to silently resubscribe the user and send another
+  // welcome email, with no new signup ever submitted. The link is valid
+  // for up to 48h, so this was a realistic replay window, not a
+  // theoretical one.
+  it('refuses to resubscribe via the exact same token that already confirmed this doc once before', async () => {
+    const db = fakeDb({
+      subscriber: { email: EMAIL, preferences: { newsletter: false }, confirmedIssuedAt: NOW },
+    });
+    const sendWelcomeEmail = vi.fn();
+    const res = fakeRes();
+
+    await handleConfirmNewsletterSignup({ query: validQuery() }, res, baseDeps({ db, sendWelcomeEmail }));
+
+    expect(sendWelcomeEmail).not.toHaveBeenCalled();
+    expect(db.getCurrentData().preferences).toEqual({ newsletter: false });
+    expect(res.status).not.toHaveBeenCalledWith(500);
+    expect(res.send).toHaveBeenCalled();
   });
 
   it('retries delivery when a prior send was rolled back (welcomeEmailSentAt explicitly null)', async () => {

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { handleNewsletterSignup } = require('./newsletterSignup.js');
-const { generateConfirmationToken } = require('./lib/confirmationToken.js');
+const { generateConfirmationToken, verifyConfirmationToken } = require('./lib/confirmationToken.js');
 
 const SECRET = 'test-secret';
 const NOW = 1700000000000;
@@ -138,12 +138,55 @@ describe('handleNewsletterSignup', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
-  it('does not touch Firestore at all -- no db dependency exists for this step', async () => {
-    // Double opt-in: nothing is written until the confirmation link is
-    // clicked (confirmNewsletterSignup.js). Asserted implicitly by every
-    // test above succeeding with no `db` in the injected deps at all --
-    // if this file ever grows a direct Firestore write again, it would
-    // need a `db` dependency these tests don't provide.
+  // Regression guard: Copilot review on PR #45 -- buildConfirmUrl trims
+  // firstName/lastName before putting them in the emailed link, but the
+  // token used to be signed from the untrimmed value. A normal submission
+  // like "  Roze  " (easy to get from mobile keyboards/autofill) signed
+  // one payload and emailed a link containing the trimmed name, so
+  // confirmNewsletterSignup.js recomputed a different HMAC and always
+  // returned 403 -- permanently unconfirmable. Fixed by normalizing once
+  // and using that value for both signing and the URL.
+  it('signs the token with the same (trimmed) name it puts in the emailed link', async () => {
+    const sendConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+    const res = fakeRes();
+
+    await handleNewsletterSignup(
+      { method: 'POST', body: { email: 'buyer@example.com', firstName: '  Roze  ', lastName: '  Smith  ' } },
+      res,
+      baseDeps({ sendConfirmationEmail })
+    );
+
+    const call = sendConfirmationEmail.mock.calls[0][0];
+    expect(call.firstName).toBe('Roze');
+
+    const parsed = new URL(call.confirmUrl);
+    const queryFirstName = parsed.searchParams.get('firstName');
+    const queryLastName = parsed.searchParams.get('lastName');
+    const queryToken = parsed.searchParams.get('token');
+    expect(queryFirstName).toBe('Roze');
+    expect(queryLastName).toBe('Smith');
+
+    // The exact check confirmNewsletterSignup.js performs: re-verify using
+    // precisely what's in the URL. This must pass.
+    expect(
+      verifyConfirmationToken(
+        { email: 'buyer@example.com', firstName: queryFirstName, lastName: queryLastName, issuedAt: String(NOW), token: queryToken },
+        SECRET
+      )
+    ).toBe(true);
+  });
+
+  it('does not write a subscriber record -- the testable core takes no db dependency at all', async () => {
+    // Double opt-in: nothing creates a newsletter_signups doc until the
+    // confirmation link is clicked (confirmNewsletterSignup.js, which DOES
+    // take a `db` dependency). handleNewsletterSignup's dependency list has
+    // no `db` parameter at all, so there is no code path here that could
+    // reach that collection even by accident -- true by construction, not
+    // just because this test's deps object happens to omit one.
+    // checkRateLimit's real implementation (in the v8-ignored wrapper) does
+    // write to the separate newsletter_signup_rate_limits collection --
+    // unrelated to this invariant, and deliberately untested here as thin
+    // infrastructure wiring, same as this file's other tests.
     const res = fakeRes();
 
     await handleNewsletterSignup(

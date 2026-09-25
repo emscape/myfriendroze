@@ -98,15 +98,29 @@ async function handleConfirmNewsletterSignup(req, res, {
           ...buildSignupRecord({ email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
           timestamp: serverTimestamp(),
+          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "created" };
       }
       const data = snap.data();
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
+        // A confirmation link must not be able to silently reverse a
+        // *later* explicit unsubscribe: if this exact token already
+        // confirmed this doc once before (confirmedIssuedAt matches), the
+        // subscriber has since unsubscribed, and re-clicking the same old
+        // link -- still valid for up to 48h -- shouldn't resubscribe them
+        // without a new, deliberate signup. A genuine resubscribe mints a
+        // fresh token (new issuedAt) by submitting the form again.
+        const tokenAlreadyConsumed =
+          data.confirmedIssuedAt !== undefined && String(data.confirmedIssuedAt) === String(issuedAt);
+        if (tokenAlreadyConsumed) {
+          return { shouldSendEmail: false, action: "resubscribe-blocked-stale-token" };
+        }
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
+          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "resubscribed" };
       }
@@ -115,6 +129,7 @@ async function handleConfirmNewsletterSignup(req, res, {
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
+          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: true, action: "retry-delivery" };
       }
@@ -122,6 +137,7 @@ async function handleConfirmNewsletterSignup(req, res, {
         tx.update(docRef, {
           ...buildExistingDocUpdate(data, { email, firstName, lastName }),
           welcomeEmailSentAt: serverTimestamp(),
+          confirmedIssuedAt: issuedAt,
         });
         return { shouldSendEmail: false, action: "legacy-backfilled" };
       }
@@ -152,6 +168,14 @@ async function handleConfirmNewsletterSignup(req, res, {
       return res.send(page(
         "You're confirmed! 🌱", '#4CAF50',
         '<p>Welcome to MyFriendRoze! Check your inbox for a welcome email.</p>'
+      ));
+    }
+
+    if (action === "resubscribe-blocked-stale-token") {
+      return res.send(page(
+        "This link has already been used", '#f39c12',
+        "<p>You confirmed this subscription once already, and have since unsubscribed. "
+          + "If you'd like to resubscribe, please sign up again on the site for a fresh confirmation link.</p>"
       ));
     }
 

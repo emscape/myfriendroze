@@ -63,12 +63,26 @@ async function handleNewsletterSignup(req, res, { checkRateLimit, sendConfirmati
     return res.status(400).json({ error: nameLengthCheck.error });
   }
 
+  // Normalized once, here, and used consistently for signing AND the
+  // emailed URL below -- buildConfirmUrl trims before putting a name in
+  // the query string, so signing the untrimmed value (e.g. "  Roze  ")
+  // while the link carries the trimmed one ("Roze") would make
+  // confirmNewsletterSignup.js recompute a different HMAC than what was
+  // actually signed, permanently 403ing an entirely normal signup.
+  const normalizedFirstName = typeof firstName === 'string' ? firstName.trim() : firstName;
+  const normalizedLastName = typeof lastName === 'string' ? lastName.trim() : lastName;
+
   const issuedAt = now();
-  const token = generateConfirmationToken({ email, firstName, lastName, issuedAt }, secret);
-  const confirmUrl = buildConfirmUrl({ email, firstName, lastName, issuedAt, token });
+  const token = generateConfirmationToken(
+    { email, firstName: normalizedFirstName, lastName: normalizedLastName, issuedAt },
+    secret
+  );
+  const confirmUrl = buildConfirmUrl({
+    email, firstName: normalizedFirstName, lastName: normalizedLastName, issuedAt, token,
+  });
 
   try {
-    await sendConfirmationEmail({ email, firstName, confirmUrl });
+    await sendConfirmationEmail({ email, firstName: normalizedFirstName, confirmUrl });
   } catch (error) {
     logger.error("Newsletter signup error:", error);
     return res.status(500).json({ error: "Failed to sign up." });
