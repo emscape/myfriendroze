@@ -4,6 +4,7 @@ const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const { verifyUnsubscribeToken } = require("./lib/unsubscribeToken");
 const { escapeHtml } = require("./lib/escapeHtml");
+const { page } = require("./lib/htmlPage");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -11,23 +12,47 @@ if (!admin.apps.length) {
 
 const unsubscribeSecret = defineSecret("UNSUBSCRIBE_SECRET");
 
-function page(title, titleColor, bodyHtml) {
-  return `
-      <html>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-          <h2 style="color: ${titleColor};">${title}</h2>
-          ${bodyHtml}
-        </body>
-      </html>
-    `;
+// Matches lib/newsletter-signup.js's CONFIRM_BASE_URL constant -- used here
+// as the interstitial form's explicit POST target. See
+// renderUnsubscribeInterstitial's comment for why GET can't perform the
+// mutation directly.
+const UNSUBSCRIBE_BASE_URL = "https://us-west1-myfriendroze-platform.cloudfunctions.net/unsubscribe";
+
+// GET must stay side-effect-free (RFC 7231 "safe methods"), same reasoning
+// and same fix shape as confirmNewsletterSignup.js's interstitial: email
+// security scanners (Microsoft Safe Links, Proofpoint, Mimecast, etc.)
+// routinely prefetch every link in an incoming email, including these
+// unsubscribe links placed directly in the welcome email -- which would
+// silently unsubscribe a real recipient who never clicked anything. Only a
+// real POST -- a hidden-field form a prefetcher won't submit -- performs
+// the actual preference update.
+function renderUnsubscribeInterstitial({ email, type, token }) {
+  const hiddenField = (name, value) =>
+    value === undefined ? '' : `<input type="hidden" name="${name}" value="${escapeHtml(String(value))}">`;
+
+  return page(
+    'Unsubscribe from myfriendroze', '#3d081b',
+    `
+      <p>Click below to confirm you'd like to stop receiving these emails.</p>
+      <form method="POST" action="${UNSUBSCRIBE_BASE_URL}" style="margin-top:24px;">
+        ${hiddenField('email', email)}
+        ${hiddenField('type', type)}
+        ${hiddenField('token', token)}
+        <button type="submit" style="background-color:#acdc9e; color:#3d081b; border:none; border-radius:6px; padding:14px 32px; font-size:16px; font-weight:700; cursor:pointer;">Unsubscribe me</button>
+      </form>
+    `
+  );
 }
 
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
  * for why dependencies are passed as parameters.
  */
-async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
-  const { email, type, token } = req.query;
+async function handleUnsubscribe(req, res, { db, secret, serverTimestamp, logger }) {
+  // GET carries fields as query params (the emailed link); the
+  // interstitial's POST carries the same fields as a form body.
+  const source = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+  const { email, type, token } = source;
 
   // A repeated query param (e.g. ?email=a@example.com&email=b@example.com)
   // parses as an array, not a string. A single-element array stringifies
@@ -48,6 +73,13 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
       'Invalid Token', '#e74c3c',
       '<p>This unsubscribe link is invalid or has expired.</p>'
     ));
+  }
+
+  // The token is valid. GET stops here and renders the interstitial -- see
+  // renderUnsubscribeInterstitial's comment for why the actual preference
+  // update is gated behind a real POST.
+  if (req.method !== 'POST') {
+    return res.send(renderUnsubscribeInterstitial({ email, type, token }));
   }
 
   try {
@@ -86,14 +118,27 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
         return res.status(400).send("Invalid unsubscribe type");
     }
 
-    // Update the subscriber's preferences
-    await subscriberDoc.ref.update({
+    // Update the subscriber's preferences. unsubscribedAt is a general
+    // "last touched by any unsubscribe action" timestamp, overwritten by
+    // every type -- confirmNewsletterSignup.js's replay guard needs a
+    // timestamp that's specific to the newsletter preference alone (an
+    // events-only unsubscribe shouldn't be able to make a legitimate,
+    // later-issued newsletter confirmation token look stale), so
+    // newsletterUnsubscribedAt is only written when this action actually
+    // touches preferences.newsletter (type 'newsletter' or 'all').
+    const preferencesUpdate = {
       preferences: newPreferences,
       unsubscribedAt: serverTimestamp(),
       unsubscribeType: type
-    });
+    };
+    if (type === 'newsletter' || type === 'all') {
+      preferencesUpdate.newsletterUnsubscribedAt = serverTimestamp();
+    }
+    await subscriberDoc.ref.update(preferencesUpdate);
 
-    logger.info(`Unsubscribed ${email} from ${type}`);
+    // Never log the email itself (CL9 -- no PII in logs); the type alone
+    // is enough to debug/monitor this endpoint.
+    logger.info(`Unsubscribe: ${type} preference updated.`);
 
     // Return success page
     res.send(`
@@ -126,14 +171,20 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
   }
 }
 
+// invoker: 'public' -- clicked directly from an email link, not proxied
+// through the site. This project's domain-restricted-sharing org policy
+// blocks anonymous Cloud Run invocation by default (same reasoning as
+// newsletterSignup.js/confirmNewsletterSignup.js), so every unsubscribe
+// link in the welcome email would 403 without this declared.
 /* v8 ignore start -- thin wiring, same rationale as createCheckoutSession.js
    and orderConfirmation.js's wrappers. */
 exports.unsubscribe = onRequest(
-  { region: "us-west1", secrets: [unsubscribeSecret] },
+  { region: "us-west1", secrets: [unsubscribeSecret], invoker: "public" },
   async (req, res) => handleUnsubscribe(req, res, {
     db: admin.firestore(),
     secret: unsubscribeSecret.value(),
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+    logger,
   })
 );
 /* v8 ignore stop */

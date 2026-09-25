@@ -349,8 +349,10 @@ import Header from '../components/Header.astro';
         const result = await response.json();
 
         if (response.ok) {
-          // Show success message
-          newsletterMessage.textContent = 'Thanks for subscribing! We promise we\'re too lazy for lots of emails.';
+          // Show success message. Signup is double opt-in now (see
+          // firebase/functions/newsletterSignup.js) -- nothing is actually
+          // subscribed yet, so this deliberately doesn't say "subscribed."
+          newsletterMessage.textContent = 'Almost done! Check your email to confirm your subscription.';
           newsletterMessage.className = 'newsletter__message newsletter__message--success';
           newsletterMessage.hidden = false;
 

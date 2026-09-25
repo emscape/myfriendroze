@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const {
   buildSignupRecord,
-  buildWelcomeEmailHtml,
+  buildConfirmUrl,
   buildExistingDocUpdate,
   validateNameLengths,
   evaluateRateLimit,
@@ -58,37 +58,41 @@ describe('buildSignupRecord', () => {
   });
 });
 
-describe('buildWelcomeEmailHtml', () => {
-  it('personalizes the greeting when a first name is given', () => {
-    expect(buildWelcomeEmailHtml({ firstName: 'Roze' })).toContain('Hi Roze,');
+describe('buildConfirmUrl', () => {
+  const BASE = { email: 'roze@example.com', issuedAt: 1700000000000, token: 'abc123' };
+
+  it('includes email, issuedAt, and token as query params', () => {
+    const url = buildConfirmUrl(BASE);
+    const parsed = new URL(url);
+    expect(parsed.origin + parsed.pathname).toBe(
+      'https://us-west1-myfriendroze-platform.cloudfunctions.net/confirmNewsletterSignup'
+    );
+    expect(parsed.searchParams.get('email')).toBe('roze@example.com');
+    expect(parsed.searchParams.get('issuedAt')).toBe('1700000000000');
+    expect(parsed.searchParams.get('token')).toBe('abc123');
   });
 
-  it('falls back to a generic greeting when no first name is given', () => {
-    const html = buildWelcomeEmailHtml({});
-    expect(html).toContain('Hi there,');
-    expect(html).not.toContain('Hi ,');
+  it('includes firstName/lastName when given', () => {
+    const url = buildConfirmUrl({ ...BASE, firstName: 'Roze', lastName: 'Smith' });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get('firstName')).toBe('Roze');
+    expect(parsed.searchParams.get('lastName')).toBe('Smith');
   });
 
-  it('falls back to a generic greeting for a blank first name', () => {
-    const html = buildWelcomeEmailHtml({ firstName: '   ' });
-    expect(html).toContain('Hi there,');
+  it('omits firstName/lastName entirely when not given or blank', () => {
+    const url = buildConfirmUrl({ ...BASE, firstName: '   ', lastName: undefined });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.has('firstName')).toBe(false);
+    expect(parsed.searchParams.has('lastName')).toBe(false);
   });
 
-  // firstName is request-controlled (astro/src/pages/api/newsletter.js
-  // passes it straight through from the request body) and gets
-  // interpolated into an email Brevo actually sends -- unescaped, a
-  // crafted name could inject arbitrary markup into an email delivered
-  // under this site's trusted sender identity to whatever address the
-  // same request specifies.
-  it('HTML-escapes a firstName containing markup instead of injecting it into the email', () => {
-    const html = buildWelcomeEmailHtml({ firstName: '<img src=x onerror=alert(1)>' });
-    expect(html).not.toContain('<img src=x onerror=alert(1)>');
-    expect(html).toContain('Hi &lt;img src=x onerror=alert(1)&gt;,');
-  });
-
-  it('escapes ampersands and quotes too', () => {
-    const html = buildWelcomeEmailHtml({ firstName: `Rose & "Bud"` });
-    expect(html).toContain('Hi Rose &amp; &quot;Bud&quot;,');
+  // URLSearchParams handles encoding -- verify a value needing real
+  // encoding (a name with a space and an ampersand) round-trips correctly
+  // rather than corrupting the query string.
+  it('URL-encodes special characters in names', () => {
+    const url = buildConfirmUrl({ ...BASE, firstName: 'Rose & Bud' });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get('firstName')).toBe('Rose & Bud');
   });
 });
 
@@ -161,6 +165,27 @@ describe('validateNameLengths', () => {
 
   it('accepts a name exactly at the 50-character boundary', () => {
     expect(validateNameLengths({ firstName: 'a'.repeat(50) })).toEqual({ valid: true });
+  });
+
+  // Regression guard: a non-string name (e.g. an array from a repeated
+  // form field, ?firstName=a&firstName=b) used to pass this check
+  // silently, then get coerced into the confirmation token's HMAC input
+  // while buildConfirmUrl omitted it from the emailed link entirely --
+  // the resulting link could never verify, permanently breaking that
+  // signup's confirmation.
+  it('rejects an array-valued firstName', () => {
+    const result = validateNameLengths({ firstName: ['Roze', 'Extra'] });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects an array-valued lastName', () => {
+    const result = validateNameLengths({ lastName: ['Smith', 'Extra'] });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects an object-valued name', () => {
+    const result = validateNameLengths({ firstName: { toString: () => 'Roze' } });
+    expect(result.valid).toBe(false);
   });
 });
 

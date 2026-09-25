@@ -1,8 +1,13 @@
-// Pure helpers for newsletterSignup.js — extracted so the record shape and
-// email personalization are unit-testable without Firestore/Brevo, same
-// pattern as lib/pricing.js.
+// Pure helpers shared by newsletterSignup.js and confirmNewsletterSignup.js
+// -- extracted so the record shape, confirm-link building, and rate-limit
+// math are unit-testable without Firestore/Brevo, same pattern as
+// lib/pricing.js.
 
-const { escapeHtml } = require('./escapeHtml');
+// Matches eventNotification.js's UNSUBSCRIBE_BASE_URL constant -- the
+// recipient clicks this from their email client, not from the site's own
+// JS bundle, so the dev/prod URL-switching that
+// astro/src/lib/newsletter-signup-url.js exists for doesn't apply here.
+const CONFIRM_BASE_URL = 'https://us-west1-myfriendroze-platform.cloudfunctions.net/confirmNewsletterSignup';
 
 /**
  * Firestore fields for a new newsletter_signups doc (timestamp is added by
@@ -29,31 +34,24 @@ function buildSignupRecord({ email, firstName, lastName }) {
 }
 
 /**
- * Personalizes the welcome email greeting when a first name was given,
- * falling back to the original generic greeting otherwise.
- * @param {{ firstName?: string }} input
+ * Builds the confirm-signup link emailed to the visitor -- carries every
+ * field the confirm step needs (confirmNewsletterSignup.js writes nothing
+ * to Firestore until this link is clicked, so the signed token itself is
+ * the only record of the pending signup). URLSearchParams handles query
+ * encoding, distinct from the HTML-escaping buildWelcomeEmailHtml used to
+ * do -- this value goes into a URL, not an HTML document.
+ * @param {{ email: string, firstName?: string, lastName?: string, issuedAt: number, token: string }} input
  * @returns {string}
  */
-function buildWelcomeEmailHtml({ firstName }) {
-  const greeting =
-    typeof firstName === 'string' && firstName.trim()
-      ? `Hi ${escapeHtml(firstName.trim())},`
-      : 'Hi there,';
-
-  return `
-          <div style="font-family: Arial, sans-serif; background: #f9f9f9; padding: 32px;">
-            <h2 style="color: #4CAF50;">Welcome to MyFriendRoze!</h2>
-            <p>${greeting}</p>
-            <p>Thank you for signing up for our newsletter. We're excited to have you join our community of plant lovers and creative souls!</p>
-            <ul>
-              <li>🌱 Get exclusive updates and offers</li>
-              <li>🌸 Be the first to know about new products and events</li>
-              <li>💌 Tips, inspiration, and more delivered to your inbox</li>
-            </ul>
-            <p>If you have any questions, just reply to this email—we love hearing from you!</p>
-            <p style="margin-top:32px; color:#888; font-size:12px;">You are receiving this email because you signed up at myfriendroze.com.</p>
-          </div>
-        `;
+function buildConfirmUrl({ email, firstName, lastName, issuedAt, token }) {
+  const params = new URLSearchParams({ email, issuedAt: String(issuedAt), token });
+  if (typeof firstName === 'string' && firstName.trim()) {
+    params.set('firstName', firstName.trim());
+  }
+  if (typeof lastName === 'string' && lastName.trim()) {
+    params.set('lastName', lastName.trim());
+  }
+  return `${CONFIRM_BASE_URL}?${params.toString()}`;
 }
 
 /**
@@ -82,10 +80,23 @@ const MAX_NAME_LENGTH = 50;
  * otherwise submit an arbitrarily long name with no boundary check. The
  * removed subscribe.js/createSubscription capped each name at 50
  * characters; this restores an equivalent limit.
+ *
+ * Also rejects a non-string name (e.g. an array from a repeated form
+ * field) outright, rather than silently letting it through: a non-string
+ * value still gets coerced into the confirmation token's HMAC input, but
+ * buildConfirmUrl only ever puts a *string* name into the emailed link --
+ * the resulting link would verify against a different name than what was
+ * actually signed, permanently failing confirmation for that signup.
  * @param {{ firstName?: string, lastName?: string }} input
  * @returns {{ valid: boolean, error?: string }}
  */
 function validateNameLengths({ firstName, lastName }) {
+  if (firstName !== undefined && typeof firstName !== 'string') {
+    return { valid: false, error: 'First name must be text.' };
+  }
+  if (lastName !== undefined && typeof lastName !== 'string') {
+    return { valid: false, error: 'Last name must be text.' };
+  }
   if (typeof firstName === 'string' && firstName.length > MAX_NAME_LENGTH) {
     return { valid: false, error: `First name must be ${MAX_NAME_LENGTH} characters or fewer.` };
   }
@@ -119,7 +130,7 @@ function evaluateRateLimit(existing, now, { maxRequests, windowMs }) {
 
 module.exports = {
   buildSignupRecord,
-  buildWelcomeEmailHtml,
+  buildConfirmUrl,
   buildExistingDocUpdate,
   validateNameLengths,
   evaluateRateLimit,

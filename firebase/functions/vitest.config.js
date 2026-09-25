@@ -21,12 +21,28 @@ module.exports = defineConfig({
   // showed as ~28% in the full multi-worker suite. Single-fork execution
   // sidesteps the merge entirely. This suite is small (well under a
   // second), so the lost parallelism doesn't matter here.
+  //
+  // Separately: every lib/*.test.mjs file must load its module under test
+  // via `const require = createRequire(import.meta.url); require('./x.js')`,
+  // never a static `import ... from './x.js'` -- if any production .js file
+  // require()s that same module via CJS at module scope in code that's
+  // actually exercised by tests (not just inside a /* v8 ignore */ thin
+  // wrapper), a plain ESM import creates a *second*, separately-instrumented
+  // module instance, and this coverage provider's merge only credits one of
+  // them. Confirmed empirically on lib/confirmationToken.js: its own
+  // 14-test file showed the module at 100% run alone, but ~40% (entire
+  // functions "uncovered") once newsletterSignup.js's CJS require of the
+  // same file joined the suite -- switching that one test file to
+  // createRequire fixed it, with no code change to the module itself.
+  // Applies to any lib/ file consumed eagerly (not lazily) by a Cloud
+  // Function's testable core -- lib/unsubscribeToken.js, lib/emailPayload.js,
+  // and lib/htmlPage.js all needed the same fix.
   pool: 'forks',
   poolOptions: { forks: { singleFork: true } },
   test: {
     coverage: {
       provider: 'v8',
-      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js', 'orderConfirmation.js', 'unsubscribe.js', 'eventNotification.js'],
+      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js', 'orderConfirmation.js', 'unsubscribe.js', 'eventNotification.js', 'newsletterSignup.js', 'confirmNewsletterSignup.js'],
       thresholds: {
         lines: 85,
         functions: 85,
