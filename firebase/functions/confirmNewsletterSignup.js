@@ -7,6 +7,7 @@ const { verifyConfirmationToken, isConfirmationTokenExpired } = require("./lib/c
 const { buildSignupRecord, buildExistingDocUpdate } = require("./lib/newsletter-signup");
 const { generateUnsubscribeToken } = require("./lib/unsubscribeToken");
 const { page } = require("./lib/htmlPage");
+const { escapeHtml } = require("./lib/escapeHtml");
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -21,12 +22,44 @@ const MAX_TOKEN_AGE_MS = 48 * 60 * 60 * 1000;
 
 // Matches eventNotification.js's UNSUBSCRIBE_BASE_URL constant.
 const UNSUBSCRIBE_BASE_URL = "https://us-west1-myfriendroze-platform.cloudfunctions.net/unsubscribe";
+// Matches lib/newsletter-signup.js's CONFIRM_BASE_URL constant -- used here
+// as the interstitial form's explicit POST target, so submission doesn't
+// depend on how a browser resolves a relative/empty form action.
+const CONFIRM_BASE_URL = "https://us-west1-myfriendroze-platform.cloudfunctions.net/confirmNewsletterSignup";
 
 function buildUnsubscribeLinks(email, secret) {
   return {
     newsletter: `${UNSUBSCRIBE_BASE_URL}?email=${encodeURIComponent(email)}&type=newsletter&token=${generateUnsubscribeToken(email, 'newsletter', secret)}`,
     all: `${UNSUBSCRIBE_BASE_URL}?email=${encodeURIComponent(email)}&type=all&token=${generateUnsubscribeToken(email, 'all', secret)}`,
   };
+}
+
+// GET must stay side-effect-free (RFC 7231 "safe methods") -- email
+// security scanners (Microsoft Safe Links, Proofpoint, Mimecast, etc.)
+// routinely prefetch every link in an incoming email to scan it before a
+// human ever clicks, which would otherwise silently "confirm" a
+// subscription nobody consented to, defeating the entire point of double
+// opt-in. GET renders this interstitial instead; only a real POST -- a
+// hidden-field form a prefetcher won't submit -- performs the actual
+// create-record-and-send-email side effect.
+function renderConfirmInterstitial({ email, firstName, lastName, issuedAt, token }) {
+  const hiddenField = (name, value) =>
+    value === undefined ? '' : `<input type="hidden" name="${name}" value="${escapeHtml(String(value))}">`;
+
+  return page(
+    'Confirm your subscription 🌹', '#3d081b',
+    `
+      <p>Click below to confirm you'd like to receive the myfriendroze newsletter.</p>
+      <form method="POST" action="${CONFIRM_BASE_URL}" style="margin-top:24px;">
+        ${hiddenField('email', email)}
+        ${hiddenField('firstName', firstName)}
+        ${hiddenField('lastName', lastName)}
+        ${hiddenField('issuedAt', issuedAt)}
+        ${hiddenField('token', token)}
+        <button type="submit" style="background-color:#acdc9e; color:#3d081b; border:none; border-radius:6px; padding:14px 32px; font-size:16px; font-weight:700; cursor:pointer;">Confirm my subscription</button>
+      </form>
+    `
+  );
 }
 
 const isMissingOrNonString = (value) => typeof value !== 'string' || !value;
@@ -41,7 +74,11 @@ const isMissingOrNonString = (value) => typeof value !== 'string' || !value;
 async function handleConfirmNewsletterSignup(req, res, {
   db, secret, unsubscribeSecret: unsubSecret, now, sendWelcomeEmail, serverTimestamp,
 }) {
-  const { email, firstName, lastName, issuedAt, token } = req.query;
+  // GET carries the fields as query params (the emailed link); the
+  // interstitial's POST carries the same fields as a form body. Either
+  // way, the same fields get validated identically below.
+  const source = req.method === 'POST' ? (req.body || {}) : (req.query || {});
+  const { email, firstName, lastName, issuedAt, token } = source;
 
   // A repeated query param parses as an array, not a string -- same class
   // of bug fixed in unsubscribe.js this morning (see its handleUnsubscribe
@@ -71,6 +108,13 @@ async function handleConfirmNewsletterSignup(req, res, {
       'Link Expired', '#e74c3c',
       '<p>This confirmation link has expired. Please sign up again to get a new one.</p>'
     ));
+  }
+
+  // The token is valid and unexpired. GET stops here and renders the
+  // interstitial -- see renderConfirmInterstitial's comment for why the
+  // actual side effect is gated behind a real POST.
+  if (req.method !== 'POST') {
+    return res.send(renderConfirmInterstitial({ email, firstName, lastName, issuedAt, token }));
   }
 
   try {
@@ -106,15 +150,21 @@ async function handleConfirmNewsletterSignup(req, res, {
       const wasUnsubscribed = data.preferences && data.preferences.newsletter === false;
       if (wasUnsubscribed) {
         // A confirmation link must not be able to silently reverse a
-        // *later* explicit unsubscribe: if this exact token already
-        // confirmed this doc once before (confirmedIssuedAt matches), the
-        // subscriber has since unsubscribed, and re-clicking the same old
-        // link -- still valid for up to 48h -- shouldn't resubscribe them
-        // without a new, deliberate signup. A genuine resubscribe mints a
-        // fresh token (new issuedAt) by submitting the form again.
-        const tokenAlreadyConsumed =
-          data.confirmedIssuedAt !== undefined && String(data.confirmedIssuedAt) === String(issuedAt);
-        if (tokenAlreadyConsumed) {
+        // *later* explicit unsubscribe. confirmedIssuedAt is tracked as a
+        // monotonic high-water mark, not just "was this the exact token
+        // that last confirmed" -- an exact-match check alone misses the
+        // case where a visitor has two outstanding tokens (e.g. submitted
+        // the form twice), confirms with the newer one, unsubscribes, then
+        // opens the *older* still-valid token: that token never matched
+        // confirmedIssuedAt, so an exact-match check would wrongly let it
+        // through. Rejecting anything at or before the high-water mark
+        // closes that gap. A genuine resubscribe mints a strictly newer
+        // token (a new issuedAt) by submitting the form again.
+        const latestConfirmedIssuedAt =
+          data.confirmedIssuedAt !== undefined ? Number(data.confirmedIssuedAt) : null;
+        const tokenIsReplay =
+          latestConfirmedIssuedAt !== null && Number(issuedAt) <= latestConfirmedIssuedAt;
+        if (tokenIsReplay) {
           return { shouldSendEmail: false, action: "resubscribe-blocked-stale-token" };
         }
         tx.update(docRef, {
