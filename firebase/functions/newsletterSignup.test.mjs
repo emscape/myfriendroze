@@ -179,14 +179,22 @@ describe('handleNewsletterSignup', () => {
   it('does not write a subscriber record -- the testable core takes no db dependency at all', async () => {
     // Double opt-in: nothing creates a newsletter_signups doc until the
     // confirmation link is clicked (confirmNewsletterSignup.js, which DOES
-    // take a `db` dependency). handleNewsletterSignup's dependency list has
-    // no `db` parameter at all, so there is no code path here that could
-    // reach that collection even by accident -- true by construction, not
-    // just because this test's deps object happens to omit one.
-    // checkRateLimit's real implementation (in the v8-ignored wrapper) does
-    // write to the separate newsletter_signup_rate_limits collection --
-    // unrelated to this invariant, and deliberately untested here as thin
-    // infrastructure wiring, same as this file's other tests.
+    // take a `db` dependency). This proves that by construction for the
+    // testable core: handleNewsletterSignup's dependency list has no `db`
+    // parameter at all, so there is no code path *here* that could reach
+    // Firestore's newsletter_signups collection.
+    //
+    // What this does NOT prove: that the real deployed wrapper
+    // (exports.newsletterSignup, inside the v8-ignored block below) never
+    // calls admin.firestore() directly. Verifying that would mean mocking
+    // firebase-admin at the module level, which this test suite doesn't do
+    // anywhere -- every onRequest/onCall wrapper in this codebase is
+    // deliberately left as untested "thin wiring" (createCheckoutSession.js,
+    // orderConfirmation.js, stripeWebhook.js follow the same pattern),
+    // verified by direct review rather than a test double. checkRateLimit's
+    // real implementation, in that same wrapper, does write to the separate
+    // newsletter_signup_rate_limits collection -- unrelated to subscriber
+    // data, and already noted in that wrapper's own comment.
     const res = fakeRes();
 
     await handleNewsletterSignup(

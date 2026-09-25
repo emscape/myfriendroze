@@ -242,10 +242,15 @@ async function handleConfirmNewsletterSignup(req, res, {
     }
 
     if (action === "resubscribe-blocked-stale-token") {
+      // Neutral wording on purpose: this branch is also reached by a token
+      // that was never actually used before, just minted earlier than a
+      // later unsubscribe (see the newerButStillStaleIssuedAt test) --
+      // "already confirmed" or "already used" would be false in that case.
       return res.send(page(
-        "This link has already been used", '#f39c12',
-        "<p>You confirmed this subscription once already, and have since unsubscribed. "
-          + "If you'd like to resubscribe, please sign up again on the site for a fresh confirmation link.</p>"
+        "This link is no longer valid", '#f39c12',
+        "<p>This confirmation link was issued before you last unsubscribed, so it can't be used to "
+          + "resubscribe you. If you'd like to receive our newsletter again, please sign up again on the "
+          + "site for a fresh confirmation link.</p>"
       ));
     }
 
