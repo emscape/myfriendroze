@@ -23,7 +23,7 @@ exports.sendOrderShippedNotification = onCall({
   // Get secret values and config
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || functions.config().email?.orders || '{"email":"orders@myfriendroze.com","name":"MyFriendRoze Orders"}');
+  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || functions.config().email?.orders || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}');
 
   const { email, orderDetails, shippingDetails } = request.data;
 

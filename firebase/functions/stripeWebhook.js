@@ -20,7 +20,7 @@ const { sessionToOrderData } = require('./lib/orderFromSession');
 // Same env-var-driven convention as the original orderConfirmation.js —
 // no SITE_URL-style convention exists in this codebase for this either.
 const ORDERS_SENDER =
-  process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"MyFriendRoze Orders"}';
+  process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}';
 
 if (!admin.apps.length) {
   admin.initializeApp();

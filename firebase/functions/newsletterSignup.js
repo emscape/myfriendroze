@@ -95,7 +95,7 @@ async function handleNewsletterSignup(req, res, { checkRateLimit, sendConfirmati
   logger.info("Newsletter signup: confirmation email sent.");
   return res.status(200).json({
     success: true,
-    message: "Almost done! Check your email to confirm your subscription.",
+    message: "Check your email for a confirmation message.",
   });
 }
 
@@ -159,7 +159,7 @@ exports.newsletterSignup = onRequest(
     const apiKey = brevoApiKey.value();
     const templates = JSON.parse(brevoTemplates.value());
     const sender = JSON.parse(
-      process.env.EMAIL_NEWSLETTER || '{"email":"newsletter@myfriendroze.com","name":"MyFriendRoze Newsletter"}'
+      process.env.EMAIL_NEWSLETTER || '{"email":"newsletter@myfriendroze.com","name":"myfriendroze Newsletter"}'
     );
 
     return handleNewsletterSignup(req, res, {

@@ -27,7 +27,7 @@ const brevoTemplates = defineSecret('BREVO_TEMPLATES');
 const ADMIN_EMAILS = ['myfriendroze@gmail.com', 'myfriendroze.store@gmail.com'];
 
 const ORDERS_SENDER =
-  process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"MyFriendRoze Orders"}';
+  process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}';
 
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
