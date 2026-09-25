@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { handleSendOrderShippedNotification } = require('./orderShipped.js');
+const { handleSendOrderShippedNotification, HttpsError } = require('./orderShipped.js');
+
+const ADMIN_EMAIL = 'myfriendroze@gmail.com';
 
 function silentLogger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -32,6 +34,7 @@ const orderDetails = { orderNumber: 'ORD-100', customerName: 'Jane Doe', shippin
 const shippingDetails = { trackingNumber: 'TRACK123', carrier: 'USPS', trackingUrl: 'https://example.com/t', estimatedDelivery: '2026-10-01' };
 
 const baseRequest = (overrides = {}) => ({
+  auth: { token: { email: ADMIN_EMAIL } },
   data: { email: 'customer@example.com', orderDetails, shippingDetails },
   ...overrides,
 });
@@ -48,6 +51,24 @@ const baseDeps = (overrides = {}) => ({
 });
 
 describe('handleSendOrderShippedNotification', () => {
+  it('rejects unauthenticated requests', async () => {
+    await expect(
+      handleSendOrderShippedNotification(
+        { auth: null, data: { email: 'customer@example.com', orderDetails, shippingDetails } },
+        baseDeps()
+      )
+    ).rejects.toThrow(HttpsError);
+  });
+
+  it('rejects requests from a non-admin email', async () => {
+    await expect(
+      handleSendOrderShippedNotification(
+        baseRequest({ auth: { token: { email: 'stranger@example.com' } } }),
+        baseDeps()
+      )
+    ).rejects.toThrow(HttpsError);
+  });
+
   it('rejects a request missing an email', async () => {
     await expect(
       handleSendOrderShippedNotification(baseRequest({ data: { orderDetails, shippingDetails } }), baseDeps())

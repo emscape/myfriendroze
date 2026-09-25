@@ -19,4 +19,7 @@ exports.stripeWebhook = require('./stripeWebhook').stripeWebhook;
 
 // Admin-only: resend an order confirmation email
 exports.resendOrderConfirmation = require('./orderConfirmation').resendOrderConfirmation;
+
+// Admin-only: mark an order shipped and send the shipping notification email
+exports.sendOrderShippedNotification = require('./orderShipped').sendOrderShippedNotification;
 exports.ssrAstro = require('./ssrAstro').ssrAstro;

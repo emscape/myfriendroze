@@ -1,4 +1,4 @@
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
@@ -13,6 +13,14 @@ if (!admin.apps.length) {
   admin.initializeApp();
 }
 
+// Same admin allowlist as orderConfirmation.js/eventNotification.js/
+// firestore.rules' isAdmin() -- kept in sync manually since Cloud Functions
+// can't reference security rules. Without this check, this callable would
+// be a public, unauthenticated endpoint that lets anyone mark an arbitrary
+// order "shipped" in Firestore and relay a Brevo email to any address of
+// their choosing through this project's verified sending domain.
+const ADMIN_EMAILS = ['myfriendroze@gmail.com', 'myfriendroze.store@gmail.com'];
+
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -25,6 +33,10 @@ function isValidEmail(email) {
 async function handleSendOrderShippedNotification(request, {
   db, sendBrevoEmail, apiKey, templates, ordersSender, serverTimestamp, logger,
 }) {
+  if (!request.auth || !ADMIN_EMAILS.includes(request.auth.token.email)) {
+    throw new HttpsError('permission-denied', 'Admin access required');
+  }
+
   logger.info("Order shipped notification function triggered.");
 
   const { email, orderDetails, shippingDetails } = request.data;
@@ -116,3 +128,4 @@ exports.sendOrderShippedNotification = onCall({
 
 // Exported separately for testing.
 exports.handleSendOrderShippedNotification = handleSendOrderShippedNotification;
+exports.HttpsError = HttpsError;
