@@ -82,6 +82,23 @@ describe('handleNewsletterSignup', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  // Regression guard: Copilot review on PR #45 -- an array-valued name
+  // used to pass validateNameLengths silently, then produce a
+  // confirmation link that could never verify (see
+  // lib/newsletter-signup.test.mjs's validateNameLengths tests for the
+  // full mechanism).
+  it('returns 400 for an array-valued firstName', async () => {
+    const res = fakeRes();
+
+    await handleNewsletterSignup(
+      { method: 'POST', body: { email: 'buyer@example.com', firstName: ['Roze', 'Extra'] } },
+      res,
+      baseDeps()
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
   it('returns 400 for a firstName over 50 characters', async () => {
     const res = fakeRes();
 

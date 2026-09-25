@@ -80,10 +80,23 @@ const MAX_NAME_LENGTH = 50;
  * otherwise submit an arbitrarily long name with no boundary check. The
  * removed subscribe.js/createSubscription capped each name at 50
  * characters; this restores an equivalent limit.
+ *
+ * Also rejects a non-string name (e.g. an array from a repeated form
+ * field) outright, rather than silently letting it through: a non-string
+ * value still gets coerced into the confirmation token's HMAC input, but
+ * buildConfirmUrl only ever puts a *string* name into the emailed link --
+ * the resulting link would verify against a different name than what was
+ * actually signed, permanently failing confirmation for that signup.
  * @param {{ firstName?: string, lastName?: string }} input
  * @returns {{ valid: boolean, error?: string }}
  */
 function validateNameLengths({ firstName, lastName }) {
+  if (firstName !== undefined && typeof firstName !== 'string') {
+    return { valid: false, error: 'First name must be text.' };
+  }
+  if (lastName !== undefined && typeof lastName !== 'string') {
+    return { valid: false, error: 'Last name must be text.' };
+  }
   if (typeof firstName === 'string' && firstName.length > MAX_NAME_LENGTH) {
     return { valid: false, error: `First name must be ${MAX_NAME_LENGTH} characters or fewer.` };
   }

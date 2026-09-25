@@ -8,8 +8,11 @@
   structure as order-confirmation.html.
 
   Brand palette pulled from astro/src/layouts/Layout.astro's :root vars:
-    background #f2efdd, foreground #3d081b, accent/button #acdc9e,
-    button text #f2efdd
+    background #f2efdd, foreground #3d081b, accent/button #acdc9e.
+    CTA button text is the dark foreground #3d081b, not the site's own
+    --color-button-text (#f2efdd) -- that pairing (light text on the pale
+    accent green) has insufficient contrast for a button that's this
+    email's one required action (flagged in PR #45 review).
 
   Params (see firebase/functions/lib/emailPayload.js
   newsletterConfirmationEmailParams): GREETING, CONFIRM_URL
@@ -41,9 +44,10 @@
         <!-- Body -->
         <tr>
           <td style="padding:24px 24px 8px 24px; color:#3d081b; font-size:16px; line-height:1.5;">
-            <p style="margin:0 0 16px 0; font-size:20px; font-weight:700;">Confirm your subscription 🌱</p>
             <p style="margin:0 0 16px 0;">{{ params.GREETING }}</p>
-            <p style="margin:0 0 24px 0;">Thanks for signing up for the MyFriendRoze newsletter! One last step — confirm your email address and we'll get you added.</p>
+            <p style="margin:0 0 16px 0;">Thanks for joining the myfriendroze email list. Your inbox must have been feeling dangerously organized, so I appreciate you trying to clutter it up.</p>
+            <p style="margin:0 0 16px 0;">Before I can actually start sending you anything, the internet requires you to prove you meant to do this. Click the button below to do so.</p>
+            <p style="margin:0 0 24px 0;">Once you click that, you're officially in. I promised very few emails, so I'll only hit your inbox when I actually have something worth saying—no daily spam, no weekly fluff.</p>
           </td>
         </tr>
 
@@ -53,7 +57,7 @@
             <table role="presentation" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="background-color:#acdc9e; border-radius:6px;">
-                  <a href="{{ params.CONFIRM_URL }}" style="display:inline-block; padding:14px 32px; font-size:16px; font-weight:700; color:#f2efdd; text-decoration:none;">Confirm my subscription</a>
+                  <a href="{{ params.CONFIRM_URL }}" style="display:inline-block; padding:14px 32px; font-size:16px; font-weight:700; color:#3d081b; text-decoration:none;">Confirm my subscription</a>
                 </td>
               </tr>
             </table>
@@ -63,7 +67,7 @@
         <!-- Expiry note -->
         <tr>
           <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:13px; line-height:1.6; opacity:0.8;">
-            <p style="margin:0;">This link expires in 48 hours. If you didn't sign up for this, no action is needed — nothing happens unless you click the button above.</p>
+            <p style="margin:0;">This link expires in 48 hours- if you regret this decision already just ignore this email and I'll go away - nothing happens unless you click the button.</p>
           </td>
         </tr>
 

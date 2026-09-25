@@ -166,6 +166,27 @@ describe('validateNameLengths', () => {
   it('accepts a name exactly at the 50-character boundary', () => {
     expect(validateNameLengths({ firstName: 'a'.repeat(50) })).toEqual({ valid: true });
   });
+
+  // Regression guard: a non-string name (e.g. an array from a repeated
+  // form field, ?firstName=a&firstName=b) used to pass this check
+  // silently, then get coerced into the confirmation token's HMAC input
+  // while buildConfirmUrl omitted it from the emailed link entirely --
+  // the resulting link could never verify, permanently breaking that
+  // signup's confirmation.
+  it('rejects an array-valued firstName', () => {
+    const result = validateNameLengths({ firstName: ['Roze', 'Extra'] });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects an array-valued lastName', () => {
+    const result = validateNameLengths({ lastName: ['Smith', 'Extra'] });
+    expect(result.valid).toBe(false);
+  });
+
+  it('rejects an object-valued name', () => {
+    const result = validateNameLengths({ firstName: { toString: () => 'Roze' } });
+    expect(result.valid).toBe(false);
+  });
 });
 
 describe('evaluateRateLimit', () => {

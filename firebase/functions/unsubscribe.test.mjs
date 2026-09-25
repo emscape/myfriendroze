@@ -8,6 +8,10 @@ const { generateUnsubscribeToken } = require('./lib/unsubscribeToken.js');
 const SECRET = 'test-secret';
 const serverTimestamp = () => 'SERVER_TIMESTAMP';
 
+function silentLogger() {
+  return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
+
 function fakeRes() {
   const res = {};
   res.status = vi.fn(() => res);
@@ -31,11 +35,21 @@ function fakeDb({ subscriber } = {}) {
   };
 }
 
+function baseDeps(overrides = {}) {
+  return {
+    db: fakeDb(),
+    secret: SECRET,
+    serverTimestamp,
+    logger: silentLogger(),
+    ...overrides,
+  };
+}
+
 describe('handleUnsubscribe', () => {
   it('returns 400 when email, type, or token is missing', async () => {
     const res = fakeRes();
 
-    await handleUnsubscribe({ query: {} }, res, { db: fakeDb(), secret: SECRET, serverTimestamp });
+    await handleUnsubscribe({ query: {} }, res, baseDeps());
 
     expect(res.status).toHaveBeenCalledWith(400);
   });
@@ -46,7 +60,7 @@ describe('handleUnsubscribe', () => {
     await handleUnsubscribe(
       { query: { email: 'buyer@example.com', type: 'newsletter', token: 'wrong' } },
       res,
-      { db: fakeDb(), secret: SECRET, serverTimestamp }
+      baseDeps()
     );
 
     expect(res.status).toHaveBeenCalledWith(403);
@@ -63,7 +77,7 @@ describe('handleUnsubscribe', () => {
     await handleUnsubscribe(
       { query: { email, type: 'newsletter', token } },
       res,
-      { db: fakeDb(), secret: SECRET, serverTimestamp }
+      baseDeps()
     );
 
     expect(res.status).toHaveBeenCalledWith(404);
@@ -83,7 +97,7 @@ describe('handleUnsubscribe', () => {
     await handleUnsubscribe(
       { query: { email: 'buyer@example.com', type: 'newsletter', token: ['a', 'b'] } },
       res,
-      { db: fakeDb(), secret: SECRET, serverTimestamp }
+      baseDeps()
     );
 
     expect(res.status).toHaveBeenCalledWith(400);
@@ -104,7 +118,7 @@ describe('handleUnsubscribe', () => {
     await handleUnsubscribe(
       { query: { email: [email], type: 'newsletter', token } },
       res,
-      { db: fakeDb(), secret: SECRET, serverTimestamp }
+      baseDeps()
     );
 
     expect(res.status).toHaveBeenCalledWith(400);
@@ -119,7 +133,7 @@ describe('handleUnsubscribe', () => {
     await handleUnsubscribe(
       { query: { email, type: 'newsletter', token } },
       res,
-      { db, secret: SECRET, serverTimestamp }
+      baseDeps({ db })
     );
 
     expect(db.update).toHaveBeenCalledWith({
@@ -138,9 +152,7 @@ describe('handleUnsubscribe', () => {
     const db = fakeDb({ subscriber: { email, preferences: { newsletter: true, events: true } } });
     const res = fakeRes();
 
-    await handleUnsubscribe({ query: { email, type: 'all', token } }, res, {
-      db, secret: SECRET, serverTimestamp,
-    });
+    await handleUnsubscribe({ query: { email, type: 'all', token } }, res, baseDeps({ db }));
 
     expect(db.update).toHaveBeenCalledWith(expect.objectContaining({
       preferences: { newsletter: false, events: false, orders: true },
@@ -153,9 +165,7 @@ describe('handleUnsubscribe', () => {
     const db = fakeDb({ subscriber: { email, preferences: {} } });
     const res = fakeRes();
 
-    await handleUnsubscribe({ query: { email, type: 'bogus', token } }, res, {
-      db, secret: SECRET, serverTimestamp,
-    });
+    await handleUnsubscribe({ query: { email, type: 'bogus', token } }, res, baseDeps({ db }));
 
     expect(res.status).toHaveBeenCalledWith(400);
   });
@@ -166,10 +176,27 @@ describe('handleUnsubscribe', () => {
     const db = { collection: () => ({ where: () => ({ get: () => Promise.reject(new Error('boom')) }) }) };
     const res = fakeRes();
 
-    await handleUnsubscribe({ query: { email, type: 'newsletter', token } }, res, {
-      db, secret: SECRET, serverTimestamp,
-    });
+    await handleUnsubscribe({ query: { email, type: 'newsletter', token } }, res, baseDeps({ db }));
 
     expect(res.status).toHaveBeenCalledWith(500);
+  });
+
+  // Regression guard: a successful unsubscribe used to log the raw email
+  // address (`Unsubscribed ${email} from ${type}`) -- CL9 violation, and
+  // this endpoint is now actually deployed (wired into index.js for the
+  // welcome email's unsubscribe links), so it will really run in production.
+  it('logs the unsubscribe outcome without the subscriber email address', async () => {
+    const email = 'leak-target@example.com';
+    const token = generateUnsubscribeToken(email, 'newsletter', SECRET);
+    const db = fakeDb({ subscriber: { email, preferences: { newsletter: true } } });
+    const logger = silentLogger();
+    const res = fakeRes();
+
+    await handleUnsubscribe({ query: { email, type: 'newsletter', token } }, res, baseDeps({ db, logger }));
+
+    expect(logger.info).toHaveBeenCalled();
+    for (const call of logger.info.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain('leak-target@example.com');
+    }
   });
 });

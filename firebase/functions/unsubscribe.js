@@ -16,7 +16,7 @@ const unsubscribeSecret = defineSecret("UNSUBSCRIBE_SECRET");
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
  * for why dependencies are passed as parameters.
  */
-async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
+async function handleUnsubscribe(req, res, { db, secret, serverTimestamp, logger }) {
   const { email, type, token } = req.query;
 
   // A repeated query param (e.g. ?email=a@example.com&email=b@example.com)
@@ -83,7 +83,9 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
       unsubscribeType: type
     });
 
-    logger.info(`Unsubscribed ${email} from ${type}`);
+    // Never log the email itself (CL9 -- no PII in logs); the type alone
+    // is enough to debug/monitor this endpoint.
+    logger.info(`Unsubscribe: ${type} preference updated.`);
 
     // Return success page
     res.send(`
@@ -116,14 +118,20 @@ async function handleUnsubscribe(req, res, { db, secret, serverTimestamp }) {
   }
 }
 
+// invoker: 'public' -- clicked directly from an email link, not proxied
+// through the site. This project's domain-restricted-sharing org policy
+// blocks anonymous Cloud Run invocation by default (same reasoning as
+// newsletterSignup.js/confirmNewsletterSignup.js), so every unsubscribe
+// link in the welcome email would 403 without this declared.
 /* v8 ignore start -- thin wiring, same rationale as createCheckoutSession.js
    and orderConfirmation.js's wrappers. */
 exports.unsubscribe = onRequest(
-  { region: "us-west1", secrets: [unsubscribeSecret] },
+  { region: "us-west1", secrets: [unsubscribeSecret], invoker: "public" },
   async (req, res) => handleUnsubscribe(req, res, {
     db: admin.firestore(),
     secret: unsubscribeSecret.value(),
     serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+    logger,
   })
 );
 /* v8 ignore stop */
