@@ -35,6 +35,13 @@ function buildUnsubscribeLinks(email, secret) {
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
  * for why dependencies are passed as parameters.
+ *
+ * eventId is the Firestore events/{eventId} doc ID -- this notifies
+ * subscribers about an event Roze already created via the admin app's
+ * add/edit event screen, mirroring orderShipped.js's orderId pattern,
+ * rather than accepting a freeform eventDetails payload and creating a
+ * second, disconnected event doc (the previous design, which used field
+ * names like date/time/price that don't exist on the real Event model).
  */
 async function handleSendEventNotification(request, {
   db, sendBrevoEmail, apiKey, templates, eventsSender, secret, serverTimestamp, logger,
@@ -43,13 +50,22 @@ async function handleSendEventNotification(request, {
     throw new HttpsError('permission-denied', 'Admin access required');
   }
 
-  const { eventDetails } = request.data || {};
+  const { eventId } = request.data || {};
 
-  if (!eventDetails) {
-    throw new HttpsError('invalid-argument', 'Event details are required');
+  if (!eventId) {
+    throw new HttpsError('invalid-argument', 'Event ID is required');
   }
 
   try {
+    const eventRef = db.collection("events").doc(eventId);
+    const eventDoc = await eventRef.get();
+
+    if (!eventDoc.exists) {
+      throw new HttpsError('not-found', 'Event not found');
+    }
+
+    const event = eventDoc.data();
+
     // Get all subscribers who want event notifications
     const subscribersSnapshot = await db
       .collection("newsletter_signups")
@@ -64,32 +80,7 @@ async function handleSendEventNotification(request, {
     const subscribers = subscribersSnapshot.docs.map(doc => doc.data().email);
     logger.info(`Found ${subscribers.length} subscribers for event notifications`);
 
-    // Save event to Firestore.
-    //
-    // isActive: true makes this doc match the `/events` page's live query
-    // (astro/src/lib/events-live.js), which filters on isActive — without
-    // it, an event created here would silently never appear on the site.
-    //
-    // KNOWN GAP: eventDetails here is caller-supplied and, going by the
-    // EVENT_DATE/EVENT_TIME fields used below for the Brevo email, is
-    // expected to carry legacy `date`/`time` strings, not a Firestore
-    // Timestamp `eventDate` field. astro/src/lib/event-mapping.js requires
-    // a real `eventDate` Timestamp and drops any doc without one, so an
-    // event created through this function still won't appear on the site
-    // even with isActive set. This function has no current callers (see
-    // the Brevo Transactional Emails Session notes) — needs a real design
-    // pass to collect a structured eventDate before it's wired up to
-    // anything, rather than guessing a caller contract that doesn't exist
-    // yet.
-    const eventRef = await db.collection("events").add({
-      ...eventDetails,
-      isActive: true,
-      timestamp: serverTimestamp(),
-      notificationSent: true,
-      recipientCount: subscribers.length
-    });
-
-    logger.info(`Successfully saved event ${eventRef.id} to Firestore.`);
+    let emailsSent = 0;
 
     // Send event notification emails
     if (apiKey && eventsSender && subscribers.length > 0) {
@@ -102,7 +93,7 @@ async function handleSendEventNotification(request, {
           sender: eventsSender,
           to: [{ email: subscriberEmail }],
           templateId: templates.eventNotification,
-          params: eventNotificationEmailParams(eventDetails, subscriberEmail, unsubscribeEvents, unsubscribeAll)
+          params: eventNotificationEmailParams(event, subscriberEmail, unsubscribeEvents, unsubscribeAll)
         });
       });
 
@@ -122,17 +113,26 @@ async function handleSendEventNotification(request, {
         });
       }
 
-      const successfulSends = responses.filter(result => result.status === 'fulfilled').length;
-      logger.info(`Successfully sent event notification to ${successfulSends}/${subscribers.length} subscribers`);
+      emailsSent = responses.filter(result => result.status === 'fulfilled').length;
+      logger.info(`Successfully sent event notification to ${emailsSent}/${subscribers.length} subscribers`);
     } else {
       logger.warn("Brevo API key or events sender not configured. Skipping email.");
     }
 
+    // Informational only -- deliberately NOT an idempotency guard like
+    // orderShipped.js's claim transaction. Roze may legitimately re-notify
+    // subscribers about the same event (e.g. a reminder closer to the
+    // date), so a prior lastNotifiedAt must never block a later send.
+    await eventRef.update({
+      lastNotifiedAt: serverTimestamp(),
+      lastNotificationRecipientCount: subscribers.length,
+    });
+
     return {
       success: true,
       message: "Event notification sent!",
-      eventId: eventRef.id,
-      emailsSent: subscribers.length
+      eventId,
+      emailsSent,
     };
 
   } catch (error) {

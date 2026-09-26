@@ -4,14 +4,19 @@
   Same table-based/inline-style approach as order-confirmation.html — see
   that file's header comment for the full compatibility rationale.
 
-  Params (see firebase/functions/eventNotification.js):
+  Params (see firebase/functions/lib/emailPayload.js's
+  eventNotificationEmailParams, built from the REAL events/{eventId} doc --
+  not a caller-supplied freeform payload):
     EVENT_TITLE, EVENT_DATE, EVENT_TIME, EVENT_LOCATION, EVENT_DESCRIPTION,
-    EVENT_PRICE, REGISTRATION_URL, UNSUBSCRIBE_EVENTS, UNSUBSCRIBE_ALL
+    EVENT_LINK, UNSUBSCRIBE_EVENTS, UNSUBSCRIBE_ALL
 
-  REGISTRATION_URL is shown as plain text, not wrapped in <a href="">,
-  because plenty of "in the wild" events (a market stall, an open house)
-  have no registration link at all (eventDetails.registrationUrl || '') —
-  an empty-href button would be worse than a line that's just blank.
+  No EVENT_PRICE -- events don't have a price/cover-charge concept on the
+  real Event model, so this was dropped rather than left permanently blank.
+
+  EVENT_LINK is shown as plain text, not wrapped in <a href="">, because
+  plenty of "in the wild" events (a market stall, an open house) have no
+  link at all -- an empty-href button would be worse than a line that's
+  just blank.
 
   UNSUBSCRIBE_EVENTS / UNSUBSCRIBE_ALL are always populated by the sending
   function (real HMAC-signed URLs, never empty), so those ARE real <a> tags —
@@ -39,8 +44,8 @@
         <!-- Body -->
         <tr>
           <td style="padding:24px 24px 8px 24px; color:#3d081b; font-size:16px; line-height:1.5;">
-            <p style="margin:0 0 16px 0; font-size:20px; font-weight:700;">{{ params.EVENT_TITLE }}</p>
-            <p style="margin:0 0 16px 0;">Come find us in the wild!</p>
+            <p style="margin:0 0 16px 0; font-size:20px; font-weight:700;">{{ params.EVENT_TITLE }} 🌵</p>
+            <p style="margin:0 0 16px 0;">Come find us in the wild! We'll have a table full of fresh-off-the-wheel pieces, and probably some questionable puns.</p>
           </td>
         </tr>
 
@@ -52,8 +57,7 @@
                 <td style="padding:20px; color:#3d081b; font-size:15px; line-height:1.8;">
                   📅 {{ params.EVENT_DATE }}<br>
                   🕒 {{ params.EVENT_TIME }}<br>
-                  📍 {{ params.EVENT_LOCATION }}<br>
-                  💵 {{ params.EVENT_PRICE }}
+                  📍 {{ params.EVENT_LOCATION }}
                 </td>
               </tr>
             </table>
@@ -64,13 +68,14 @@
         <tr>
           <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
             <p style="margin:0 0 16px 0;">{{ params.EVENT_DESCRIPTION }}</p>
-            <p style="margin:0;">More info / RSVP: {{ params.REGISTRATION_URL }}</p>
+            <p style="margin:0;">More info: {{ params.EVENT_LINK }}</p>
           </td>
         </tr>
 
         <!-- Sign-off -->
         <tr>
           <td style="padding:0 24px 32px 24px; color:#3d081b; font-size:15px;">
+            <p style="margin:0;">Hope to see you there —</p>
             <p style="margin:0;">~ myfriendroze</p>
           </td>
         </tr>
