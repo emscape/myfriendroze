@@ -50,42 +50,65 @@ async function handleSendOrderShippedNotification(request, {
 
   try {
     const orderRef = db.collection("orders").doc(orderId);
-    const orderDoc = await orderRef.get();
 
-    if (!orderDoc.exists) {
-      throw new HttpsError('not-found', 'Order not found');
-    }
+    // Atomically claim the order before sending anything: two concurrent
+    // invocations (e.g. an admin double-click, or a client retry racing the
+    // original attempt) must not both observe the notification as unsent
+    // and both email the customer. A Firestore transaction guarantees only
+    // one caller's write wins for a given document version -- the loser's
+    // transaction is retried by the SDK and its re-read sees
+    // shippedNotificationSentAt already set (found in PR #46 review).
+    //
+    // The claim-write happens here, before the email is actually sent,
+    // trading away automatic retry-ability on a Brevo failure -- the order
+    // stays marked shipped even if the send below fails. That's the same
+    // tradeoff stripeWebhook.js already accepts for the order-confirmation
+    // email (marks the order handled before emailing, no auto-retry if
+    // sendConfirmationEmail fails): duplicate customer-facing emails from a
+    // race are worse than a single unretried failure.
+    const claim = await db.runTransaction(async (tx) => {
+      const orderDoc = await tx.get(orderRef);
 
-    const order = orderDoc.data();
+      if (!orderDoc.exists) {
+        throw new HttpsError('not-found', 'Order not found');
+      }
 
-    // Idempotency guard: a client can legitimately retry this callable
-    // (e.g. after a timeout with an ambiguous response), and repeat
-    // invocations for an already-notified order must not resend the
-    // customer's shipping email (found in PR #46 review). Keyed on this
-    // marker rather than status === 'shipped' alone so a request that
-    // updated status but failed before the email went out (see below)
-    // still gets a genuine retry.
-    if (order.shippedNotificationSentAt) {
+      const order = orderDoc.data();
+
+      if (order.shippedNotificationSentAt) {
+        return { alreadyNotified: true, order };
+      }
+
+      const email = order.customer?.email;
+      if (!email) {
+        throw new HttpsError('failed-precondition', 'Order has no customer email on file');
+      }
+
+      tx.update(orderRef, {
+        status: "shipped",
+        shippingDetails: shippingDetails,
+        shippedAt: serverTimestamp(),
+        shippedNotificationSentAt: serverTimestamp(),
+      });
+
+      return { alreadyNotified: false, order, email };
+    });
+
+    if (claim.alreadyNotified) {
       logger.info(`Order ${orderId} shipping notification already sent; skipping duplicate.`);
       return {
         success: true,
         message: "Order was already marked shipped; no duplicate notification sent.",
         orderId,
-        trackingNumber: order.shippingDetails?.trackingNumber,
+        trackingNumber: claim.order.shippingDetails?.trackingNumber,
       };
     }
 
-    const email = order.customer?.email;
+    logger.info(`Updated order ${orderId} status to shipped`);
 
-    if (!email) {
-      throw new HttpsError('failed-precondition', 'Order has no customer email on file');
-    }
+    const { order, email } = claim;
 
-    // Send the email before writing to Firestore (not after): if
-    // sendBrevoEmail throws, the order is left untouched -- still 'paid',
-    // not marked shipped -- so a client retry legitimately re-attempts the
-    // send instead of finding a "shipped" order it can't safely act on
-    // (found in PR #46 review).
+    // Send shipping notification email
     let emailSent = false;
     if (apiKey && ordersSender) {
       const orderDetails = {
@@ -113,24 +136,11 @@ async function handleSendOrderShippedNotification(request, {
       logger.warn("Brevo API key or orders sender not configured. Skipping email.");
     }
 
-    await orderRef.update({
-      status: "shipped",
-      shippingDetails: shippingDetails,
-      shippedAt: serverTimestamp(),
-      // Only set once the email has actually gone out -- its presence is
-      // exactly the idempotency signal checked above. Omitted (not written
-      // false/null) when Brevo isn't configured, so a later retry once it
-      // is configured still attempts the real send.
-      ...(emailSent && { shippedNotificationSentAt: serverTimestamp() }),
-    });
-    logger.info(`Updated order ${orderId} status to shipped`);
-
     return {
       success: true,
-      // The order status update above always happens if we got this far
-      // (an unfound order or Firestore failure already returned/threw), so
-      // success itself stays true either way -- but the message must not
-      // claim an email went out when it didn't.
+      // The claim above already committed status: "shipped" regardless of
+      // what happens next, so success stays true either way -- but the
+      // message must not claim an email went out when it didn't.
       message: emailSent
         ? "Shipping notification sent!"
         : "Order marked as shipped, but no notification email was sent (Brevo not configured).",

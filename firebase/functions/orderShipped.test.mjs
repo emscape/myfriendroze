@@ -38,7 +38,7 @@ function realOrder(overrides = {}) {
 }
 
 function fakeDb({ order = realOrder() } = {}) {
-  const update = vi.fn().mockResolvedValue(undefined);
+  const update = vi.fn();
   const get = vi.fn().mockResolvedValue({
     exists: order !== null,
     data: () => order,
@@ -46,11 +46,23 @@ function fakeDb({ order = realOrder() } = {}) {
   // doc() records the id it's called with, so a test can assert the lookup
   // actually targets the right order (Copilot's PR #46 review finding: the
   // original fake ignored its argument, so a wrong-ID bug couldn't fail it).
-  const doc = vi.fn((id) => ({ get, update }));
+  const doc = vi.fn((id) => ({ id }));
+  // Routes through runTransaction, mirroring stripeWebhook.test.mjs's
+  // fakeDb -- the claim-and-write must happen atomically (tx.get + tx.update
+  // in one transaction), not as two separate calls, so a real Firestore
+  // transaction retry can't let two concurrent invocations both observe the
+  // notification as unsent (found in PR #46 review). tx.update's ref
+  // argument is dropped before recording, so existing `toHaveBeenCalledWith`
+  // assertions on the write payload alone still read naturally.
+  const runTransaction = vi.fn((fn) => fn({
+    get,
+    update: (ref, data) => update(data),
+  }));
   return {
     update,
     get,
     doc,
+    runTransaction,
     collection: (name) => {
       if (name !== 'orders') throw new Error(`Unexpected collection requested in test: ${name}`);
       return { doc };
@@ -131,6 +143,11 @@ describe('handleSendOrderShippedNotification', () => {
     const result = await handleSendOrderShippedNotification(baseRequest(), deps);
 
     expect(deps.db.doc).toHaveBeenCalledWith('cs_test_abc123');
+    // The claim-and-write must go through a real Firestore transaction, not
+    // a plain get()-then-update() pair, so the atomicity guarantee that
+    // prevents two concurrent invocations from both sending is actually
+    // backed by Firestore itself (found in PR #46 review).
+    expect(deps.db.runTransaction).toHaveBeenCalledTimes(1);
     expect(deps.db.get).toHaveBeenCalledTimes(1);
     expect(deps.db.update).toHaveBeenCalledWith({
       status: 'shipped',
@@ -195,7 +212,13 @@ describe('handleSendOrderShippedNotification', () => {
     const result = await handleSendOrderShippedNotification(baseRequest(), deps);
 
     expect(deps.sendBrevoEmail).not.toHaveBeenCalled();
-    expect(deps.db.update).toHaveBeenCalled();
+    // The claim (status/shippedAt/shippedNotificationSentAt) is written
+    // atomically before the email is even attempted -- see the "wraps a
+    // failed Brevo send" test below for why the marker is set unconditionally
+    // here rather than only on a confirmed send.
+    expect(deps.db.update).toHaveBeenCalledWith(expect.objectContaining({
+      shippedNotificationSentAt: 'SERVER_TIMESTAMP',
+    }));
     expect(result).toEqual({
       success: true,
       message: 'Order marked as shipped, but no notification email was sent (Brevo not configured).',
@@ -204,19 +227,24 @@ describe('handleSendOrderShippedNotification', () => {
     });
   });
 
-  // Regression guard: the Firestore update used to happen before the email
-  // send, so a Brevo failure left the order marked "shipped" (with no
-  // notification actually sent) while still returning an error -- a client
-  // retry then found the order already 'shipped' with no way to tell the
-  // notification hadn't gone out. Sending first means a Brevo failure
-  // leaves the order untouched and safely retryable (found in PR #46 review).
-  it('wraps a failed Brevo send as a generic error, without marking the order shipped', async () => {
+  // The order is claimed (marked shipped) atomically *before* the email is
+  // sent -- trading away automatic retry-ability on a Brevo failure in
+  // exchange for concurrency safety (found in PR #46 review, second round):
+  // the alternative -- checking-then-sending-then-writing -- leaves a gap
+  // where two concurrent invocations (e.g. an admin double-click) could both
+  // observe the notification as unsent and both email the customer. This is
+  // the same tradeoff stripeWebhook.js already accepts for the order-
+  // confirmation email: mark handled first, no auto-retry if the send fails.
+  it('still marks the order shipped even when the Brevo send fails, matching stripeWebhook.js\'s precedent', async () => {
     const deps = baseDeps({ sendBrevoEmail: vi.fn().mockRejectedValue(new Error('Brevo API request failed with status 400')) });
 
     await expect(handleSendOrderShippedNotification(baseRequest(), deps)).rejects.toThrow(
       'Failed to send shipping notification'
     );
-    expect(deps.db.update).not.toHaveBeenCalled();
+    expect(deps.db.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'shipped',
+      shippedNotificationSentAt: 'SERVER_TIMESTAMP',
+    }));
   });
 
   // Regression guard: calling this callable twice for the same order (e.g.
@@ -245,7 +273,8 @@ describe('handleSendOrderShippedNotification', () => {
 
   it('wraps an unexpected Firestore failure as a generic error', async () => {
     const db = {
-      collection: () => ({ doc: () => ({ get: () => Promise.reject(new Error('firestore down')) }) }),
+      collection: () => ({ doc: () => ({}) }),
+      runTransaction: () => Promise.reject(new Error('firestore down')),
     };
     const deps = baseDeps({ db });
 
