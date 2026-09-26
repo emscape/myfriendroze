@@ -2,9 +2,10 @@
 // an authenticated Firebase user (request.auth), but this site never had
 // customer accounts, so it could never actually be called by a real
 // customer. This is a plain HTTPS function, proxied through Astro's
-// api/checkout.js the same way api/shipping.js already proxies to
-// getShippingEstimate — no CORS handling needed since the browser never
-// calls this directly.
+// api/checkout.js -- no CORS handling needed since the browser never calls
+// this directly. Unlike api/checkout.js, api/shipping.js does NOT proxy to
+// a Cloud Function: it computes USPS Ground Advantage rates itself, in
+// Astro's own SSR runtime (see astro/src/lib/usps-rate-fetcher.js).
 
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');

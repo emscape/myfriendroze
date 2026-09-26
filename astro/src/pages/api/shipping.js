@@ -55,10 +55,6 @@ export async function POST({ request }) {
     // Get rate from dynamic table
     const totalCost = await getDynamicRate(weightNum, zone);
 
-    // Get base rate (1lb rate for the zone)
-    const baseRate = await getDynamicRate(1, zone);
-    const weightCharge = Math.max(0, totalCost - baseRate);
-
     // Get delivery estimate
     const deliveryDays = getDeliveryDays(zone);
 
@@ -73,8 +69,6 @@ export async function POST({ request }) {
           originZip: ORIGIN_ZIP,
           weight: weightNum,
           zone,
-          baseRate: parseFloat(baseRate.toFixed(2)),
-          weightCharge: parseFloat(weightCharge.toFixed(2)),
           totalCost: parseFloat(totalCost.toFixed(2)),
           carrier: 'USPS Ground Advantage',
           estimatedDays: `${deliveryDays} business days`,

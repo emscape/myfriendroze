@@ -1,8 +1,8 @@
 // USPS Zone Lookup
 // Zones are based on distance from origin zip code
-// This table is for origin: 90210 (Los Angeles, CA)
+// This table is for origin: 90065 (Los Angeles, CA)
 
-export const ORIGIN_ZIP = '90210';
+export const ORIGIN_ZIP = '90065';
 
 // Zone mapping based on 3-digit zip code prefix
 // Source: USPS Zone Chart for SCF 900-908
@@ -151,7 +151,7 @@ const ZONE_MAP = {
 };
 
 /**
- * Get USPS zone for a destination zip code (from origin 90210)
+ * Get USPS zone for a destination zip code (from origin 90065)
  * @param {string} destZip - Destination 5-digit zip code
  * @returns {number} - Zone (1-9)
  */
