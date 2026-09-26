@@ -77,7 +77,14 @@ async function handleStripeWebhook(
 
   const alreadyHandled = await db.runTransaction(async (tx) => {
     const doc = await tx.get(orderRef);
-    if (doc.exists && doc.data().status === 'paid') {
+    // doc.exists alone, not status === 'paid': this doc is only ever
+    // created once, right here, keyed by session ID -- any existing doc
+    // means this checkout was already processed, whatever its current
+    // status. orderShipped.js later transitions status to 'shipped'; a
+    // duplicate webhook delivery arriving after that must not resurrect
+    // the order back to 'paid' and wipe its shippingDetails/shippedAt
+    // (found in PR #46 review).
+    if (doc.exists) {
       return true;
     }
     tx.set(orderRef, {
