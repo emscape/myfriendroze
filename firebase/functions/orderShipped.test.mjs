@@ -185,14 +185,22 @@ describe('handleSendOrderShippedNotification', () => {
     );
   });
 
-  it('skips sending email (but still updates the order) when Brevo is not configured', async () => {
+  // Regression guard: the message used to unconditionally say "Shipping
+  // notification sent!" even here, where no email was actually sent
+  // (found in PR #46 review as a "misleading delivery success" report).
+  it('skips sending email (but still updates the order) when Brevo is not configured, and says so', async () => {
     const deps = baseDeps({ apiKey: null });
 
     const result = await handleSendOrderShippedNotification(baseRequest(), deps);
 
     expect(deps.sendBrevoEmail).not.toHaveBeenCalled();
     expect(deps.db.update).toHaveBeenCalled();
-    expect(result.success).toBe(true);
+    expect(result).toEqual({
+      success: true,
+      message: 'Order marked as shipped, but no notification email was sent (Brevo not configured).',
+      orderId: 'cs_test_abc123',
+      trackingNumber: 'TRACK123',
+    });
   });
 
   it('wraps a failed Brevo send as a generic error', async () => {

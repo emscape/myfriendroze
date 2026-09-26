@@ -2,7 +2,6 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
-const functions = require("firebase-functions");
 const { orderShippedEmailParams, formatAddressRaw } = require("./lib/emailPayload");
 
 // Define secrets
@@ -72,6 +71,7 @@ async function handleSendOrderShippedNotification(request, {
     logger.info(`Updated order ${orderId} status to shipped`);
 
     // Send shipping notification email
+    let emailSent = false;
     if (apiKey && ordersSender) {
       const orderDetails = {
         orderNumber: order.stripeSessionId,
@@ -89,6 +89,7 @@ async function handleSendOrderShippedNotification(request, {
       };
 
       await sendBrevoEmail(payload);
+      emailSent = true;
 
       // Logs the order id, never the customer's raw email address -- same
       // PII-logging fix as eventNotification.js.
@@ -99,7 +100,13 @@ async function handleSendOrderShippedNotification(request, {
 
     return {
       success: true,
-      message: "Shipping notification sent!",
+      // The order status update above always happens if we got this far
+      // (an unfound order or Firestore failure already returned/threw), so
+      // success itself stays true either way -- but the message must not
+      // claim an email went out when it didn't.
+      message: emailSent
+        ? "Shipping notification sent!"
+        : "Order marked as shipped, but no notification email was sent (Brevo not configured).",
       orderId,
       trackingNumber: shippingDetails.trackingNumber
     };
@@ -122,7 +129,10 @@ exports.sendOrderShippedNotification = onCall({
   const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || functions.config().email?.orders || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}');
+  // functions.config() (Firebase Functions v1 config API) is retired --
+  // its backing Cloud Runtime Configuration API shut down 2025-12-31 -- so
+  // this only ever falls through to the JSON literal default now.
+  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}');
 
   return handleSendOrderShippedNotification(request, {
     db: admin.firestore(),
