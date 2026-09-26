@@ -42,7 +42,7 @@ module.exports = defineConfig({
   test: {
     coverage: {
       provider: 'v8',
-      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js', 'orderConfirmation.js', 'unsubscribe.js', 'eventNotification.js', 'newsletterSignup.js', 'confirmNewsletterSignup.js'],
+      include: ['lib/**', 'createCheckoutSession.js', 'stripeWebhook.js', 'orderConfirmation.js', 'unsubscribe.js', 'eventNotification.js', 'newsletterSignup.js', 'confirmNewsletterSignup.js', 'orderShipped.js'],
       thresholds: {
         lines: 85,
         functions: 85,

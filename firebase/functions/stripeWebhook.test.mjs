@@ -192,4 +192,40 @@ describe('handleStripeWebhook', () => {
     expect(db.state.written).toBeNull(); // no second write
     expect(sendConfirmationEmail).not.toHaveBeenCalled();
   });
+
+  // Found in PR #46 review: orderShipped.js transitions an order's status
+  // to 'shipped' after this webhook creates it as 'paid'. The old idempotency
+  // check (status === 'paid') would treat a duplicate delivery arriving
+  // *after* shipping as unhandled, tx.set()-ing the whole document back to
+  // fresh orderData -- wiping shippingDetails/shippedAt and resetting status
+  // to 'paid' -- and sending a second confirmation email. Any existing order
+  // doc for this session ID, regardless of its current status, means this
+  // checkout was already processed and must never be overwritten.
+  it('does not resurrect an already-shipped order on a duplicate webhook delivery', async () => {
+    const event = checkoutCompletedEvent();
+    const req = signedRequest(event);
+    const res = fakeRes();
+    const db = fakeDb({
+      existingOrder: {
+        status: 'shipped',
+        stripeSessionId: 'cs_test_abc123',
+        shippingDetails: { trackingNumber: 'TRACK123' },
+        shippedAt: 'already-shipped-timestamp',
+      },
+    });
+    const stripeClient = fakeStripeClient();
+    const sendConfirmationEmail = vi.fn();
+
+    await handleStripeWebhook(req, res, {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail,
+      serverTimestamp: () => 'x',
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.state.written).toBeNull(); // shipped order must not be overwritten
+    expect(sendConfirmationEmail).not.toHaveBeenCalled();
+  });
 });
