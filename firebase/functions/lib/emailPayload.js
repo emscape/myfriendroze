@@ -4,6 +4,7 @@
 // lib/ modules.
 
 const { escapeHtml } = require('./escapeHtml');
+const { formatEventDateTime } = require('./eventDateFormat');
 
 function joinAddressParts(address, esc) {
   if (!address) return '';
@@ -85,20 +86,26 @@ function orderShippedEmailParams(email, orderDetails, shippingDetails) {
   };
 }
 
-// eventDetails is caller-supplied (onCall), same concern as
-// orderShippedEmailParams above. subscriberEmail and the unsubscribe URLs
-// come from Firestore/HMAC generation, not free text, so they're passed
-// through unescaped.
-function eventNotificationEmailParams(eventDetails, subscriberEmail, unsubscribeEvents, unsubscribeAll) {
+// `event` is the real Firestore events/{eventId} doc (see
+// eventNotification.js) -- title/description/location/link are Roze's own
+// free-text input via the admin app, same trust boundary as
+// orderShippedEmailParams above, so every free-text field still gets
+// escaped here before it's interpolated unescaped into the Brevo template
+// body. eventDate/endDate are Firestore Timestamps; formatEventDateTime's
+// output is generated purely from Intl formatters (no user-controlled
+// characters can pass through), so it needs no separate escaping.
+// subscriberEmail and the unsubscribe URLs come from Firestore/HMAC
+// generation, not free text, so they're passed through unescaped too.
+function eventNotificationEmailParams(event, subscriberEmail, unsubscribeEvents, unsubscribeAll) {
+  const { dateText, timeText } = formatEventDateTime(event.eventDate, event.endDate);
   return {
     EMAIL: subscriberEmail,
-    EVENT_TITLE: esc(eventDetails.title) || 'Special Event',
-    EVENT_DATE: esc(eventDetails.date) || '',
-    EVENT_TIME: esc(eventDetails.time) || '',
-    EVENT_LOCATION: esc(eventDetails.location) || '',
-    EVENT_DESCRIPTION: esc(eventDetails.description) || '',
-    EVENT_PRICE: esc(eventDetails.price) || '',
-    REGISTRATION_URL: esc(eventDetails.registrationUrl) || '',
+    EVENT_TITLE: esc(event.title) || 'Special Event',
+    EVENT_DATE: dateText,
+    EVENT_TIME: timeText,
+    EVENT_LOCATION: esc(event.location) || '',
+    EVENT_DESCRIPTION: esc(event.description) || '',
+    EVENT_LINK: esc(event.link) || '',
     UNSUBSCRIBE_EVENTS: unsubscribeEvents,
     UNSUBSCRIBE_ALL: unsubscribeAll,
   };
