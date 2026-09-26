@@ -70,6 +70,60 @@ function fakeDb({ order = realOrder() } = {}) {
   };
 }
 
+// Unlike fakeDb above (which just runs the transaction callback once,
+// unconditionally accepting whatever it writes), this models Firestore's
+// actual optimistic-concurrency behavior: each attempt reads a snapshot of
+// the shared document version, and a write only commits if nothing else
+// committed since that snapshot was read -- otherwise the whole callback is
+// re-run against a fresh read, exactly like a real contended transaction.
+// Needed to prove the concurrency property itself (found in PR #46 review):
+// a fake with no shared state or retry behavior can't fail even if the
+// production code isn't actually relying on transactional atomicity.
+function fakeConcurrentDb({ order = realOrder() } = {}) {
+  let committed = order;
+  let version = 0;
+  const doc = vi.fn((id) => ({ id }));
+
+  const runTransaction = vi.fn(async (fn) => {
+    for (;;) {
+      const readVersion = version;
+      const snapshot = committed;
+      let pendingUpdate = null;
+
+      const tx = {
+        get: async () => ({
+          exists: snapshot !== null,
+          data: () => snapshot,
+        }),
+        update: (ref, data) => {
+          pendingUpdate = data;
+        },
+      };
+
+      const result = await fn(tx);
+
+      if (pendingUpdate) {
+        if (version !== readVersion) {
+          continue; // Lost the race -- retry with a fresh read.
+        }
+        committed = { ...snapshot, ...pendingUpdate };
+        version += 1;
+      }
+
+      return result;
+    }
+  });
+
+  return {
+    doc,
+    runTransaction,
+    collection: (name) => {
+      if (name !== 'orders') throw new Error(`Unexpected collection requested in test: ${name}`);
+      return { doc };
+    },
+  };
+}
+
 const shippingDetails = { trackingNumber: 'TRACK123', carrier: 'USPS', trackingUrl: 'https://example.com/t', estimatedDelivery: '2026-10-01' };
 
 const baseRequest = (overrides = {}) => ({
@@ -269,6 +323,31 @@ describe('handleSendOrderShippedNotification', () => {
       orderId: 'cs_test_abc123',
       trackingNumber: 'ORIGINAL-TRACK',
     });
+  });
+
+  // Proves the concurrency property itself, not just that a retry after
+  // completion is idempotent: two invocations start before either has
+  // committed, sharing one fakeConcurrentDb (which models Firestore's real
+  // optimistic-concurrency retry, unlike fakeDb's single unconditional
+  // pass-through) and one sendBrevoEmail spy. Exactly one must win the
+  // claim and send; the other must lose the race, retry, observe the
+  // winner's committed marker, and return "already notified" without a
+  // second send (found in PR #46 review).
+  it('is safe under truly concurrent invocations, not just sequential retries', async () => {
+    const db = fakeConcurrentDb();
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+
+    const [resultA, resultB] = await Promise.all([
+      handleSendOrderShippedNotification(baseRequest(), baseDeps({ db, sendBrevoEmail })),
+      handleSendOrderShippedNotification(baseRequest(), baseDeps({ db, sendBrevoEmail })),
+    ]);
+
+    expect(sendBrevoEmail).toHaveBeenCalledTimes(1);
+    const messages = [resultA.message, resultB.message].sort();
+    expect(messages).toEqual([
+      'Order was already marked shipped; no duplicate notification sent.',
+      'Shipping notification sent!',
+    ]);
   });
 
   it('wraps an unexpected Firestore failure as a generic error', async () => {
