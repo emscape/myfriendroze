@@ -130,4 +130,5 @@ module.exports = {
   eventNotificationEmailParams,
   newsletterConfirmationEmailParams,
   newsletterWelcomeEmailParams,
+  formatAddress,
 };

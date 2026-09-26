@@ -10,32 +10,56 @@ function silentLogger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 }
 
-function fakeDb({ orderFound = true } = {}) {
+// Matches the real shape lib/orderFromSession.js's sessionToOrderData
+// produces and stripeWebhook.js writes to Firestore, doc ID = Stripe
+// Checkout Session ID -- not the {email, orderDetails.orderNumber} shape
+// this file's query used to assume (see Copilot's PR #46 review finding).
+function realOrder(overrides = {}) {
+  return {
+    status: 'paid',
+    stripeSessionId: 'cs_test_abc123',
+    stripePaymentIntentId: 'pi_test_xyz',
+    customer: { email: 'customer@example.com', name: 'Jane Doe', phone: null },
+    items: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
+    total: 70,
+    currency: 'usd',
+    shippingAddress: {
+      name: 'Jane Doe',
+      line1: '123 Main St',
+      line2: null,
+      city: 'Springfield',
+      state: 'CA',
+      postalCode: '90210',
+      country: 'US',
+    },
+    notes: null,
+    ...overrides,
+  };
+}
+
+function fakeDb({ order = realOrder() } = {}) {
   const update = vi.fn().mockResolvedValue(undefined);
+  const get = vi.fn().mockResolvedValue({
+    exists: order !== null,
+    data: () => order,
+  });
   return {
     update,
+    get,
     collection: (name) => {
       if (name !== 'orders') throw new Error(`Unexpected collection requested in test: ${name}`);
       return {
-        where: () => ({
-          where: () => ({
-            get: () => Promise.resolve({
-              empty: !orderFound,
-              docs: orderFound ? [{ ref: { update } }] : [],
-            }),
-          }),
-        }),
+        doc: () => ({ get, update }),
       };
     },
   };
 }
 
-const orderDetails = { orderNumber: 'ORD-100', customerName: 'Jane Doe', shippingAddress: '123 Main St' };
 const shippingDetails = { trackingNumber: 'TRACK123', carrier: 'USPS', trackingUrl: 'https://example.com/t', estimatedDelivery: '2026-10-01' };
 
 const baseRequest = (overrides = {}) => ({
   auth: { token: { email: ADMIN_EMAIL } },
-  data: { email: 'customer@example.com', orderDetails, shippingDetails },
+  data: { orderId: 'cs_test_abc123', shippingDetails },
   ...overrides,
 });
 
@@ -44,7 +68,7 @@ const baseDeps = (overrides = {}) => ({
   sendBrevoEmail: vi.fn().mockResolvedValue(undefined),
   apiKey: 'brevo-key',
   templates: { orderShipped: 'tmpl-shipped' },
-  ordersSender: { email: 'orders@myfriendroze.com', name: 'MyFriendRoze Orders' },
+  ordersSender: { email: 'orders@myfriendroze.com', name: 'myfriendroze Orders' },
   serverTimestamp: () => 'SERVER_TIMESTAMP',
   logger: silentLogger(),
   ...overrides,
@@ -53,10 +77,7 @@ const baseDeps = (overrides = {}) => ({
 describe('handleSendOrderShippedNotification', () => {
   it('rejects unauthenticated requests', async () => {
     await expect(
-      handleSendOrderShippedNotification(
-        { auth: null, data: { email: 'customer@example.com', orderDetails, shippingDetails } },
-        baseDeps()
-      )
+      handleSendOrderShippedNotification({ auth: null, data: { orderId: 'cs_test_abc123', shippingDetails } }, baseDeps())
     ).rejects.toThrow(HttpsError);
   });
 
@@ -69,38 +90,38 @@ describe('handleSendOrderShippedNotification', () => {
     ).rejects.toThrow(HttpsError);
   });
 
-  it('rejects a request missing an email', async () => {
+  it('rejects a request missing an orderId', async () => {
     await expect(
-      handleSendOrderShippedNotification(baseRequest({ data: { orderDetails, shippingDetails } }), baseDeps())
-    ).rejects.toThrow('Email, order details, and shipping details are required');
-  });
-
-  it('rejects a request missing orderDetails', async () => {
-    await expect(
-      handleSendOrderShippedNotification(baseRequest({ data: { email: 'a@example.com', shippingDetails } }), baseDeps())
-    ).rejects.toThrow('Email, order details, and shipping details are required');
+      handleSendOrderShippedNotification(baseRequest({ data: { shippingDetails } }), baseDeps())
+    ).rejects.toThrow('Order ID and shipping details are required');
   });
 
   it('rejects a request missing shippingDetails', async () => {
     await expect(
-      handleSendOrderShippedNotification(baseRequest({ data: { email: 'a@example.com', orderDetails } }), baseDeps())
-    ).rejects.toThrow('Email, order details, and shipping details are required');
+      handleSendOrderShippedNotification(baseRequest({ data: { orderId: 'cs_test_abc123' } }), baseDeps())
+    ).rejects.toThrow('Order ID and shipping details are required');
   });
 
-  it('rejects an invalid email address', async () => {
-    await expect(
-      handleSendOrderShippedNotification(
-        baseRequest({ data: { email: 'not-an-email', orderDetails, shippingDetails } }),
-        baseDeps()
-      )
-    ).rejects.toThrow('Valid email address required');
+  it('rejects with not-found when no order exists for the given orderId', async () => {
+    const deps = baseDeps({ db: fakeDb({ order: null }) });
+
+    await expect(handleSendOrderShippedNotification(baseRequest(), deps)).rejects.toThrow('Order not found');
   });
 
-  it('updates the matching order to shipped and sends the notification email', async () => {
+  it('rejects with failed-precondition when the order has no customer email on file', async () => {
+    const deps = baseDeps({ db: fakeDb({ order: realOrder({ customer: { email: null, name: 'Jane Doe' } }) }) });
+
+    await expect(handleSendOrderShippedNotification(baseRequest(), deps)).rejects.toThrow(
+      'Order has no customer email on file'
+    );
+  });
+
+  it('updates the order (looked up by Firestore doc ID) to shipped and sends the notification email', async () => {
     const deps = baseDeps();
 
     const result = await handleSendOrderShippedNotification(baseRequest(), deps);
 
+    expect(deps.db.get).toHaveBeenCalledTimes(1);
     expect(deps.db.update).toHaveBeenCalledWith({
       status: 'shipped',
       shippingDetails,
@@ -110,23 +131,19 @@ describe('handleSendOrderShippedNotification', () => {
     const payload = deps.sendBrevoEmail.mock.calls[0][0];
     expect(payload.to).toEqual([{ email: 'customer@example.com' }]);
     expect(payload.templateId).toBe('tmpl-shipped');
+    // Derived from the real order doc, not caller-supplied free text:
+    // stripeSessionId doubles as the order number shown to the customer,
+    // same convention orderDataToConfirmationEmailParams already uses.
+    expect(payload.params.ORDER_NUMBER).toBe('cs_test_abc123');
+    expect(payload.params.CUSTOMER_NAME).toBe('Jane Doe');
+    expect(payload.params.SHIPPING_ADDRESS).toBe('123 Main St, Springfield, CA 90210, US');
     expect(payload.params.TRACKING_NUMBER).toBe('TRACK123');
     expect(result).toEqual({
       success: true,
       message: 'Shipping notification sent!',
-      orderNumber: 'ORD-100',
+      orderId: 'cs_test_abc123',
       trackingNumber: 'TRACK123',
     });
-  });
-
-  it('still sends the email when no matching order is found in Firestore', async () => {
-    const deps = baseDeps({ db: fakeDb({ orderFound: false }) });
-
-    const result = await handleSendOrderShippedNotification(baseRequest(), deps);
-
-    expect(deps.db.update).not.toHaveBeenCalled();
-    expect(deps.sendBrevoEmail).toHaveBeenCalledTimes(1);
-    expect(result.success).toBe(true);
   });
 
   it('skips sending email (but still updates the order) when Brevo is not configured', async () => {
@@ -149,7 +166,7 @@ describe('handleSendOrderShippedNotification', () => {
 
   it('wraps an unexpected Firestore failure as a generic error', async () => {
     const db = {
-      collection: () => ({ where: () => ({ where: () => ({ get: () => Promise.reject(new Error('firestore down')) }) }) }),
+      collection: () => ({ doc: () => ({ get: () => Promise.reject(new Error('firestore down')) }) }),
     };
     const deps = baseDeps({ db });
 
@@ -161,7 +178,7 @@ describe('handleSendOrderShippedNotification', () => {
   // Regression guard for the PII-logging finding (same class as
   // eventNotification.js's fix): a successful send used to log
   // `Successfully sent shipping notification to ${email}`.
-  it('logs a successful send by order number, never by the customer\'s email address', async () => {
+  it('logs a successful send by order id, never by the customer\'s email address', async () => {
     const logger = silentLogger();
     const deps = baseDeps({ logger });
 
@@ -170,6 +187,6 @@ describe('handleSendOrderShippedNotification', () => {
     for (const call of logger.info.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('customer@example.com');
     }
-    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('ORD-100'));
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('cs_test_abc123'));
   });
 });

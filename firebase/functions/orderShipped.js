@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const functions = require("firebase-functions");
-const { orderShippedEmailParams } = require("./lib/emailPayload");
+const { orderShippedEmailParams, formatAddress } = require("./lib/emailPayload");
 
 // Define secrets
 const brevoApiKey = defineSecret("BREVO_API_KEY");
@@ -21,14 +21,17 @@ if (!admin.apps.length) {
 // their choosing through this project's verified sending domain.
 const ADMIN_EMAILS = ['myfriendroze@gmail.com', 'myfriendroze.store@gmail.com'];
 
-function isValidEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
 /**
  * Testable core — see eventNotification.js's handleSendEventNotification
  * for why dependencies are passed as parameters.
+ *
+ * orderId is the Stripe Checkout Session ID, which doubles as the Firestore
+ * orders/ doc ID (see stripeWebhook.js) -- looking the order up directly by
+ * doc ID instead of a where() query on {email, orderDetails.orderNumber}
+ * fixes a bug found in PR #46 review: real order docs (lib/orderFromSession.js's
+ * sessionToOrderData shape) have neither of those fields, so that query
+ * always came back empty and this handler silently never updated the order
+ * while still reporting success and emailing the customer.
  */
 async function handleSendOrderShippedNotification(request, {
   db, sendBrevoEmail, apiKey, templates, ordersSender, serverTimestamp, logger,
@@ -39,37 +42,42 @@ async function handleSendOrderShippedNotification(request, {
 
   logger.info("Order shipped notification function triggered.");
 
-  const { email, orderDetails, shippingDetails } = request.data;
+  const { orderId, shippingDetails } = request.data;
 
-  if (!email || !orderDetails || !shippingDetails) {
-    logger.error("Missing required fields: email, orderDetails, or shippingDetails");
-    throw new Error("Email, order details, and shipping details are required");
-  }
-
-  if (!isValidEmail(email)) {
-    logger.error("Invalid email address provided.");
-    throw new Error("Valid email address required");
+  if (!orderId || !shippingDetails) {
+    logger.error("Missing required fields: orderId or shippingDetails");
+    throw new HttpsError('invalid-argument', 'Order ID and shipping details are required');
   }
 
   try {
-    // Update order status in Firestore
-    const ordersRef = db.collection("orders");
-    const orderQuery = await ordersRef.where("email", "==", email.toLowerCase().trim())
-                                     .where("orderDetails.orderNumber", "==", orderDetails.orderNumber)
-                                     .get();
+    const orderRef = db.collection("orders").doc(orderId);
+    const orderDoc = await orderRef.get();
 
-    if (!orderQuery.empty) {
-      const orderDoc = orderQuery.docs[0];
-      await orderDoc.ref.update({
-        status: "shipped",
-        shippingDetails: shippingDetails,
-        shippedAt: serverTimestamp()
-      });
-      logger.info(`Updated order ${orderDetails.orderNumber} status to shipped`);
+    if (!orderDoc.exists) {
+      throw new HttpsError('not-found', 'Order not found');
     }
+
+    const order = orderDoc.data();
+    const email = order.customer?.email;
+
+    if (!email) {
+      throw new HttpsError('failed-precondition', 'Order has no customer email on file');
+    }
+
+    await orderRef.update({
+      status: "shipped",
+      shippingDetails: shippingDetails,
+      shippedAt: serverTimestamp()
+    });
+    logger.info(`Updated order ${orderId} status to shipped`);
 
     // Send shipping notification email
     if (apiKey && ordersSender) {
+      const orderDetails = {
+        orderNumber: order.stripeSessionId,
+        customerName: order.customer?.name,
+        shippingAddress: formatAddress(order.shippingAddress),
+      };
       const payload = {
         sender: ordersSender,
         to: [{ email: email }],
@@ -79,9 +87,9 @@ async function handleSendOrderShippedNotification(request, {
 
       await sendBrevoEmail(payload);
 
-      // Logs the order number, never the customer's raw email address --
-      // same PII-logging fix as eventNotification.js.
-      logger.info(`Successfully sent shipping notification for order ${orderDetails.orderNumber}`);
+      // Logs the order id, never the customer's raw email address -- same
+      // PII-logging fix as eventNotification.js.
+      logger.info(`Successfully sent shipping notification for order ${orderId}`);
     } else {
       logger.warn("Brevo API key or orders sender not configured. Skipping email.");
     }
@@ -89,11 +97,14 @@ async function handleSendOrderShippedNotification(request, {
     return {
       success: true,
       message: "Shipping notification sent!",
-      orderNumber: orderDetails.orderNumber,
+      orderId,
       trackingNumber: shippingDetails.trackingNumber
     };
 
   } catch (error) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
     logger.error("Order shipped notification error:", error);
     throw new Error("Failed to send shipping notification");
   }
