@@ -136,6 +136,7 @@ describe('handleSendOrderShippedNotification', () => {
       status: 'shipped',
       shippingDetails,
       shippedAt: 'SERVER_TIMESTAMP',
+      shippedNotificationSentAt: 'SERVER_TIMESTAMP',
     });
     expect(deps.sendBrevoEmail).toHaveBeenCalledTimes(1);
     const payload = deps.sendBrevoEmail.mock.calls[0][0];
@@ -203,12 +204,43 @@ describe('handleSendOrderShippedNotification', () => {
     });
   });
 
-  it('wraps a failed Brevo send as a generic error', async () => {
+  // Regression guard: the Firestore update used to happen before the email
+  // send, so a Brevo failure left the order marked "shipped" (with no
+  // notification actually sent) while still returning an error -- a client
+  // retry then found the order already 'shipped' with no way to tell the
+  // notification hadn't gone out. Sending first means a Brevo failure
+  // leaves the order untouched and safely retryable (found in PR #46 review).
+  it('wraps a failed Brevo send as a generic error, without marking the order shipped', async () => {
     const deps = baseDeps({ sendBrevoEmail: vi.fn().mockRejectedValue(new Error('Brevo API request failed with status 400')) });
 
     await expect(handleSendOrderShippedNotification(baseRequest(), deps)).rejects.toThrow(
       'Failed to send shipping notification'
     );
+    expect(deps.db.update).not.toHaveBeenCalled();
+  });
+
+  // Regression guard: calling this callable twice for the same order (e.g.
+  // a client retry after a timeout) used to send a second duplicate
+  // shipping email every time (found in PR #46 review).
+  it('is idempotent: skips the email and the update when the order was already notified', async () => {
+    const deps = baseDeps({
+      db: fakeDb({ order: realOrder({
+        status: 'shipped',
+        shippingDetails: { trackingNumber: 'ORIGINAL-TRACK' },
+        shippedNotificationSentAt: 'already-sent-timestamp',
+      }) }),
+    });
+
+    const result = await handleSendOrderShippedNotification(baseRequest(), deps);
+
+    expect(deps.sendBrevoEmail).not.toHaveBeenCalled();
+    expect(deps.db.update).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      success: true,
+      message: 'Order was already marked shipped; no duplicate notification sent.',
+      orderId: 'cs_test_abc123',
+      trackingNumber: 'ORIGINAL-TRACK',
+    });
   });
 
   it('wraps an unexpected Firestore failure as a generic error', async () => {

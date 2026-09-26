@@ -57,20 +57,35 @@ async function handleSendOrderShippedNotification(request, {
     }
 
     const order = orderDoc.data();
+
+    // Idempotency guard: a client can legitimately retry this callable
+    // (e.g. after a timeout with an ambiguous response), and repeat
+    // invocations for an already-notified order must not resend the
+    // customer's shipping email (found in PR #46 review). Keyed on this
+    // marker rather than status === 'shipped' alone so a request that
+    // updated status but failed before the email went out (see below)
+    // still gets a genuine retry.
+    if (order.shippedNotificationSentAt) {
+      logger.info(`Order ${orderId} shipping notification already sent; skipping duplicate.`);
+      return {
+        success: true,
+        message: "Order was already marked shipped; no duplicate notification sent.",
+        orderId,
+        trackingNumber: order.shippingDetails?.trackingNumber,
+      };
+    }
+
     const email = order.customer?.email;
 
     if (!email) {
       throw new HttpsError('failed-precondition', 'Order has no customer email on file');
     }
 
-    await orderRef.update({
-      status: "shipped",
-      shippingDetails: shippingDetails,
-      shippedAt: serverTimestamp()
-    });
-    logger.info(`Updated order ${orderId} status to shipped`);
-
-    // Send shipping notification email
+    // Send the email before writing to Firestore (not after): if
+    // sendBrevoEmail throws, the order is left untouched -- still 'paid',
+    // not marked shipped -- so a client retry legitimately re-attempts the
+    // send instead of finding a "shipped" order it can't safely act on
+    // (found in PR #46 review).
     let emailSent = false;
     if (apiKey && ordersSender) {
       const orderDetails = {
@@ -97,6 +112,18 @@ async function handleSendOrderShippedNotification(request, {
     } else {
       logger.warn("Brevo API key or orders sender not configured. Skipping email.");
     }
+
+    await orderRef.update({
+      status: "shipped",
+      shippingDetails: shippingDetails,
+      shippedAt: serverTimestamp(),
+      // Only set once the email has actually gone out -- its presence is
+      // exactly the idempotency signal checked above. Omitted (not written
+      // false/null) when Brevo isn't configured, so a later retry once it
+      // is configured still attempts the real send.
+      ...(emailSent && { shippedNotificationSentAt: serverTimestamp() }),
+    });
+    logger.info(`Updated order ${orderId} status to shipped`);
 
     return {
       success: true,
