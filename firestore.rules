@@ -11,7 +11,8 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read, write: if false; // Cloud Functions (Admin SDK) only
+      allow read: if isAdmin();
+      allow write: if false; // Cloud Functions (Admin SDK) only -- see orderShipped.js
     }
 
     match /products/{productId} {
