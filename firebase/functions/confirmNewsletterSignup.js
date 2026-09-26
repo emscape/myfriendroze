@@ -247,7 +247,7 @@ async function handleConfirmNewsletterSignup(req, res, {
       }
       return res.send(page(
         "You're confirmed! 🌱", '#4CAF50',
-        '<p>Welcome to MyFriendRoze! Check your inbox for a welcome email.</p>'
+        '<p>Welcome to myfriendroze! Check your inbox for a welcome email.</p>'
       ));
     }
 
@@ -293,7 +293,7 @@ exports.confirmNewsletterSignup = onRequest(
     const apiKey = brevoApiKey.value();
     const templates = JSON.parse(brevoTemplates.value());
     const sender = JSON.parse(
-      process.env.EMAIL_NEWSLETTER || '{"email":"newsletter@myfriendroze.com","name":"MyFriendRoze Newsletter"}'
+      process.env.EMAIL_NEWSLETTER || '{"email":"newsletter@myfriendroze.com","name":"myfriendroze Newsletter"}'
     );
 
     return handleConfirmNewsletterSignup(req, res, {

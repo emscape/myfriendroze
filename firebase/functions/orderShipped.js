@@ -108,7 +108,7 @@ exports.sendOrderShippedNotification = onCall({
   const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || functions.config().email?.orders || '{"email":"orders@myfriendroze.com","name":"MyFriendRoze Orders"}');
+  const ordersSender = JSON.parse(process.env.EMAIL_ORDERS || functions.config().email?.orders || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}');
 
   return handleSendOrderShippedNotification(request, {
     db: admin.firestore(),
