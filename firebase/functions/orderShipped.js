@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
 const functions = require("firebase-functions");
-const { orderShippedEmailParams, formatAddress } = require("./lib/emailPayload");
+const { orderShippedEmailParams, formatAddressRaw } = require("./lib/emailPayload");
 
 // Define secrets
 const brevoApiKey = defineSecret("BREVO_API_KEY");
@@ -76,7 +76,10 @@ async function handleSendOrderShippedNotification(request, {
       const orderDetails = {
         orderNumber: order.stripeSessionId,
         customerName: order.customer?.name,
-        shippingAddress: formatAddress(order.shippingAddress),
+        // Raw (unescaped) -- orderShippedEmailParams applies the single
+        // escaping pass. formatAddress here would double-escape (see
+        // formatAddressRaw's own comment).
+        shippingAddress: formatAddressRaw(order.shippingAddress),
       };
       const payload = {
         sender: ordersSender,

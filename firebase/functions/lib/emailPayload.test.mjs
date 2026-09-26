@@ -16,6 +16,7 @@ const {
   eventNotificationEmailParams,
   newsletterConfirmationEmailParams,
   newsletterWelcomeEmailParams,
+  formatAddressRaw,
 } = require('./emailPayload.js');
 
 function fullOrder(overrides = {}) {
@@ -225,6 +226,33 @@ describe('orderShippedEmailParams', () => {
     );
 
     expect(params.ORDER_NUMBER).toBe('1001');
+  });
+});
+
+describe('formatAddressRaw', () => {
+  it('joins address parts the same way formatAddress does, without escaping', () => {
+    expect(formatAddressRaw({
+      line1: '123 Main St',
+      line2: 'Apt 4B',
+      city: 'Springfield',
+      state: 'CA',
+      postalCode: '90210',
+      country: 'US',
+    })).toBe('123 Main St, Apt 4B, Springfield, CA 90210, US');
+  });
+
+  it('leaves HTML-significant characters unescaped, for a caller that will escape the whole joined string itself', () => {
+    expect(formatAddressRaw({
+      line1: 'Smith & Sons, 5 <Main> St',
+      city: 'Springfield',
+      state: 'CA',
+      postalCode: '90210',
+      country: 'US',
+    })).toBe('Smith & Sons, 5 <Main> St, Springfield, CA 90210, US');
+  });
+
+  it('returns an empty string for a null address', () => {
+    expect(formatAddressRaw(null)).toBe('');
   });
 });
 

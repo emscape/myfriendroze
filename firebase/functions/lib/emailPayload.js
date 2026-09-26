@@ -5,16 +5,30 @@
 
 const { escapeHtml } = require('./escapeHtml');
 
-// Customer-supplied free text (from Stripe Checkout's address collection)
-// gets interpolated as-is into the order-confirmation template body, so it
-// must be escaped here before it ever reaches Brevo.
-function formatAddress(address) {
+function joinAddressParts(address, esc) {
   if (!address) return '';
-  const esc = (value) => (value ? escapeHtml(value) : value);
   const lines = [esc(address.line1), esc(address.line2), esc(address.city)].filter(Boolean);
   const stateZip = [esc(address.state), esc(address.postalCode)].filter(Boolean).join(' ');
   const tail = [stateZip, esc(address.country)].filter(Boolean);
   return [...lines, ...tail].join(', ');
+}
+
+// Customer-supplied free text (from Stripe Checkout's address collection)
+// gets interpolated as-is into the order-confirmation template body, so it
+// must be escaped here before it ever reaches Brevo.
+function formatAddress(address) {
+  return joinAddressParts(address, (value) => (value ? escapeHtml(value) : value));
+}
+
+// Same joining, deliberately unescaped -- for callers (orderShippedEmailParams)
+// that apply their own single escaping pass to the whole formatted string.
+// Escaping each field individually then joining vs. joining raw fields then
+// escaping the whole string produce identical output (escapeHtml only
+// touches &<>"', none of which the join's ", " / " " separators introduce),
+// so this is safe -- but calling formatAddress a second time on its own
+// output double-escapes (e.g. "&" -> "&amp;" -> "&amp;amp;").
+function formatAddressRaw(address) {
+  return joinAddressParts(address, (value) => value);
 }
 
 // Pre-formatted for direct interpolation into the Brevo template body
@@ -131,4 +145,5 @@ module.exports = {
   newsletterConfirmationEmailParams,
   newsletterWelcomeEmailParams,
   formatAddress,
+  formatAddressRaw,
 };

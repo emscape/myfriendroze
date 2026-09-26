@@ -43,14 +43,17 @@ function fakeDb({ order = realOrder() } = {}) {
     exists: order !== null,
     data: () => order,
   });
+  // doc() records the id it's called with, so a test can assert the lookup
+  // actually targets the right order (Copilot's PR #46 review finding: the
+  // original fake ignored its argument, so a wrong-ID bug couldn't fail it).
+  const doc = vi.fn((id) => ({ get, update }));
   return {
     update,
     get,
+    doc,
     collection: (name) => {
       if (name !== 'orders') throw new Error(`Unexpected collection requested in test: ${name}`);
-      return {
-        doc: () => ({ get, update }),
-      };
+      return { doc };
     },
   };
 }
@@ -121,6 +124,7 @@ describe('handleSendOrderShippedNotification', () => {
 
     const result = await handleSendOrderShippedNotification(baseRequest(), deps);
 
+    expect(deps.db.doc).toHaveBeenCalledWith('cs_test_abc123');
     expect(deps.db.get).toHaveBeenCalledTimes(1);
     expect(deps.db.update).toHaveBeenCalledWith({
       status: 'shipped',
@@ -144,6 +148,35 @@ describe('handleSendOrderShippedNotification', () => {
       orderId: 'cs_test_abc123',
       trackingNumber: 'TRACK123',
     });
+  });
+
+  // Regression guard: formatAddressRaw must stay unescaped here, since
+  // orderShippedEmailParams applies its own single escaping pass --
+  // formatAddress (which escapes internally) would double-escape, e.g.
+  // "&" -> "&amp;" -> "&amp;amp;" (found in PR #46 review).
+  it('escapes the shipping address exactly once, even with HTML-significant characters', async () => {
+    const deps = baseDeps({
+      db: fakeDb({
+        order: realOrder({
+          shippingAddress: {
+            name: 'Jane Doe',
+            line1: 'Smith & Sons, 5 <Main> St',
+            line2: null,
+            city: 'Springfield',
+            state: 'CA',
+            postalCode: '90210',
+            country: 'US',
+          },
+        }),
+      }),
+    });
+
+    await handleSendOrderShippedNotification(baseRequest(), deps);
+
+    const payload = deps.sendBrevoEmail.mock.calls[0][0];
+    expect(payload.params.SHIPPING_ADDRESS).toBe(
+      'Smith &amp; Sons, 5 &lt;Main&gt; St, Springfield, CA 90210, US'
+    );
   });
 
   it('skips sending email (but still updates the order) when Brevo is not configured', async () => {
