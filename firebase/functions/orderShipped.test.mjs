@@ -93,6 +93,12 @@ describe('handleSendOrderShippedNotification', () => {
     ).rejects.toThrow(HttpsError);
   });
 
+  it('rejects a request with no data payload at all, without throwing a raw TypeError', async () => {
+    await expect(
+      handleSendOrderShippedNotification(baseRequest({ data: undefined }), baseDeps())
+    ).rejects.toThrow('Order ID and shipping details are required');
+  });
+
   it('rejects a request missing an orderId', async () => {
     await expect(
       handleSendOrderShippedNotification(baseRequest({ data: { shippingDetails } }), baseDeps())

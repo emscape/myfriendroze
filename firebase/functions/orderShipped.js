@@ -42,7 +42,7 @@ async function handleSendOrderShippedNotification(request, {
 
   logger.info("Order shipped notification function triggered.");
 
-  const { orderId, shippingDetails } = request.data;
+  const { orderId, shippingDetails } = request.data || {};
 
   if (!orderId || !shippingDetails) {
     logger.error("Missing required fields: orderId or shippingDetails");
