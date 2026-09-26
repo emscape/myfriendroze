@@ -89,7 +89,11 @@ describe('POST /api/shipping', () => {
       originZip: '90065',
       weight: 2.5,
       zone: 8,
-      totalCost: expect.any(Number),
+      // Deterministic, not just "a number": zip 10001 -> zone 8, weight 2.5
+      // -> the 3lb bracket, and the real fixture's zone-8/3lb rate is
+      // $22.40 (computed once via parseRateTable against this exact
+      // fixture, not hand-transcribed from the raw markup).
+      totalCost: 22.4,
       carrier: 'USPS Ground Advantage',
       estimatedDays: expect.any(String),
       service: 'Ground Advantage',
@@ -108,7 +112,10 @@ describe('POST /api/shipping', () => {
 
     expect(response.status).toBe(200);
     expect(data.data.usingFallbackRates).toBe(true);
-    expect(data.data.totalCost).toBeGreaterThan(0);
+    // Deterministic: zip 10001 -> zone 8, weight 2.5 -> the 3lb bracket,
+    // and the static fallback table's zone-8/3lb rate (usps-rates.js) is
+    // a fixed, known value -- $20.75, not just "some positive number".
+    expect(data.data.totalCost).toBe(20.75);
   });
 });
 
