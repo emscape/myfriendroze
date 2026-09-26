@@ -31,9 +31,19 @@ describe('parseRateTable', () => {
     expect(rates[70]).toBeDefined();
     expect(rates[70][8]).toBe(196.80);
 
-    // At least the 4 sub-pound rows + 70 whole-pound rows -- well above the
-    // >=50 sanity floor that used to reject a broken partial parse.
-    expect(Object.keys(rates).length).toBeGreaterThanOrEqual(70);
+    // Every whole-pound bracket 1-70 must be present with all 9 zone
+    // prices -- checking only the total key count would pass even with a
+    // gap in the middle (the fixture's extra sub-pound entries mask a
+    // missing pound bracket in a simple length check), and getDynamicRate
+    // throws for any weight that maps to a missing key.
+    for (let lb = 1; lb <= 70; lb++) {
+      expect(rates[lb], `missing rate bracket for ${lb} lb`).toBeDefined();
+      expect(rates[lb], `${lb} lb bracket should have 9 zone prices`).toHaveLength(9);
+      for (const price of rates[lb]) {
+        expect(typeof price, `${lb} lb bracket has a non-numeric price`).toBe('number');
+        expect(Number.isFinite(price)).toBe(true);
+      }
+    }
   });
 
   it('throws instead of silently returning a handful of rows if the table structure changes again', () => {
