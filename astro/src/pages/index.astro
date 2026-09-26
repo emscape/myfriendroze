@@ -352,7 +352,7 @@ import Header from '../components/Header.astro';
           // Show success message. Signup is double opt-in now (see
           // firebase/functions/newsletterSignup.js) -- nothing is actually
           // subscribed yet, so this deliberately doesn't say "subscribed."
-          newsletterMessage.textContent = 'Almost done! Check your email to confirm your subscription.';
+          newsletterMessage.textContent = 'Check your email for a confirmation message.';
           newsletterMessage.className = 'newsletter__message newsletter__message--success';
           newsletterMessage.hidden = false;
 
