@@ -9,8 +9,8 @@
 // but this specifically avoids relying on Git Bash being the one running
 // it — predeploy hooks execute via the platform's default shell).
 //
-// IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie,
-// devalue, es-module-lexer, html-escaper, kleur, mrmime, send,
+// IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie, cssesc,
+// devalue, es-module-lexer, html-escaper, mrmime, piccolore, send,
 // server-destroy, unstorage, zod as DIRECT dependencies (exact versions,
 // not ^ranges), in addition to astro itself: astro-dist/server/**/*.mjs
 // imports these by bare specifier
