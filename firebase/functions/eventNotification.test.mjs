@@ -106,6 +106,30 @@ describe('handleSendEventNotification', () => {
     ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
+  // Anything that isn't a valid Firestore document ID must fail at the
+  // boundary as invalid-argument, not reach .doc() and surface as internal.
+  it.each([
+    ['a number', 42],
+    ['an object', { id: 'event-1' }],
+    ['a path with a slash', 'events/event-1'],
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+    ['"."', '.'],
+    ['".."', '..'],
+    ['a reserved __name__', '__reserved__'],
+    ['an over-long id', 'x'.repeat(1501)],
+  ])('rejects a malformed eventId (%s) as invalid-argument', async (_label, eventId) => {
+    const db = fakeDb({ event: realEvent() });
+
+    await expect(
+      handleSendEventNotification(
+        adminRequest({ data: { eventId } }),
+        { db, sendBrevoEmail: vi.fn(), ...baseDeps() }
+      )
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(db.eventGet).not.toHaveBeenCalled();
+  });
+
   it('rejects with not-found when the event does not exist', async () => {
     const db = fakeDb({ event: null });
 
@@ -196,7 +220,28 @@ describe('handleSendEventNotification', () => {
 
     expect(sendBrevoEmail).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ success: true, emailsSent: 2 });
-    expect(logger.error).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('lastNotifiedAt could not be recorded'),
+      expect.any(Error)
+    );
+  });
+
+  // The bookkeeping-failure log must not claim delivery: it also runs when
+  // Brevo isn't configured (nothing sent) or every send failed.
+  it('does not log a bookkeeping failure as a successful send when nothing was sent', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com'], event: realEvent() });
+    db.eventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+    const logger = silentLogger();
+
+    const result = await handleSendEventNotification(adminRequest(), {
+      db, sendBrevoEmail: vi.fn(), ...baseDeps(), apiKey: null, logger,
+    });
+
+    const [logMessage] = logger.error.mock.calls[0];
+    expect(logMessage).not.toContain('notification sent');
+    expect(logMessage).toContain('0/1 sends succeeded');
+    // Nor may the returned message claim the notification was recorded.
+    expect(result.message).not.toMatch(/recorded/i);
   });
 
   it('does not block re-notifying about the same event -- no idempotency guard', async () => {
@@ -230,7 +275,7 @@ describe('handleSendEventNotification', () => {
     });
     expect(result.emailsSent).toBe(0);
     // Must not claim a send that didn't happen.
-    expect(result.message).toBe('Event notification recorded, but no emails were sent (Brevo not configured).');
+    expect(result.message).toBe('No event notification emails were sent (Brevo not configured).');
   });
 
   // Regression guard for the PII-logging finding: a failed send used to log

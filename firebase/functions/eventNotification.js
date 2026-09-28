@@ -42,6 +42,20 @@ function buildUnsubscribeLinks(email, secret) {
  * second, disconnected event doc (the previous design, which used field
  * names like date/time/price that don't exist on the real Event model).
  */
+// Firestore's documented document-ID constraints: a non-empty string, no
+// "/", not "." or "..", not matching __.*__, at most 1500 bytes. Checked at
+// the callable boundary so a malformed eventId fails as invalid-argument
+// instead of throwing inside .doc() and surfacing as internal. Whitespace-
+// only is rejected too -- never a real admin-app event id.
+function isValidDocumentId(id) {
+  return typeof id === 'string'
+    && id.trim() !== ''
+    && !id.includes('/')
+    && id !== '.' && id !== '..'
+    && !/^__.*__$/.test(id)
+    && Buffer.byteLength(id, 'utf8') <= 1500;
+}
+
 async function handleSendEventNotification(request, {
   db, sendBrevoEmail, apiKey, templates, eventsSender, secret, serverTimestamp, logger,
 }) {
@@ -51,8 +65,8 @@ async function handleSendEventNotification(request, {
 
   const { eventId } = request.data || {};
 
-  if (!eventId) {
-    throw new HttpsError('invalid-argument', 'Event ID is required');
+  if (!isValidDocumentId(eventId)) {
+    throw new HttpsError('invalid-argument', 'A valid event ID is required');
   }
 
   try {
@@ -124,27 +138,31 @@ async function handleSendEventNotification(request, {
     // subscribers about the same event (e.g. a reminder closer to the
     // date), so a prior lastNotifiedAt must never block a later send.
     //
-    // By this point the emails have already gone out, so a failure here is
-    // logged rather than thrown: surfacing it as an error would invite a
+    // By this point any sends have already been attempted, so a failure here
+    // is logged rather than thrown: surfacing it as an error would invite a
     // retry, and with no idempotency guard that retry would email every
-    // subscriber again.
+    // subscriber again. The log states the real send count, since this also
+    // runs when Brevo isn't configured or every send failed.
     try {
       await eventRef.update({
         lastNotifiedAt: serverTimestamp(),
         lastNotificationRecipientCount: subscribers.length,
       });
     } catch (bookkeepingError) {
-      logger.error(`Event ${eventId}: notification sent but lastNotifiedAt could not be recorded:`, bookkeepingError);
+      logger.error(
+        `Event ${eventId}: notification processed (${emailsSent}/${subscribers.length} sends succeeded) but lastNotifiedAt could not be recorded:`,
+        bookkeepingError
+      );
     }
 
-    // success stays true either way (the notification is still recorded on
-    // the event doc), but the message must not claim sends that didn't
-    // happen -- same fix as orderShipped.js.
+    // success stays true either way, but the message must only state what
+    // actually happened (same fix as orderShipped.js) -- it doesn't claim the
+    // notification was recorded, since the write above may have failed.
     return {
       success: true,
       message: brevoConfigured
         ? `Event notification sent to ${emailsSent} of ${subscribers.length} subscribers.`
-        : "Event notification recorded, but no emails were sent (Brevo not configured).",
+        : "No event notification emails were sent (Brevo not configured).",
       eventId,
       emailsSent,
     };
