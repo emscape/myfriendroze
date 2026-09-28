@@ -27,14 +27,14 @@ describe('formatEventDateTime', () => {
     expect(result.timeText).toBe('6:00 PM – 9:00 PM');
   });
 
-  it('formats a multi-day event as a date range with a start time', () => {
+  it('formats a multi-day event as a date range with both start and end times', () => {
     const start = ts(new Date('2026-10-04T01:00:00Z')); // Oct 3, 6:00 PM PDT
     const end = ts(new Date('2026-10-05T20:00:00Z')); // Oct 5, 1:00 PM PDT
 
     const result = formatEventDateTime(start, end);
 
     expect(result.dateText).toBe('Saturday, October 3, 2026 – Monday, October 5, 2026');
-    expect(result.timeText).toBe('Starts 6:00 PM');
+    expect(result.timeText).toBe('Starts 6:00 PM, ends 1:00 PM');
   });
 
   it('treats an endDate equal to the start as single-day (matches the admin app\'s hasDistinctEndDate check)', () => {

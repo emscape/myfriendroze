@@ -86,6 +86,15 @@ function orderShippedEmailParams(email, orderDetails, shippingDetails) {
   };
 }
 
+// Builds the whole "More info: <link>" line in code (empty when there's no
+// link), same reasoning as greeting() below: branching in the template would
+// need Brevo conditional syntax, and a fixed label would dangle for the
+// many events that have no link.
+function moreInfoLine(link) {
+  const trimmed = typeof link === 'string' ? link.trim() : '';
+  return trimmed ? `More info: ${esc(trimmed)}` : '';
+}
+
 // `event` is the real Firestore events/{eventId} doc (see
 // eventNotification.js) -- title/description/location/link are Roze's own
 // free-text input via the admin app, same trust boundary as
@@ -105,7 +114,7 @@ function eventNotificationEmailParams(event, subscriberEmail, unsubscribeEvents,
     EVENT_TIME: timeText,
     EVENT_LOCATION: esc(event.location) || '',
     EVENT_DESCRIPTION: esc(event.description) || '',
-    EVENT_LINK: esc(event.link) || '',
+    EVENT_MORE_INFO: moreInfoLine(event.link),
     UNSUBSCRIBE_EVENTS: unsubscribeEvents,
     UNSUBSCRIBE_ALL: unsubscribeAll,
   };

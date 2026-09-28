@@ -58,9 +58,12 @@ function formatEventDateTime(eventDate, endDate) {
     };
   }
 
+  // "Starts X, ends Y" rather than "X – Y": alongside a date range, a bare
+  // time range would read as daily hours, which events don't model (the
+  // start time applies to the first day, the end time to the last).
   return {
     dateText: `${dateFormatter.format(start)} – ${dateFormatter.format(end)}`,
-    timeText: `Starts ${timeFormatter.format(start)}`,
+    timeText: `Starts ${timeFormatter.format(start)}, ends ${timeFormatter.format(end)}`,
   };
 }
 

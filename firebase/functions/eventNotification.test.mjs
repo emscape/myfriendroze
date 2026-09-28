@@ -85,7 +85,7 @@ describe('handleSendEventNotification', () => {
         { auth: null, data: {} },
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
   it('rejects requests from a non-admin email', async () => {
@@ -94,7 +94,7 @@ describe('handleSendEventNotification', () => {
         { auth: { token: { email: 'stranger@example.com' } }, data: {} },
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
   it('rejects a request missing eventId', async () => {
@@ -103,7 +103,7 @@ describe('handleSendEventNotification', () => {
         adminRequest({ data: {} }),
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
   it('rejects with not-found when the event does not exist', async () => {
@@ -111,7 +111,7 @@ describe('handleSendEventNotification', () => {
 
     await expect(
       handleSendEventNotification(adminRequest(), { db, sendBrevoEmail: vi.fn(), ...baseDeps() })
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'not-found', message: 'Event not found' });
     expect(db.eventUpdate).not.toHaveBeenCalled();
   });
 
@@ -180,6 +180,23 @@ describe('handleSendEventNotification', () => {
       lastNotifiedAt: 'SERVER_TIMESTAMP',
       lastNotificationRecipientCount: 2,
     });
+  });
+
+  // Emails have already gone out by the time lastNotifiedAt is written, and
+  // there's deliberately no idempotency guard -- so if that bookkeeping write
+  // failed and surfaced as an error, the caller's natural retry would email
+  // every subscriber a second time.
+  it('still reports success when recording lastNotifiedAt fails after the emails were sent', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com', 'b@example.com'], event: realEvent() });
+    db.eventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+    const logger = silentLogger();
+
+    const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps(), logger });
+
+    expect(sendBrevoEmail).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ success: true, emailsSent: 2 });
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it('does not block re-notifying about the same event -- no idempotency guard', async () => {

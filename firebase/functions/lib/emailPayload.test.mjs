@@ -291,7 +291,7 @@ describe('eventNotificationEmailParams', () => {
       EVENT_TIME: '6:00 PM',
       EVENT_LOCATION: 'MyFriendRoze Studio',
       EVENT_DESCRIPTION: 'Learn to arrange your own succulent garden.',
-      EVENT_LINK: 'https://myfriendroze.com/events/succulent-workshop',
+      EVENT_MORE_INFO: 'More info: https://myfriendroze.com/events/succulent-workshop',
       UNSUBSCRIBE_EVENTS: 'https://example.com/unsub?type=events',
       UNSUBSCRIBE_ALL: 'https://example.com/unsub?type=all',
     });
@@ -317,10 +317,11 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EVENT_TIME).toBe('');
     expect(params.EVENT_LOCATION).toBe('');
     expect(params.EVENT_DESCRIPTION).toBe('');
-    expect(params.EVENT_LINK).toBe('');
+    // No link -> no line at all, not a dangling "More info:" label.
+    expect(params.EVENT_MORE_INFO).toBe('');
   });
 
-  it('formats a multi-day event as a date range with a start time', () => {
+  it('formats a multi-day event as a date range with both start and end times', () => {
     const params = eventNotificationEmailParams(
       fullEvent({
         eventDate: ts(new Date('2026-10-16T01:00:00Z')), // Oct 15, 6:00 PM PDT
@@ -332,7 +333,7 @@ describe('eventNotificationEmailParams', () => {
     );
 
     expect(params.EVENT_DATE).toBe('Thursday, October 15, 2026 – Saturday, October 17, 2026');
-    expect(params.EVENT_TIME).toBe('Starts 6:00 PM');
+    expect(params.EVENT_TIME).toBe('Starts 6:00 PM, ends 1:00 PM');
   });
 
   it('escapes HTML in Roze-entered event fields, since they are interpolated '
@@ -342,6 +343,7 @@ describe('eventNotificationEmailParams', () => {
         title: '<b>Workshop</b>',
         description: '<script>alert(1)</script>',
         location: '<img src=x onerror=alert(1)>',
+        link: '<a href=x>click</a>',
       }),
       'subscriber@example.com',
       'https://example.com/unsub?type=events',
@@ -351,6 +353,18 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EVENT_TITLE).toBe('&lt;b&gt;Workshop&lt;/b&gt;');
     expect(params.EVENT_DESCRIPTION).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(params.EVENT_LOCATION).toBe('&lt;img src=x onerror=alert(1)&gt;');
+    expect(params.EVENT_MORE_INFO).toBe('More info: &lt;a href=x&gt;click&lt;/a&gt;');
+  });
+
+  it('omits the "More info" line when the link is only whitespace', () => {
+    const params = eventNotificationEmailParams(
+      fullEvent({ link: '   ' }),
+      'subscriber@example.com',
+      'https://example.com/unsub?type=events',
+      'https://example.com/unsub?type=all'
+    );
+
+    expect(params.EVENT_MORE_INFO).toBe('');
   });
 
   it('passes EMAIL and unsubscribe URLs through unescaped, since they are Firestore/HMAC '

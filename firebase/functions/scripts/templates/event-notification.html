@@ -8,15 +8,16 @@
   eventNotificationEmailParams, built from the REAL events/{eventId} doc --
   not a caller-supplied freeform payload):
     EVENT_TITLE, EVENT_DATE, EVENT_TIME, EVENT_LOCATION, EVENT_DESCRIPTION,
-    EVENT_LINK, UNSUBSCRIBE_EVENTS, UNSUBSCRIBE_ALL
+    EVENT_MORE_INFO, UNSUBSCRIBE_EVENTS, UNSUBSCRIBE_ALL
 
   No EVENT_PRICE -- events don't have a price/cover-charge concept on the
   real Event model, so this was dropped rather than left permanently blank.
 
-  EVENT_LINK is shown as plain text, not wrapped in <a href="">, because
-  plenty of "in the wild" events (a market stall, an open house) have no
-  link at all -- an empty-href button would be worse than a line that's
-  just blank.
+  EVENT_MORE_INFO is the complete "More info: <link>" line, or empty when
+  the event has no link (plenty of "in the wild" events -- a market stall,
+  an open house -- don't), built in emailPayload.js so no label dangles.
+  Plain text, not an <a href="">, since an empty-href link would be worse
+  than a blank line.
 
   UNSUBSCRIBE_EVENTS / UNSUBSCRIBE_ALL are always populated by the sending
   function (real HMAC-signed URLs, never empty), so those ARE real <a> tags —
@@ -68,7 +69,7 @@
         <tr>
           <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
             <p style="margin:0 0 16px 0;">{{ params.EVENT_DESCRIPTION }}</p>
-            <p style="margin:0;">More info: {{ params.EVENT_LINK }}</p>
+            <p style="margin:0;">{{ params.EVENT_MORE_INFO }}</p>
           </td>
         </tr>
 

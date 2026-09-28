@@ -123,10 +123,19 @@ async function handleSendEventNotification(request, {
     // orderShipped.js's claim transaction. Roze may legitimately re-notify
     // subscribers about the same event (e.g. a reminder closer to the
     // date), so a prior lastNotifiedAt must never block a later send.
-    await eventRef.update({
-      lastNotifiedAt: serverTimestamp(),
-      lastNotificationRecipientCount: subscribers.length,
-    });
+    //
+    // By this point the emails have already gone out, so a failure here is
+    // logged rather than thrown: surfacing it as an error would invite a
+    // retry, and with no idempotency guard that retry would email every
+    // subscriber again.
+    try {
+      await eventRef.update({
+        lastNotifiedAt: serverTimestamp(),
+        lastNotificationRecipientCount: subscribers.length,
+      });
+    } catch (bookkeepingError) {
+      logger.error(`Event ${eventId}: notification sent but lastNotifiedAt could not be recorded:`, bookkeepingError);
+    }
 
     // success stays true either way (the notification is still recorded on
     // the event doc), but the message must not claim sends that didn't
