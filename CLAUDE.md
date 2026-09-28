@@ -9,9 +9,10 @@
 ## Project Context
 
 - **Project**: myfriendroze — Astro static website for myfriendroze ceramics & d.d. succulents
-- **Tech stack**: Astro / TypeScript / Firebase Hosting / Firestore / Firebase Functions (Node 18 ESM)
+- **Tech stack**: Astro / TypeScript / Firebase Hosting / Firestore / Firebase Functions (Node 22, CommonJS)
 - **Primary language**: TypeScript (Astro components + Firebase Functions)
-- **Non-goals**: No SSR — this is a static site. No React/Vue/Angular. No native app features. No customer authentication (admin auth is handled in the separate Flutter app).
+- **Rendering**: server-rendered — `astro.config.mjs` uses `output: 'server'` with the Node adapter, served by the `ssrAstro` Cloud Function behind a Hosting rewrite (see `firebase.json`); Hosting serves static assets directly.
+- **Non-goals**: No React/Vue/Angular. No native app features. No customer authentication (admin auth is handled in the separate Flutter app).
 - **Key files**:
   - `astro/src/pages/index.astro` — home page (hero, about, events, newsletter)
   - `astro/src/pages/shop.astro` — shop / product listing
@@ -28,7 +29,7 @@
 
 This project runs on **Windows 11** with Git Bash available. Rules:
 
-- **Node**: use `node` / `npm` — project targets Node 18
+- **Node**: use `node` / `npm` — project targets Node 22 (Functions runtime `nodejs22` in `firebase.json`, CI `node-version: "22"`). Use Node ≥ 22.19 locally: astro 5.18's transitive `undici@8` declares that minimum (install-time warning only, not loaded by the deployed SSR bundle).
 - **Path separators**: forward slashes `/` work in most contexts; use them in code and config
 - **Astro dev server**: `cd astro && npm run dev` (runs on localhost:4321 by default)
 - **Firebase emulator**: `firebase emulators:start` from repo root
@@ -70,6 +71,7 @@ No tool attribution in commit messages.
 - **Every feature, fix, or improvement** gets its own branch: `feature/name`, `fix/name`, `chore/name`.
 - **Never run `git commit` without explicit permission** from Emily in the current conversation.
 - Trivial one-line config changes may be committed to main only with explicit approval.
+- **Check the site locally before committing (MANDATORY)** for anything that touches a page, component, layout, or style — and for dependency/framework upgrades (Astro, adapters, Tailwind), which can change rendering without touching `src/`. Unit tests and the `ssrAstro` smoke test verify status codes and logic, not what a page actually looks like. Start `cd astro && npm run dev` (localhost:4321; reads live Firestore via the service-account key), offer it to Emily to click through, and wait for her OK before asking for commit approval. Don't complete a checkout from localhost — outside the Functions emulator it can reach the real Stripe account. This matters because merging to `master` deploys immediately with no manual gate after.
 - **Merge via GitHub, not locally**: after pushing a branch, open a PR (`gh pr create`) and merge it with `gh pr merge` or the GitHub UI — never `git merge` locally followed by a direct push to `main`. A local merge+push is invisible on GitHub (just an anonymous commit landing on `main`, no PR history, no inline checks-passed summary). Going through a real PR is also what's required for a future branch-protection rule to actually mean anything.
 
 ---

@@ -9,8 +9,8 @@
 // but this specifically avoids relying on Git Bash being the one running
 // it — predeploy hooks execute via the platform's default shell).
 //
-// IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie,
-// devalue, es-module-lexer, html-escaper, kleur, mrmime, send,
+// IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie, cssesc,
+// devalue, es-module-lexer, html-escaper, mrmime, piccolore, send,
 // server-destroy, unstorage, zod as DIRECT dependencies (exact versions,
 // not ^ranges), in addition to astro itself: astro-dist/server/**/*.mjs
 // imports these by bare specifier
@@ -19,14 +19,16 @@
 // never uploads local node_modules for a Functions deploy — Cloud Build
 // always runs a fresh `npm install` server-side from package.json — so
 // these packages have to be resolvable there too, not just locally.
-// They're pinned as *direct* deps (not left as transitive-only, e.g. via
-// prompts's kleur@3) because npm's hoisting only guarantees a transitive
-// dependency lands at the top-level node_modules/ (where these
-// files-copied-outside-node_modules/astro/ actually look) if nothing else
-// wants a conflicting version — which is exactly what happened with kleur
-// (prompts's kleur@3 won the top-level slot over astro's own kleur@4 until
-// this file's copy-astro-dist smoke test caught it). A direct dependency
-// always wins that slot, deterministically. If a future `astro build`
+// They're pinned as *direct* deps (not left as transitive-only) because
+// npm's hoisting only guarantees a transitive dependency lands at the
+// top-level node_modules/ (where these files-copied-outside-node_modules/
+// astro/ actually look) if nothing else wants a conflicting version. The
+// case that established this was kleur: under astro 5.12, prompts's kleur@3
+// won the top-level slot over astro's own kleur@4 until this file's
+// copy-astro-dist smoke test caught it. (kleur itself is no longer pinned —
+// astro 5.18's server output stopped importing it.) A direct dependency
+// always wins that slot, deterministically. When bumping astro, re-grep the
+// build for bare imports and drop pins the output no longer uses. If a future `astro build`
 // starts requiring a new external package that isn't in this list, the
 // smoke test (see ssrAstro.js's exports.getApp) will fail with
 // ERR_MODULE_NOT_FOUND naming exactly which one — add it here with the
