@@ -9,9 +9,10 @@
 ## Project Context
 
 - **Project**: myfriendroze — Astro static website for myfriendroze ceramics & d.d. succulents
-- **Tech stack**: Astro / TypeScript / Firebase Hosting / Firestore / Firebase Functions (Node 18 ESM)
+- **Tech stack**: Astro / TypeScript / Firebase Hosting / Firestore / Firebase Functions (Node 22, CommonJS)
 - **Primary language**: TypeScript (Astro components + Firebase Functions)
-- **Non-goals**: No SSR — this is a static site. No React/Vue/Angular. No native app features. No customer authentication (admin auth is handled in the separate Flutter app).
+- **Rendering**: server-rendered — `astro.config.mjs` uses `output: 'server'` with the Node adapter, served by the `ssrAstro` Cloud Function behind a Hosting rewrite (see `firebase.json`); Hosting serves static assets directly.
+- **Non-goals**: No React/Vue/Angular. No native app features. No customer authentication (admin auth is handled in the separate Flutter app).
 - **Key files**:
   - `astro/src/pages/index.astro` — home page (hero, about, events, newsletter)
   - `astro/src/pages/shop.astro` — shop / product listing
@@ -28,7 +29,7 @@
 
 This project runs on **Windows 11** with Git Bash available. Rules:
 
-- **Node**: use `node` / `npm` — project targets Node 18
+- **Node**: use `node` / `npm` — project targets Node 22 (Functions runtime `nodejs22` in `firebase.json`, CI `node-version: "22"`). Use Node ≥ 22.19 locally: astro 5.18's transitive `undici@8` declares that minimum (install-time warning only, not loaded by the deployed SSR bundle).
 - **Path separators**: forward slashes `/` work in most contexts; use them in code and config
 - **Astro dev server**: `cd astro && npm run dev` (runs on localhost:4321 by default)
 - **Firebase emulator**: `firebase emulators:start` from repo root
