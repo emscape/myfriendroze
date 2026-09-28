@@ -152,10 +152,22 @@ describe('handleSendEventNotification', () => {
     expect(firstPayload.params.UNSUBSCRIBE_EVENTS).toContain('type=events');
     expect(result).toEqual({
       success: true,
-      message: 'Event notification sent!',
+      message: 'Event notification sent to 2 of 2 subscribers.',
       eventId: 'event-1',
       emailsSent: 2,
     });
+  });
+
+  it('reports the real sent count in the message when some sends fail', async () => {
+    const db = fakeDb({ subscribers: ['ok@example.com', 'fails@example.com'], event: realEvent() });
+    const sendBrevoEmail = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network down'));
+
+    const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
+
+    expect(result.message).toBe('Event notification sent to 1 of 2 subscribers.');
+    expect(result.emailsSent).toBe(1);
   });
 
   it('records lastNotifiedAt/lastNotificationRecipientCount on the real event doc after sending', async () => {
@@ -200,6 +212,8 @@ describe('handleSendEventNotification', () => {
       lastNotificationRecipientCount: 1,
     });
     expect(result.emailsSent).toBe(0);
+    // Must not claim a send that didn't happen.
+    expect(result.message).toBe('Event notification recorded, but no emails were sent (Brevo not configured).');
   });
 
   // Regression guard for the PII-logging finding: a failed send used to log

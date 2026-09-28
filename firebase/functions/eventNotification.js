@@ -2,7 +2,6 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
-const functions = require("firebase-functions");
 const { eventNotificationEmailParams } = require("./lib/emailPayload");
 const { generateUnsubscribeToken } = require("./lib/unsubscribeToken");
 // sendBrevoEmail required lazily inside the v8-ignored wrapper below, not
@@ -81,9 +80,10 @@ async function handleSendEventNotification(request, {
     logger.info(`Found ${subscribers.length} subscribers for event notifications`);
 
     let emailsSent = 0;
+    const brevoConfigured = Boolean(apiKey && eventsSender);
 
     // Send event notification emails
-    if (apiKey && eventsSender && subscribers.length > 0) {
+    if (brevoConfigured && subscribers.length > 0) {
       // Send individual emails with personalized unsubscribe links
       const emailPromises = subscribers.map((subscriberEmail) => {
         const { events: unsubscribeEvents, all: unsubscribeAll } =
@@ -128,9 +128,14 @@ async function handleSendEventNotification(request, {
       lastNotificationRecipientCount: subscribers.length,
     });
 
+    // success stays true either way (the notification is still recorded on
+    // the event doc), but the message must not claim sends that didn't
+    // happen -- same fix as orderShipped.js.
     return {
       success: true,
-      message: "Event notification sent!",
+      message: brevoConfigured
+        ? `Event notification sent to ${emailsSent} of ${subscribers.length} subscribers.`
+        : "Event notification recorded, but no emails were sent (Brevo not configured).",
       eventId,
       emailsSent,
     };
@@ -153,7 +158,10 @@ exports.sendEventNotification = onCall({
   const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || functions.config().email?.events || '{"email":"events@myfriendroze.com","name":"myfriendroze Events"}');
+  // functions.config() (Firebase Functions v1 config API) is retired --
+  // its backing Cloud Runtime Configuration API shut down 2025-12-31 -- so
+  // it's not part of the fallback chain.
+  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || '{"email":"events@myfriendroze.com","name":"myfriendroze Events"}');
 
   return handleSendEventNotification(request, {
     db: admin.firestore(),
