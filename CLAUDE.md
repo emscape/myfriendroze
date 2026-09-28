@@ -70,6 +70,7 @@ No tool attribution in commit messages.
 - **Every feature, fix, or improvement** gets its own branch: `feature/name`, `fix/name`, `chore/name`.
 - **Never run `git commit` without explicit permission** from Emily in the current conversation.
 - Trivial one-line config changes may be committed to main only with explicit approval.
+- **Check the site locally before committing (MANDATORY)** for anything that touches a page, component, layout, or style — and for dependency/framework upgrades (Astro, adapters, Tailwind), which can change rendering without touching `src/`. Unit tests and the `ssrAstro` smoke test verify status codes and logic, not what a page actually looks like. Start `cd astro && npm run dev` (localhost:4321; reads live Firestore via the service-account key), offer it to Emily to click through, and wait for her OK before asking for commit approval. Don't complete a checkout from localhost — outside the Functions emulator it can reach the real Stripe account. This matters because merging to `master` deploys immediately with no manual gate after.
 - **Merge via GitHub, not locally**: after pushing a branch, open a PR (`gh pr create`) and merge it with `gh pr merge` or the GitHub UI — never `git merge` locally followed by a direct push to `main`. A local merge+push is invisible on GitHub (just an anonymous commit landing on `main`, no PR history, no inline checks-passed summary). Going through a real PR is also what's required for a future branch-protection rule to actually mean anything.
 
 ---
