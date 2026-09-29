@@ -29,7 +29,7 @@
 
 This project runs on **Windows 11** with Git Bash available. Rules:
 
-- **Node**: use `node` / `npm` — project targets Node 22 (Functions runtime `nodejs22` in `firebase.json`, CI `node-version: "22"`). Use Node ≥ 22.19 locally: astro 5.18's transitive `undici@8` declares that minimum (install-time warning only, not loaded by the deployed SSR bundle).
+- **Node**: use `node` / `npm` — project targets Node 22 (Functions runtime `nodejs22` in `firebase.json`, CI `node-version: "22"`). Astro 7 itself requires Node ≥ 22.12. Use Node ≥ 22.19 locally: astro 7's transitive `undici@8` (via `unifont`) declares that minimum (install-time warning only, not loaded by the deployed SSR bundle).
 - **Path separators**: forward slashes `/` work in most contexts; use them in code and config
 - **Astro dev server**: `cd astro && npm run dev` (runs on localhost:4321 by default)
 - **Firebase emulator**: `firebase emulators:start` from repo root

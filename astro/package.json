@@ -11,9 +11,9 @@
     "deploy": "npm run build && cd .. && node deploy.js"
   },
   "dependencies": {
-    "@astrojs/node": "^9.5.5",
+    "@astrojs/node": "^11.1.6",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^5.18.2",
+    "astro": "^7.3.5",
     "firebase-admin": "^13.10.0",
     "google-auth-library": "^10.9.1",
     "tailwindcss": "^4.3.3"

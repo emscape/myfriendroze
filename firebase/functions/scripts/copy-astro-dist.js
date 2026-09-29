@@ -9,11 +9,11 @@
 // but this specifically avoids relying on Git Bash being the one running
 // it — predeploy hooks execute via the platform's default shell).
 //
-// IMPORTANT — why package.json pins @oslojs/encoding, clsx, cookie, cssesc,
-// devalue, es-module-lexer, html-escaper, mrmime, piccolore, send,
-// server-destroy, unstorage, zod as DIRECT dependencies (exact versions,
-// not ^ranges), in addition to astro itself: astro-dist/server/**/*.mjs
-// imports these by bare specifier
+// IMPORTANT — why package.json pins @astrojs/internal-helpers,
+// @oslojs/encoding, clsx, cookie, devalue, html-escaper, mrmime, piccolore,
+// send, server-destroy, unstorage, zod as DIRECT dependencies (exact
+// versions, not ^ranges): astro-dist/server/**/*.mjs imports these by bare
+// specifier
 // (Astro's Node adapter leaves them external rather than bundling them —
 // confirmed by grepping the built output for non-relative imports). Firebase
 // never uploads local node_modules for a Functions deploy — Cloud Build
@@ -26,7 +26,10 @@
 // case that established this was kleur: under astro 5.12, prompts's kleur@3
 // won the top-level slot over astro's own kleur@4 until this file's
 // copy-astro-dist smoke test caught it. (kleur itself is no longer pinned —
-// astro 5.18's server output stopped importing it.) A direct dependency
+// astro 5.18's server output stopped importing it.) astro itself is not
+// pinned: since astro 7 the server output bundles astro's runtime and no
+// longer imports `astro` by bare specifier, so the package (and its optional
+// sharp dependency) isn't needed here. A direct dependency
 // always wins that slot, deterministically. When bumping astro, re-grep the
 // build for bare imports and drop pins the output no longer uses. If a future `astro build`
 // starts requiring a new external package that isn't in this list, the
