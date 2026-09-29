@@ -257,22 +257,28 @@ describe('formatAddressRaw', () => {
 });
 
 describe('eventNotificationEmailParams', () => {
-  function fullEventDetails(overrides = {}) {
+  // Firestore Timestamps expose .toDate() -- this fake mimics just enough
+  // of that surface for the pure formatting logic under test.
+  function ts(date) {
+    return { toDate: () => date };
+  }
+
+  function fullEvent(overrides = {}) {
     return {
       title: 'Succulent Workshop',
-      date: '2026-10-15',
-      time: '6:00 PM',
+      // 2026-10-15 18:00 America/Los_Angeles == 2026-10-16 01:00 UTC (PDT)
+      eventDate: ts(new Date('2026-10-16T01:00:00Z')),
+      endDate: null,
       location: 'MyFriendRoze Studio',
       description: 'Learn to arrange your own succulent garden.',
-      price: '$25',
-      registrationUrl: 'https://myfriendroze.com/events/succulent-workshop',
+      link: 'https://myfriendroze.com/events/succulent-workshop',
       ...overrides,
     };
   }
 
-  it('maps event details and subscriber info to Brevo template params', () => {
+  it('maps the real event doc and subscriber info to Brevo template params', () => {
     const params = eventNotificationEmailParams(
-      fullEventDetails(),
+      fullEvent(),
       'subscriber@example.com',
       'https://example.com/unsub?type=events',
       'https://example.com/unsub?type=all'
@@ -281,12 +287,11 @@ describe('eventNotificationEmailParams', () => {
     expect(params).toEqual({
       EMAIL: 'subscriber@example.com',
       EVENT_TITLE: 'Succulent Workshop',
-      EVENT_DATE: '2026-10-15',
+      EVENT_DATE: 'Thursday, October 15, 2026',
       EVENT_TIME: '6:00 PM',
       EVENT_LOCATION: 'MyFriendRoze Studio',
       EVENT_DESCRIPTION: 'Learn to arrange your own succulent garden.',
-      EVENT_PRICE: '$25',
-      REGISTRATION_URL: 'https://myfriendroze.com/events/succulent-workshop',
+      EVENT_MORE_INFO: 'More info: https://myfriendroze.com/events/succulent-workshop',
       UNSUBSCRIBE_EVENTS: 'https://example.com/unsub?type=events',
       UNSUBSCRIBE_ALL: 'https://example.com/unsub?type=all',
     });
@@ -296,12 +301,11 @@ describe('eventNotificationEmailParams', () => {
     const params = eventNotificationEmailParams(
       {
         title: undefined,
-        date: undefined,
-        time: undefined,
+        eventDate: null,
+        endDate: null,
         location: undefined,
         description: undefined,
-        price: undefined,
-        registrationUrl: undefined,
+        link: undefined,
       },
       'subscriber@example.com',
       'https://example.com/unsub?type=events',
@@ -313,17 +317,33 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EVENT_TIME).toBe('');
     expect(params.EVENT_LOCATION).toBe('');
     expect(params.EVENT_DESCRIPTION).toBe('');
-    expect(params.EVENT_PRICE).toBe('');
-    expect(params.REGISTRATION_URL).toBe('');
+    // No link -> no line at all, not a dangling "More info:" label.
+    expect(params.EVENT_MORE_INFO).toBe('');
   });
 
-  it('escapes HTML in caller-supplied event fields, since they are interpolated '
+  it('formats a multi-day event as a date range with both start and end times', () => {
+    const params = eventNotificationEmailParams(
+      fullEvent({
+        eventDate: ts(new Date('2026-10-16T01:00:00Z')), // Oct 15, 6:00 PM PDT
+        endDate: ts(new Date('2026-10-17T20:00:00Z')), // Oct 17, 1:00 PM PDT
+      }),
+      'subscriber@example.com',
+      'https://example.com/unsub?type=events',
+      'https://example.com/unsub?type=all'
+    );
+
+    expect(params.EVENT_DATE).toBe('Thursday, October 15, 2026 – Saturday, October 17, 2026');
+    expect(params.EVENT_TIME).toBe('Starts 6:00 PM, ends 1:00 PM');
+  });
+
+  it('escapes HTML in Roze-entered event fields, since they are interpolated '
     + 'unescaped into the Brevo template body', () => {
     const params = eventNotificationEmailParams(
-      fullEventDetails({
+      fullEvent({
         title: '<b>Workshop</b>',
         description: '<script>alert(1)</script>',
         location: '<img src=x onerror=alert(1)>',
+        link: '<a href=x>click</a>',
       }),
       'subscriber@example.com',
       'https://example.com/unsub?type=events',
@@ -333,12 +353,24 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EVENT_TITLE).toBe('&lt;b&gt;Workshop&lt;/b&gt;');
     expect(params.EVENT_DESCRIPTION).toBe('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(params.EVENT_LOCATION).toBe('&lt;img src=x onerror=alert(1)&gt;');
+    expect(params.EVENT_MORE_INFO).toBe('More info: &lt;a href=x&gt;click&lt;/a&gt;');
+  });
+
+  it('omits the "More info" line when the link is only whitespace', () => {
+    const params = eventNotificationEmailParams(
+      fullEvent({ link: '   ' }),
+      'subscriber@example.com',
+      'https://example.com/unsub?type=events',
+      'https://example.com/unsub?type=all'
+    );
+
+    expect(params.EVENT_MORE_INFO).toBe('');
   });
 
   it('passes EMAIL and unsubscribe URLs through unescaped, since they are Firestore/HMAC '
     + 'generated rather than caller-supplied free text', () => {
     const params = eventNotificationEmailParams(
-      fullEventDetails(),
+      fullEvent(),
       'subscriber@example.com',
       'https://example.com/unsub?type=events&token=abc&x=1',
       'https://example.com/unsub?type=all&token=def&x=2'
@@ -347,18 +379,6 @@ describe('eventNotificationEmailParams', () => {
     expect(params.EMAIL).toBe('subscriber@example.com');
     expect(params.UNSUBSCRIBE_EVENTS).toBe('https://example.com/unsub?type=events&token=abc&x=1');
     expect(params.UNSUBSCRIBE_ALL).toBe('https://example.com/unsub?type=all&token=def&x=2');
-  });
-
-  it('coerces a numeric EVENT_PRICE to a string instead of throwing, since these are '
-    + 'onCall inputs with no type validation at the boundary', () => {
-    const params = eventNotificationEmailParams(
-      fullEventDetails({ price: 25 }),
-      'subscriber@example.com',
-      'https://example.com/unsub?type=events',
-      'https://example.com/unsub?type=all'
-    );
-
-    expect(params.EVENT_PRICE).toBe('25');
   });
 });
 

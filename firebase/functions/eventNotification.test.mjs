@@ -12,10 +12,19 @@ function silentLogger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 }
 
-function fakeDb({ subscribers = [], eventId = 'event-1' } = {}) {
-  const eventsAdd = vi.fn().mockResolvedValue({ id: eventId });
+function ts(date) {
+  return { toDate: () => date };
+}
+
+function fakeDb({ subscribers = [], event = null, eventId = 'event-1' } = {}) {
+  const eventUpdate = vi.fn().mockResolvedValue(undefined);
+  const eventGet = vi.fn().mockResolvedValue({
+    exists: event !== null,
+    data: () => event,
+  });
   return {
-    eventsAdd,
+    eventUpdate,
+    eventGet,
     collection: (name) => {
       if (name === 'newsletter_signups') {
         return {
@@ -28,17 +37,34 @@ function fakeDb({ subscribers = [], eventId = 'event-1' } = {}) {
         };
       }
       if (name === 'events') {
-        return { add: eventsAdd };
+        return {
+          doc: (id) => {
+            if (id !== eventId) throw new Error(`Unexpected event id requested in test: ${id}`);
+            return { get: eventGet, update: eventUpdate };
+          },
+        };
       }
       throw new Error(`Unexpected collection requested in test: ${name}`);
     },
   };
 }
 
+function realEvent(overrides = {}) {
+  return {
+    title: 'Pasadena Artwalk',
+    description: '11a - 6p',
+    eventDate: ts(new Date('2026-10-04T01:00:00Z')),
+    endDate: null,
+    location: 'Green St, Pasadena CA',
+    link: null,
+    ...overrides,
+  };
+}
+
 function adminRequest(overrides = {}) {
   return {
     auth: { token: { email: ADMIN_EMAIL } },
-    data: { eventDetails: { title: 'Pasadena Artwalk', date: '2026-10-01', time: '6pm' } },
+    data: { eventId: 'event-1' },
     ...overrides,
   };
 }
@@ -59,7 +85,7 @@ describe('handleSendEventNotification', () => {
         { auth: null, data: {} },
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
   it('rejects requests from a non-admin email', async () => {
@@ -68,57 +94,188 @@ describe('handleSendEventNotification', () => {
         { auth: { token: { email: 'stranger@example.com' } }, data: {} },
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'permission-denied' });
   });
 
-  it('rejects a request missing eventDetails', async () => {
+  it('rejects a request missing eventId', async () => {
     await expect(
       handleSendEventNotification(
         adminRequest({ data: {} }),
         { db: fakeDb(), sendBrevoEmail: vi.fn(), ...baseDeps() }
       )
-    ).rejects.toThrow(HttpsError);
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+
+  // Anything that isn't a valid Firestore document ID must fail at the
+  // boundary as invalid-argument, not reach .doc() and surface as internal.
+  it.each([
+    ['a number', 42],
+    ['an object', { id: 'event-1' }],
+    ['a path with a slash', 'events/event-1'],
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+    ['"."', '.'],
+    ['".."', '..'],
+    ['a reserved __name__', '__reserved__'],
+    ['an over-long id', 'x'.repeat(1501)],
+  ])('rejects a malformed eventId (%s) as invalid-argument', async (_label, eventId) => {
+    const db = fakeDb({ event: realEvent() });
+
+    await expect(
+      handleSendEventNotification(
+        adminRequest({ data: { eventId } }),
+        { db, sendBrevoEmail: vi.fn(), ...baseDeps() }
+      )
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+    expect(db.eventGet).not.toHaveBeenCalled();
+  });
+
+  it('rejects with not-found when the event does not exist', async () => {
+    const db = fakeDb({ event: null });
+
+    await expect(
+      handleSendEventNotification(adminRequest(), { db, sendBrevoEmail: vi.fn(), ...baseDeps() })
+    ).rejects.toMatchObject({ code: 'not-found', message: 'Event not found' });
+    expect(db.eventUpdate).not.toHaveBeenCalled();
   });
 
   it('returns early with no emails sent when there are no events-subscribers', async () => {
-    const db = fakeDb({ subscribers: [] });
+    const db = fakeDb({ subscribers: [], event: realEvent() });
     const sendBrevoEmail = vi.fn();
 
     const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
 
     expect(result).toEqual({ success: true, message: 'No subscribers to notify', emailsSent: 0 });
     expect(sendBrevoEmail).not.toHaveBeenCalled();
-    expect(db.eventsAdd).not.toHaveBeenCalled();
+    expect(db.eventUpdate).not.toHaveBeenCalled();
   });
 
-  it('saves the event and emails every events-subscriber with a per-recipient unsubscribe link', async () => {
-    const db = fakeDb({ subscribers: ['a@example.com', 'b@example.com'] });
+  it('does NOT create a new event doc -- only reads and updates the existing one', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com'], event: realEvent() });
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+
+    await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
+
+    expect(db.eventGet).toHaveBeenCalled();
+  });
+
+  it('emails every events-subscriber using the REAL event fields, with a per-recipient unsubscribe link', async () => {
+    const db = fakeDb({
+      subscribers: ['a@example.com', 'b@example.com'],
+      event: realEvent({ title: 'Pasadena Artwalk' }),
+    });
     const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
 
     const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
 
-    expect(db.eventsAdd).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Pasadena Artwalk',
-      isActive: true,
-      notificationSent: true,
-      recipientCount: 2,
-      timestamp: 'SERVER_TIMESTAMP',
-    }));
     expect(sendBrevoEmail).toHaveBeenCalledTimes(2);
-    const firstPayload = sendBrevoEmail.mock.calls[0][0];
+    const [firstPayload, secondPayload] = sendBrevoEmail.mock.calls.map(([payload]) => payload);
     expect(firstPayload.to).toEqual([{ email: 'a@example.com' }]);
+    expect(secondPayload.to).toEqual([{ email: 'b@example.com' }]);
     expect(firstPayload.templateId).toBe('tmpl-1');
-    expect(firstPayload.params.UNSUBSCRIBE_EVENTS).toContain('type=events');
+    expect(firstPayload.params.EVENT_TITLE).toBe('Pasadena Artwalk');
+    // Each recipient's unsubscribe URLs must be bound to their own address
+    // (and signed for it) -- reusing the first subscriber's links for
+    // everyone would let one person unsubscribe another.
+    for (const [payload, email] of [[firstPayload, 'a@example.com'], [secondPayload, 'b@example.com']]) {
+      const eventsUrl = new URL(payload.params.UNSUBSCRIBE_EVENTS);
+      const allUrl = new URL(payload.params.UNSUBSCRIBE_ALL);
+      expect(eventsUrl.searchParams.get('email')).toBe(email);
+      expect(eventsUrl.searchParams.get('type')).toBe('events');
+      expect(allUrl.searchParams.get('email')).toBe(email);
+      expect(allUrl.searchParams.get('type')).toBe('all');
+    }
+    expect(firstPayload.params.UNSUBSCRIBE_EVENTS).not.toBe(secondPayload.params.UNSUBSCRIBE_EVENTS);
+    expect(new URL(firstPayload.params.UNSUBSCRIBE_EVENTS).searchParams.get('token'))
+      .not.toBe(new URL(secondPayload.params.UNSUBSCRIBE_EVENTS).searchParams.get('token'));
     expect(result).toEqual({
       success: true,
-      message: 'Event notification sent!',
+      message: 'Event notification sent to 2 of 2 subscribers.',
       eventId: 'event-1',
       emailsSent: 2,
     });
   });
 
-  it('skips sending email (but still saves the event) when Brevo is not configured', async () => {
-    const db = fakeDb({ subscribers: ['a@example.com'] });
+  it('reports the real sent count in the message when some sends fail', async () => {
+    const db = fakeDb({ subscribers: ['ok@example.com', 'fails@example.com'], event: realEvent() });
+    const sendBrevoEmail = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('network down'));
+
+    const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
+
+    expect(result.message).toBe('Event notification sent to 1 of 2 subscribers.');
+    expect(result.emailsSent).toBe(1);
+  });
+
+  it('records lastNotifiedAt/lastNotificationRecipientCount on the real event doc after sending', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com', 'b@example.com'], event: realEvent() });
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+
+    await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
+
+    expect(db.eventUpdate).toHaveBeenCalledWith({
+      lastNotifiedAt: 'SERVER_TIMESTAMP',
+      lastNotificationRecipientCount: 2,
+    });
+  });
+
+  // Emails have already gone out by the time lastNotifiedAt is written, and
+  // there's deliberately no idempotency guard -- so if that bookkeeping write
+  // failed and surfaced as an error, the caller's natural retry would email
+  // every subscriber a second time.
+  it('still reports success when recording lastNotifiedAt fails after the emails were sent', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com', 'b@example.com'], event: realEvent() });
+    db.eventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+    const logger = silentLogger();
+
+    const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps(), logger });
+
+    expect(sendBrevoEmail).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ success: true, emailsSent: 2 });
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('lastNotifiedAt could not be recorded'),
+      expect.any(Error)
+    );
+  });
+
+  // The bookkeeping-failure log must not claim delivery: it also runs when
+  // Brevo isn't configured (nothing sent) or every send failed.
+  it('does not log a bookkeeping failure as a successful send when nothing was sent', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com'], event: realEvent() });
+    db.eventUpdate.mockRejectedValueOnce(new Error('firestore unavailable'));
+    const logger = silentLogger();
+
+    const result = await handleSendEventNotification(adminRequest(), {
+      db, sendBrevoEmail: vi.fn(), ...baseDeps(), apiKey: null, logger,
+    });
+
+    const [logMessage] = logger.error.mock.calls[0];
+    expect(logMessage).not.toContain('notification sent');
+    expect(logMessage).toContain('0/1 sends succeeded');
+    // Nor may the returned message claim the notification was recorded.
+    expect(result.message).not.toMatch(/recorded/i);
+  });
+
+  it('does not block re-notifying about the same event -- no idempotency guard', async () => {
+    // Unlike orderShipped.js, Roze may legitimately re-notify subscribers
+    // about the same event (e.g. a reminder closer to the date), so a prior
+    // lastNotifiedAt on the doc must not prevent a second send.
+    const db = fakeDb({
+      subscribers: ['a@example.com'],
+      event: realEvent({ lastNotifiedAt: 'SOME_PAST_TIMESTAMP', lastNotificationRecipientCount: 5 }),
+    });
+    const sendBrevoEmail = vi.fn().mockResolvedValue(undefined);
+
+    const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
+
+    expect(sendBrevoEmail).toHaveBeenCalledTimes(1);
+    expect(result.emailsSent).toBe(1);
+  });
+
+  it('skips sending email (but still records the notification) when Brevo is not configured', async () => {
+    const db = fakeDb({ subscribers: ['a@example.com'], event: realEvent() });
     const sendBrevoEmail = vi.fn();
 
     const result = await handleSendEventNotification(adminRequest(), {
@@ -126,14 +283,19 @@ describe('handleSendEventNotification', () => {
     });
 
     expect(sendBrevoEmail).not.toHaveBeenCalled();
-    expect(db.eventsAdd).toHaveBeenCalled();
-    expect(result.emailsSent).toBe(1);
+    expect(db.eventUpdate).toHaveBeenCalledWith({
+      lastNotifiedAt: 'SERVER_TIMESTAMP',
+      lastNotificationRecipientCount: 1,
+    });
+    expect(result.emailsSent).toBe(0);
+    // Must not claim a send that didn't happen.
+    expect(result.message).toBe('No event notification emails were sent (Brevo not configured).');
   });
 
   // Regression guard for the PII-logging finding: a failed send used to log
   // the subscriber's raw email address via `Failed to send to ${email}`.
   it('logs a failed send by position, never by the subscriber\'s email address', async () => {
-    const db = fakeDb({ subscribers: ['leak-target@example.com'] });
+    const db = fakeDb({ subscribers: ['leak-target@example.com'], event: realEvent() });
     const sendBrevoEmail = vi.fn().mockRejectedValue(new Error('network down'));
     const logger = silentLogger();
 
@@ -149,7 +311,7 @@ describe('handleSendEventNotification', () => {
   // list of failures rather than the original subscriber list, so a later
   // subscriber's failure could misreport an earlier position.
   it('logs the correct 1-based subscriber position when an earlier send succeeded and a later one failed', async () => {
-    const db = fakeDb({ subscribers: ['ok@example.com', 'fails@example.com'] });
+    const db = fakeDb({ subscribers: ['ok@example.com', 'fails@example.com'], event: realEvent() });
     const sendBrevoEmail = vi.fn()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('network down'));
@@ -165,7 +327,12 @@ describe('handleSendEventNotification', () => {
 
   it('wraps an unexpected error (e.g. a Firestore failure) as an internal HttpsError', async () => {
     const db = {
-      collection: () => ({ where: () => ({ get: () => Promise.reject(new Error('firestore down')) }) }),
+      collection: (name) => {
+        if (name === 'events') {
+          return { doc: () => ({ get: () => Promise.reject(new Error('firestore down')) }) };
+        }
+        throw new Error(`Unexpected collection requested in test: ${name}`);
+      },
     };
     const logger = silentLogger();
 

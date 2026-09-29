@@ -2,7 +2,6 @@ const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
 const { defineSecret } = require("firebase-functions/params");
-const functions = require("firebase-functions");
 const { eventNotificationEmailParams } = require("./lib/emailPayload");
 const { generateUnsubscribeToken } = require("./lib/unsubscribeToken");
 // sendBrevoEmail required lazily inside the v8-ignored wrapper below, not
@@ -35,7 +34,28 @@ function buildUnsubscribeLinks(email, secret) {
 /**
  * Testable core — see createCheckoutSession.js's handleCreateCheckoutSession
  * for why dependencies are passed as parameters.
+ *
+ * eventId is the Firestore events/{eventId} doc ID -- this notifies
+ * subscribers about an event Roze already created via the admin app's
+ * add/edit event screen, mirroring orderShipped.js's orderId pattern,
+ * rather than accepting a freeform eventDetails payload and creating a
+ * second, disconnected event doc (the previous design, which used field
+ * names like date/time/price that don't exist on the real Event model).
  */
+// Firestore's documented document-ID constraints: a non-empty string, no
+// "/", not "." or "..", not matching __.*__, at most 1500 bytes. Checked at
+// the callable boundary so a malformed eventId fails as invalid-argument
+// instead of throwing inside .doc() and surfacing as internal. Whitespace-
+// only is rejected too -- never a real admin-app event id.
+function isValidDocumentId(id) {
+  return typeof id === 'string'
+    && id.trim() !== ''
+    && !id.includes('/')
+    && id !== '.' && id !== '..'
+    && !/^__.*__$/.test(id)
+    && Buffer.byteLength(id, 'utf8') <= 1500;
+}
+
 async function handleSendEventNotification(request, {
   db, sendBrevoEmail, apiKey, templates, eventsSender, secret, serverTimestamp, logger,
 }) {
@@ -43,13 +63,22 @@ async function handleSendEventNotification(request, {
     throw new HttpsError('permission-denied', 'Admin access required');
   }
 
-  const { eventDetails } = request.data || {};
+  const { eventId } = request.data || {};
 
-  if (!eventDetails) {
-    throw new HttpsError('invalid-argument', 'Event details are required');
+  if (!isValidDocumentId(eventId)) {
+    throw new HttpsError('invalid-argument', 'A valid event ID is required');
   }
 
   try {
+    const eventRef = db.collection("events").doc(eventId);
+    const eventDoc = await eventRef.get();
+
+    if (!eventDoc.exists) {
+      throw new HttpsError('not-found', 'Event not found');
+    }
+
+    const event = eventDoc.data();
+
     // Get all subscribers who want event notifications
     const subscribersSnapshot = await db
       .collection("newsletter_signups")
@@ -64,35 +93,11 @@ async function handleSendEventNotification(request, {
     const subscribers = subscribersSnapshot.docs.map(doc => doc.data().email);
     logger.info(`Found ${subscribers.length} subscribers for event notifications`);
 
-    // Save event to Firestore.
-    //
-    // isActive: true makes this doc match the `/events` page's live query
-    // (astro/src/lib/events-live.js), which filters on isActive — without
-    // it, an event created here would silently never appear on the site.
-    //
-    // KNOWN GAP: eventDetails here is caller-supplied and, going by the
-    // EVENT_DATE/EVENT_TIME fields used below for the Brevo email, is
-    // expected to carry legacy `date`/`time` strings, not a Firestore
-    // Timestamp `eventDate` field. astro/src/lib/event-mapping.js requires
-    // a real `eventDate` Timestamp and drops any doc without one, so an
-    // event created through this function still won't appear on the site
-    // even with isActive set. This function has no current callers (see
-    // the Brevo Transactional Emails Session notes) — needs a real design
-    // pass to collect a structured eventDate before it's wired up to
-    // anything, rather than guessing a caller contract that doesn't exist
-    // yet.
-    const eventRef = await db.collection("events").add({
-      ...eventDetails,
-      isActive: true,
-      timestamp: serverTimestamp(),
-      notificationSent: true,
-      recipientCount: subscribers.length
-    });
-
-    logger.info(`Successfully saved event ${eventRef.id} to Firestore.`);
+    let emailsSent = 0;
+    const brevoConfigured = Boolean(apiKey && eventsSender);
 
     // Send event notification emails
-    if (apiKey && eventsSender && subscribers.length > 0) {
+    if (brevoConfigured && subscribers.length > 0) {
       // Send individual emails with personalized unsubscribe links
       const emailPromises = subscribers.map((subscriberEmail) => {
         const { events: unsubscribeEvents, all: unsubscribeAll } =
@@ -102,7 +107,7 @@ async function handleSendEventNotification(request, {
           sender: eventsSender,
           to: [{ email: subscriberEmail }],
           templateId: templates.eventNotification,
-          params: eventNotificationEmailParams(eventDetails, subscriberEmail, unsubscribeEvents, unsubscribeAll)
+          params: eventNotificationEmailParams(event, subscriberEmail, unsubscribeEvents, unsubscribeAll)
         });
       });
 
@@ -122,17 +127,44 @@ async function handleSendEventNotification(request, {
         });
       }
 
-      const successfulSends = responses.filter(result => result.status === 'fulfilled').length;
-      logger.info(`Successfully sent event notification to ${successfulSends}/${subscribers.length} subscribers`);
+      emailsSent = responses.filter(result => result.status === 'fulfilled').length;
+      logger.info(`Successfully sent event notification to ${emailsSent}/${subscribers.length} subscribers`);
     } else {
       logger.warn("Brevo API key or events sender not configured. Skipping email.");
     }
 
+    // Informational only -- deliberately NOT an idempotency guard like
+    // orderShipped.js's claim transaction. Roze may legitimately re-notify
+    // subscribers about the same event (e.g. a reminder closer to the
+    // date), so a prior lastNotifiedAt must never block a later send.
+    //
+    // By this point any sends have already been attempted, so a failure here
+    // is logged rather than thrown: surfacing it as an error would invite a
+    // retry, and with no idempotency guard that retry would email every
+    // subscriber again. The log states the real send count, since this also
+    // runs when Brevo isn't configured or every send failed.
+    try {
+      await eventRef.update({
+        lastNotifiedAt: serverTimestamp(),
+        lastNotificationRecipientCount: subscribers.length,
+      });
+    } catch (bookkeepingError) {
+      logger.error(
+        `Event ${eventId}: notification processed (${emailsSent}/${subscribers.length} sends succeeded) but lastNotifiedAt could not be recorded:`,
+        bookkeepingError
+      );
+    }
+
+    // success stays true either way, but the message must only state what
+    // actually happened (same fix as orderShipped.js) -- it doesn't claim the
+    // notification was recorded, since the write above may have failed.
     return {
       success: true,
-      message: "Event notification sent!",
-      eventId: eventRef.id,
-      emailsSent: subscribers.length
+      message: brevoConfigured
+        ? `Event notification sent to ${emailsSent} of ${subscribers.length} subscribers.`
+        : "No event notification emails were sent (Brevo not configured).",
+      eventId,
+      emailsSent,
     };
 
   } catch (error) {
@@ -153,7 +185,10 @@ exports.sendEventNotification = onCall({
   const { sendBrevoEmail: postToBrevo } = require("./lib/sendBrevoEmail");
   const apiKey = brevoApiKey.value();
   const templates = JSON.parse(brevoTemplates.value());
-  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || functions.config().email?.events || '{"email":"events@myfriendroze.com","name":"myfriendroze Events"}');
+  // functions.config() (Firebase Functions v1 config API) is retired --
+  // its backing Cloud Runtime Configuration API shut down 2025-12-31 -- so
+  // it's not part of the fallback chain.
+  const eventsSender = JSON.parse(process.env.EMAIL_EVENTS || '{"email":"events@myfriendroze.com","name":"myfriendroze Events"}');
 
   return handleSendEventNotification(request, {
     db: admin.firestore(),
