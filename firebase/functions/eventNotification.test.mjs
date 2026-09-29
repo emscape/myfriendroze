@@ -169,11 +169,25 @@ describe('handleSendEventNotification', () => {
     const result = await handleSendEventNotification(adminRequest(), { db, sendBrevoEmail, ...baseDeps() });
 
     expect(sendBrevoEmail).toHaveBeenCalledTimes(2);
-    const firstPayload = sendBrevoEmail.mock.calls[0][0];
+    const [firstPayload, secondPayload] = sendBrevoEmail.mock.calls.map(([payload]) => payload);
     expect(firstPayload.to).toEqual([{ email: 'a@example.com' }]);
+    expect(secondPayload.to).toEqual([{ email: 'b@example.com' }]);
     expect(firstPayload.templateId).toBe('tmpl-1');
     expect(firstPayload.params.EVENT_TITLE).toBe('Pasadena Artwalk');
-    expect(firstPayload.params.UNSUBSCRIBE_EVENTS).toContain('type=events');
+    // Each recipient's unsubscribe URLs must be bound to their own address
+    // (and signed for it) -- reusing the first subscriber's links for
+    // everyone would let one person unsubscribe another.
+    for (const [payload, email] of [[firstPayload, 'a@example.com'], [secondPayload, 'b@example.com']]) {
+      const eventsUrl = new URL(payload.params.UNSUBSCRIBE_EVENTS);
+      const allUrl = new URL(payload.params.UNSUBSCRIBE_ALL);
+      expect(eventsUrl.searchParams.get('email')).toBe(email);
+      expect(eventsUrl.searchParams.get('type')).toBe('events');
+      expect(allUrl.searchParams.get('email')).toBe(email);
+      expect(allUrl.searchParams.get('type')).toBe('all');
+    }
+    expect(firstPayload.params.UNSUBSCRIBE_EVENTS).not.toBe(secondPayload.params.UNSUBSCRIBE_EVENTS);
+    expect(new URL(firstPayload.params.UNSUBSCRIBE_EVENTS).searchParams.get('token'))
+      .not.toBe(new URL(secondPayload.params.UNSUBSCRIBE_EVENTS).searchParams.get('token'));
     expect(result).toEqual({
       success: true,
       message: 'Event notification sent to 2 of 2 subscribers.',
