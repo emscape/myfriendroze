@@ -3,6 +3,8 @@
 // request (see products-live.js). Extracted from the transform logic so
 // it's unit-testable without a live database.
 
+import { normalizeCategory } from './shop-categories.js';
+
 /**
  * Lowercases, strips punctuation, and hyphenates a title into a URL-safe
  * slug — matches the convention the old hand-written products.js already
@@ -43,12 +45,13 @@ export function formatDimensions({ widthIn, heightIn, depthIn }) {
  * returns, below). No Firestore calls here — unit-testable without a live
  * database.
  *
- * category/features/tags/compareAtPrice default to safe empty values
- * rather than being invented — the Flutter admin app's Product model
- * doesn't collect those fields today, a known gap tracked separately, not
+ * features/tags/compareAtPrice default to safe empty values rather than
+ * being invented — the Flutter admin app's Product model doesn't collect
+ * those fields today, a known gap tracked separately, not
  * something to paper over with guessed data here. dimensions IS collected
  * (heightIn/widthIn/depthIn, added for shipping estimates) and is formatted
- * via formatDimensions above.
+ * via formatDimensions above. category IS collected too, and a missing or
+ * unknown one is normalized to pottery (see shop-categories.js).
  * @param {{ id: string, data: () => Record<string, any> }} doc
  */
 export function docToProduct(doc) {
@@ -85,7 +88,7 @@ export function docToProduct(doc) {
     // reaches this point is already isActive by construction, since every
     // real caller queries where('isActive', '==', true) first.)
     inStock: data.inStock === undefined ? true : data.inStock === true,
-    category: '',
+    category: normalizeCategory(data.category),
     dimensions: formatDimensions({ widthIn, heightIn, depthIn }),
     features: [],
     weight: typeof data.weight === 'number' ? data.weight : 0,

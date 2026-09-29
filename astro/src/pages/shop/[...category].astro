@@ -3,14 +3,24 @@
 // current Firestore data — an admin-app price/availability edit shows up
 // immediately instead of waiting for the next build+deploy. See
 // src/lib/products-live.js.
+//
+// One page per product category (src/lib/shop-categories.js): /shop is
+// pottery, /shop/plants and /shop/other the rest. Any other /shop/... path
+// is a 404.
 export const prerender = false;
 
-import Layout from '../layouts/Layout.astro';
-import Header from '../components/Header.astro';
-import ProductCard from '../components/ProductCard.astro';
-import ShippingCalculator from '../components/ShippingCalculator.astro';
-import { fetchLiveProducts } from '../lib/products-live.js';
-import { getFirestoreDb } from '../lib/firestore-admin.js';
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import ShippingCalculator from '../../components/ShippingCalculator.astro';
+import { fetchLiveProducts } from '../../lib/products-live.js';
+import { getFirestoreDb } from '../../lib/firestore-admin.js';
+import { shopCategoryForSlug, productsInCategory } from '../../lib/shop-categories.js';
+
+const shop = shopCategoryForSlug(Astro.params.category);
+if (!shop) {
+  return new Response(null, { status: 404, statusText: 'Not Found' });
+}
 
 // A transient Firestore/credentials failure here must not take the whole
 // page down — falling back to an empty list keeps /shop serving (with a
@@ -18,7 +28,7 @@ import { getFirestoreDb } from '../lib/firestore-admin.js';
 // recovers. Logged loudly since this is otherwise silent.
 let products: Awaited<ReturnType<typeof fetchLiveProducts>> = [];
 try {
-  products = await fetchLiveProducts(getFirestoreDb());
+  products = productsInCategory(await fetchLiveProducts(getFirestoreDb()), shop.value);
 } catch (error) {
   console.error('[shop] Failed to fetch live products from Firestore — showing an empty list.', error);
 }
@@ -36,11 +46,11 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
 ---
 
 <Layout
-  title="Shop | myfriendroze Ceramics"
-  description="Shop handcrafted ceramic planters and unique pottery pieces from myfriendroze ceramics. Each piece is lovingly made by hand."
+  title={shop.pageTitle}
+  description={shop.pageDescription}
 >
   <!-- Custom header -->
-  <Header slot="header" currentPath="/shop" />
+  <Header slot="header" currentPath={shop.path} />
 
   <!-- Banner Section -->
   <section class="image-banner">
@@ -75,7 +85,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   <section class="collection-hero color-background-1 gradient">
     <div class="collection-hero__inner page-width">
       <div class="collection-hero__text-wrapper">
-        <h1 class="collection-hero__title">you're kiln me</h1>
+        <h1 class="collection-hero__title">{shop.label}</h1>
       </div>
     </div>
   </section>
@@ -171,6 +181,9 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
             <ProductCard product={product} showQuickOrder={true} />
           ))}
         </div>
+        {products.length === 0 && (
+          <p class="product-grid__empty">nothing here yet. check back soon!</p>
+        )}
       </div>
     </div>
   </section>
@@ -452,6 +465,12 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
 
   .collection-product-grid__wrapper {
     margin-top: 2rem;
+  }
+
+  .product-grid__empty {
+    text-align: center;
+    font-size: 1.6rem;
+    padding: 4rem 0;
   }
 
   .product-grid {
