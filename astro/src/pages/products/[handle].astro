@@ -93,7 +93,7 @@ const additionalImages = product.images.slice(1);
         <div class="product-detail__info">
           <!-- Category Badge -->
           <div class="product-detail__meta">
-            <span class="product-detail__category">{shop.label}</span>
+            <a href={shop.path} class="product-detail__category">{shop.label}</a>
           </div>
 
           <!-- Title -->
@@ -358,6 +358,12 @@ const additionalImages = product.images.slice(1);
     letter-spacing: 0.08em;
     color: var(--color-accent);
     font-weight: 600;
+    text-decoration: none;
+  }
+
+  .product-detail__category:hover,
+  .product-detail__category:focus-visible {
+    text-decoration: underline;
   }
 
   .product-detail__title {
