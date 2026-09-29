@@ -88,8 +88,8 @@ describe('docToProduct', () => {
     expect(product.images).toEqual([]);
   });
 
-  it('defaults category, features, tags, and compareAtPrice for fields Firestore does not store', () => {
-    // The Flutter admin app's Product model has no category/features/tags/
+  it('defaults features, tags, and compareAtPrice for fields Firestore does not store', () => {
+    // The Flutter admin app's Product model has no features/tags/
     // compareAtPrice fields today — this is a known data-completeness gap,
     // not something this transform should invent data for. Everything
     // must default to a safe, renderable empty value rather than being
@@ -98,10 +98,21 @@ describe('docToProduct', () => {
 
     const product = docToProduct(doc);
 
-    expect(product.category).toBe('');
     expect(product.features).toEqual([]);
     expect(product.tags).toEqual([]);
     expect(product.compareAtPrice).toBeNull();
+  });
+
+  it('reads the category the admin app stores', () => {
+    expect(docToProduct(fakeDoc('a', { title: 'Haworthia', category: 'plant' })).category).toBe('plant');
+    expect(docToProduct(fakeDoc('b', { title: 'Beads', category: 'other' })).category).toBe('other');
+  });
+
+  it('lists a product with no or an unknown category as pottery', () => {
+    // Every product created before the admin app's category picker is
+    // pottery, so a missing category must not drop it from the shop.
+    expect(docToProduct(fakeDoc('a', { title: 'Old Pot' })).category).toBe('pottery');
+    expect(docToProduct(fakeDoc('b', { title: 'Odd', category: 'jewelry' })).category).toBe('pottery');
   });
 
   it('formats dimensions from heightIn/widthIn/depthIn when present', () => {

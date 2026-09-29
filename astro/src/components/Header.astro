@@ -1,14 +1,22 @@
 ---
 // Header component for myfriendroze - Mobile-first responsive design
+import NavDropdown from './NavDropdown.astro';
+import { isNavItemActive } from '../lib/navigation.js';
+import { SHOP_CATEGORIES } from '../lib/shop-categories.js';
+
 export interface Props {
   currentPath?: string;
 }
 
 const { currentPath = '/' } = Astro.props;
 
+// An item with `children` renders as a dropdown (NavDropdown.astro).
 const navigation = [
   { href: '/', label: 'home' },
-  { href: '/shop', label: "you're kiln me" },
+  {
+    label: 'shops',
+    children: SHOP_CATEGORIES.map(({ path, label }) => ({ href: path, label })),
+  },
   { href: '/gallery', label: 'gallery' },
   { href: '/events', label: 'in the wild' },
   { href: '/small-print', label: 'the small print' },
@@ -33,11 +41,15 @@ const navigation = [
     <!-- Desktop Navigation -->
     <nav class="header__nav desktop-only">
       <ul class="header__nav-list">
-        {navigation.map((item) => (
+        {navigation.map((item, i) => (
           <li>
-            <a href={item.href} class={currentPath === item.href ? 'active' : ''}>
-              {item.label}
-            </a>
+            {'children' in item ? (
+              <NavDropdown item={item} currentPath={currentPath} variant="desktop" id={`nav-dropdown-${i}`} />
+            ) : (
+              <a href={item.href} class={isNavItemActive(item, currentPath) ? 'active' : ''}>
+                {item.label}
+              </a>
+            )}
           </li>
         ))}
       </ul>
@@ -64,11 +76,15 @@ const navigation = [
   <div class="mobile-menu" id="mobile-menu" hidden>
     <nav class="mobile-menu__nav">
       <ul class="mobile-menu__list">
-        {navigation.map((item) => (
+        {navigation.map((item, i) => (
           <li>
-            <a href={item.href} class={`mobile-menu__link ${currentPath === item.href ? 'mobile-menu__link--active' : ''}`}>
-              {item.label}
-            </a>
+            {'children' in item ? (
+              <NavDropdown item={item} currentPath={currentPath} variant="mobile" id={`mobile-nav-dropdown-${i}`} />
+            ) : (
+              <a href={item.href} class={`mobile-menu__link ${isNavItemActive(item, currentPath) ? 'mobile-menu__link--active' : ''}`}>
+                {item.label}
+              </a>
+            )}
           </li>
         ))}
       </ul>

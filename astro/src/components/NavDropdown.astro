@@ -1,0 +1,188 @@
+---
+// A header nav item that opens a list of links (e.g. "shops"). Uses the
+// disclosure pattern: a real <button> with aria-expanded/aria-controls
+// toggling a plain list of links, rather than an ARIA menu, which would
+// need arrow-key handling and hides the links from screen readers' normal
+// link navigation. Escape closes it and returns focus to the button.
+//
+// variant="desktop" floats the list under the button and closes it on an
+// outside click or when focus leaves it; variant="mobile" expands the list
+// inline inside the hamburger menu.
+import { isNavItemActive, isCurrentPage } from '../lib/navigation.js';
+
+export interface Props {
+  item: { label: string; children: { href: string; label: string }[] };
+  currentPath: string;
+  variant: 'desktop' | 'mobile';
+  id: string;
+}
+
+const { item, currentPath, variant, id } = Astro.props;
+const active = isNavItemActive(item, currentPath);
+// currentPath drives the highlight and can name a section (a product page
+// passes its shop's path); aria-current follows the real URL instead.
+const pathname = Astro.url.pathname;
+---
+
+<div class={`nav-dropdown nav-dropdown--${variant}`} data-nav-dropdown data-variant={variant}>
+  <button
+    type="button"
+    class:list={['nav-dropdown__toggle', { 'nav-dropdown__toggle--active': active }]}
+    aria-expanded="false"
+    aria-controls={id}
+  >
+    {item.label}
+    <svg class="nav-dropdown__caret" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="m9.354.646a.5.5 0 0 0-.708 0L5 4.293 1.354.646a.5.5 0 0 0-.708.708l4 4a.5.5 0 0 0 .708 0l4-4a.5.5 0 0 0 0-.708Z" fill="currentColor"/>
+    </svg>
+  </button>
+  <ul class="nav-dropdown__list" id={id} hidden>
+    {item.children.map((child) => (
+      <li>
+        <a
+          href={child.href}
+          class:list={[
+            'nav-dropdown__link',
+            // Header.astro's script closes the mobile menu when any
+            // .mobile-menu__link is followed.
+            { 'mobile-menu__link': variant === 'mobile' },
+            { 'nav-dropdown__link--active': child.href === currentPath },
+          ]}
+          aria-current={isCurrentPage(child.href, pathname) ? 'page' : undefined}
+        >
+          {child.label}
+        </a>
+      </li>
+    ))}
+  </ul>
+</div>
+
+<style>
+  .nav-dropdown__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--color-foreground);
+    cursor: pointer;
+    font: inherit;
+    font-size: 1.4rem;
+    font-weight: 500;
+    transition: color 0.2s ease;
+  }
+
+  .nav-dropdown__toggle:hover,
+  .nav-dropdown__toggle--active {
+    color: var(--color-accent);
+  }
+
+  .nav-dropdown__caret {
+    transition: transform 0.2s ease;
+  }
+
+  .nav-dropdown__toggle[aria-expanded='true'] .nav-dropdown__caret {
+    transform: rotate(180deg);
+  }
+
+  .nav-dropdown__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-dropdown__list[hidden] {
+    display: none;
+  }
+
+  .nav-dropdown__link {
+    display: block;
+    color: var(--color-foreground);
+    text-decoration: none;
+    font-size: 1.4rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .nav-dropdown__link:hover,
+  .nav-dropdown__link--active {
+    background-color: var(--color-background-2);
+    color: var(--color-accent);
+  }
+
+  /* Desktop: list floats below the button */
+  .nav-dropdown--desktop {
+    position: relative;
+  }
+
+  /* No vertical padding: unlike the header's inline <a> links, where
+     padding doesn't move the text, it would push this inline-flex
+     button's label below theirs. */
+  .nav-dropdown--desktop .nav-dropdown__toggle {
+    padding: 0;
+  }
+
+  .nav-dropdown--desktop .nav-dropdown__list {
+    position: absolute;
+    top: 100%;
+    left: -1.6rem;
+    z-index: 101;
+    min-width: 100%;
+    margin-top: 0.8rem;
+    padding: 0.8rem 0;
+    background: var(--color-background);
+    /* color-mix, not rgba(var(...)): --color-foreground is a hex value */
+    border: 1px solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .nav-dropdown--desktop .nav-dropdown__link {
+    padding: 0.8rem 1.6rem;
+  }
+
+  /* Mobile: list expands inline inside the hamburger menu */
+  .nav-dropdown--mobile .nav-dropdown__toggle {
+    width: 100%;
+    padding: 1.2rem 2rem;
+    text-align: left;
+  }
+
+  .nav-dropdown--mobile .nav-dropdown__link {
+    padding: 1.2rem 2rem 1.2rem 4rem;
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-nav-dropdown]').forEach((dropdown) => {
+    const toggle = dropdown.querySelector<HTMLButtonElement>('.nav-dropdown__toggle');
+    const list = dropdown.querySelector<HTMLElement>('.nav-dropdown__list');
+    if (!toggle || !list) return;
+
+    const setOpen = (open: boolean) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      list.hidden = !open;
+    };
+    const isOpen = () => toggle.getAttribute('aria-expanded') === 'true';
+
+    toggle.addEventListener('click', () => setOpen(!isOpen()));
+
+    dropdown.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && isOpen()) {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+
+    // The floating desktop list would otherwise stay open over the page
+    // after the visitor has clicked or tabbed elsewhere.
+    if (dropdown.dataset.variant === 'desktop') {
+      document.addEventListener('click', (event) => {
+        if (!dropdown.contains(event.target as Node)) setOpen(false);
+      });
+      dropdown.addEventListener('focusout', (event) => {
+        if (!dropdown.contains(event.relatedTarget as Node | null)) setOpen(false);
+      });
+    }
+  });
+</script>

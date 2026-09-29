@@ -4,6 +4,7 @@ import Header from '../../components/Header.astro';
 import ShippingCalculator from '../../components/ShippingCalculator.astro';
 import { fetchLiveProductByHandle } from '../../lib/products-live.js';
 import { getFirestoreDb } from '../../lib/firestore-admin.js';
+import { shopCategoryForValue } from '../../lib/shop-categories.js';
 
 // Rendered on demand (not prerendered/getStaticPaths-enumerated) so a
 // price/availability edit in the admin app shows up immediately instead of
@@ -30,6 +31,10 @@ if (!product) {
   return Astro.redirect('/shop');
 }
 
+// The shop page this product is listed on, for the breadcrumb, the
+// category badge, and which "shops" dropdown entry is highlighted.
+const shop = shopCategoryForValue(product.category);
+
 // Featured image is the first one
 const featuredImage = product.images[0];
 const additionalImages = product.images.slice(1);
@@ -40,13 +45,13 @@ const additionalImages = product.images.slice(1);
   description={product.seoDescription || product.description}
 >
   <!-- Custom header -->
-  <Header slot="header" currentPath="/shop" />
+  <Header slot="header" currentPath={shop.path} />
 
   <!-- Breadcrumb Navigation -->
   <div class="breadcrumb-nav page-width">
     <a href="/" class="breadcrumb-link">Home</a>
     <span class="breadcrumb-separator">/</span>
-    <a href="/shop" class="breadcrumb-link">Shop</a>
+    <a href={shop.path} class="breadcrumb-link">{shop.label}</a>
     <span class="breadcrumb-separator">/</span>
     <span class="breadcrumb-current">{product.title}</span>
   </div>
@@ -88,7 +93,7 @@ const additionalImages = product.images.slice(1);
         <div class="product-detail__info">
           <!-- Category Badge -->
           <div class="product-detail__meta">
-            <span class="product-detail__category">{product.category}</span>
+            <a href={shop.path} class="product-detail__category">{shop.label}</a>
           </div>
 
           <!-- Title -->
@@ -353,6 +358,12 @@ const additionalImages = product.images.slice(1);
     letter-spacing: 0.08em;
     color: var(--color-accent);
     font-weight: 600;
+    text-decoration: none;
+  }
+
+  .product-detail__category:hover,
+  .product-detail__category:focus-visible {
+    text-decoration: underline;
   }
 
   .product-detail__title {
@@ -518,10 +529,43 @@ const additionalImages = product.images.slice(1);
     outline: none;
   }
 
+  /* Styled here rather than relying on Layout.astro's .button rules:
+     those are scoped to Layout, so they never reach this page's markup.
+     Dark text on the green fill (not --color-button-text's cream, which is
+     too low-contrast to read on it); hover/focus inverts to maroon. */
   .product-detail__add-to-cart {
+    display: block;
     width: 100%;
     padding: 1.5rem 2rem;
+    background-color: var(--color-button);
+    color: var(--color-foreground);
+    border: 0.2rem solid var(--color-foreground);
+    border-radius: var(--buttons-radius);
+    font: inherit;
     font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 0.3rem 0 var(--color-foreground);
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .product-detail__add-to-cart:hover:not(:disabled),
+  .product-detail__add-to-cart:focus-visible {
+    background-color: var(--color-foreground);
+    color: var(--color-background);
+    transform: translateY(-0.2rem);
+    box-shadow: 0 0.5rem 0 var(--color-button);
+  }
+
+  .product-detail__add-to-cart:active:not(:disabled) {
+    transform: translateY(0.1rem);
+    box-shadow: 0 0.1rem 0 var(--color-button);
+  }
+
+  .product-detail__add-to-cart:focus-visible {
+    outline: 0.2rem solid var(--color-foreground);
+    outline-offset: 0.4rem;
   }
 
   .product-detail__add-to-cart:disabled {
