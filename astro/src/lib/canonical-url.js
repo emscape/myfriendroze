@@ -2,7 +2,9 @@
 // production domain, not the request's host, so localhost, preview and
 // Hosting-default domains never become canonical. A trailing slash is
 // dropped so /shop and /shop/ don't count as two pages; the query string
-// is never included.
+// is never included. Leading slashes/backslashes collapse to one, since a
+// path such as "//evil.example" would otherwise resolve as a
+// protocol-relative URL and swap in another host.
 
 const SITE_ORIGIN = 'https://myfriendroze.com';
 
@@ -11,6 +13,7 @@ const SITE_ORIGIN = 'https://myfriendroze.com';
  * @returns {string}
  */
 export function canonicalUrl(pathname) {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  const rooted = `/${pathname.replace(/^[/\\]+/, '')}`;
+  const path = rooted.length > 1 ? rooted.replace(/\/+$/, '') : rooted;
   return new URL(path, SITE_ORIGIN).href;
 }

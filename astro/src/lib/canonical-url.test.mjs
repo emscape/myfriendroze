@@ -11,4 +11,11 @@ describe('canonicalUrl', () => {
   it('drops a trailing slash so /shop and /shop/ share one canonical', () => {
     expect(canonicalUrl('/shop/')).toBe('https://myfriendroze.com/shop');
   });
+
+  it('never lets a path starting with // change the origin', () => {
+    expect(canonicalUrl('//evil.example/shop')).toBe('https://myfriendroze.com/evil.example/shop');
+    expect(canonicalUrl('///evil.example')).toBe('https://myfriendroze.com/evil.example');
+    // URL parsing treats "\" as "/" for https, so "/\evil" is also "//evil".
+    expect(canonicalUrl('/\\evil.example')).toBe('https://myfriendroze.com/evil.example');
+  });
 });
