@@ -12,6 +12,11 @@ const { title = 'myfriendroze', description = 'Handcrafted ceramic planters and 
 // stylesheet, so .page-width's padding (and everything else defined only here) was
 // never actually applied on any page.
 import '../styles/global.css';
+import { canonicalUrl } from '../lib/canonical-url.js';
+
+// Each page's own URL. Was hardcoded to the home page on every page,
+// which told search engines every page duplicated the home page.
+const canonical = canonicalUrl(Astro.url.pathname);
 ---
 
 <!doctype html>
@@ -21,14 +26,14 @@ import '../styles/global.css';
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#f2efdd">
-    <link rel="canonical" href="https://myfriendroze.com">
+    <link rel="canonical" href={canonical}>
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="keywords" content="succulents, cacti, ceramics, planters, handmade, myfriendroze" />
     <meta property="og:title" content="myfriendroze" />
     <meta property="og:description" content="Handcrafted ceramic planters and carefully curated succulents from myfriendroze." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://myfriendroze.com" />
+    <meta property="og:url" content={canonical} />
 
     <!-- Favicon — a single fill color can't read against both light and
          dark browser chrome (the near-white fill this asset started with

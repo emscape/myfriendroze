@@ -19,3 +19,17 @@ export function isNavItemActive(item, currentPath) {
   }
   return item.href === currentPath;
 }
+
+/**
+ * Whether `href` is the page actually being viewed, for aria-current.
+ * Distinct from the highlight: Header's currentPath can name a section
+ * (a product page passes its shop's path), but aria-current="page" must
+ * only mark a link to the page itself. Tolerates a trailing slash.
+ * @param {string} href
+ * @param {string} pathname
+ * @returns {boolean}
+ */
+export function isCurrentPage(href, pathname) {
+  const strip = (p) => (p.length > 1 ? p.replace(/\/+$/, '') : p);
+  return strip(href) === strip(pathname);
+}

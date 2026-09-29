@@ -8,7 +8,7 @@
 // variant="desktop" floats the list under the button and closes it on an
 // outside click or when focus leaves it; variant="mobile" expands the list
 // inline inside the hamburger menu.
-import { isNavItemActive } from '../lib/navigation.js';
+import { isNavItemActive, isCurrentPage } from '../lib/navigation.js';
 
 export interface Props {
   item: { label: string; children: { href: string; label: string }[] };
@@ -19,6 +19,9 @@ export interface Props {
 
 const { item, currentPath, variant, id } = Astro.props;
 const active = isNavItemActive(item, currentPath);
+// currentPath drives the highlight and can name a section (a product page
+// passes its shop's path); aria-current follows the real URL instead.
+const pathname = Astro.url.pathname;
 ---
 
 <div class={`nav-dropdown nav-dropdown--${variant}`} data-nav-dropdown data-variant={variant}>
@@ -45,7 +48,7 @@ const active = isNavItemActive(item, currentPath);
             { 'mobile-menu__link': variant === 'mobile' },
             { 'nav-dropdown__link--active': child.href === currentPath },
           ]}
-          aria-current={child.href === currentPath ? 'page' : undefined}
+          aria-current={isCurrentPage(child.href, pathname) ? 'page' : undefined}
         >
           {child.label}
         </a>

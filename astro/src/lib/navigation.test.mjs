@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNavItemActive } from './navigation.js';
+import { isNavItemActive, isCurrentPage } from './navigation.js';
 
 describe('isNavItemActive', () => {
   it('matches a plain link by exact path', () => {
@@ -20,5 +20,19 @@ describe('isNavItemActive', () => {
     expect(isNavItemActive(shops, '/shop')).toBe(true);
     expect(isNavItemActive(shops, '/shop/plants')).toBe(true);
     expect(isNavItemActive(shops, '/gallery')).toBe(false);
+  });
+});
+
+describe('isCurrentPage', () => {
+  it('matches the page actually being viewed, ignoring a trailing slash', () => {
+    expect(isCurrentPage('/shop/plants', '/shop/plants')).toBe(true);
+    expect(isCurrentPage('/shop/plants', '/shop/plants/')).toBe(true);
+    expect(isCurrentPage('/shop', '/shop/')).toBe(true);
+    expect(isCurrentPage('/', '/')).toBe(true);
+  });
+
+  it('is false on a product page even though its shop is highlighted', () => {
+    expect(isCurrentPage('/shop/plants', '/products/desert-rose')).toBe(false);
+    expect(isCurrentPage('/shop', '/shop/plants')).toBe(false);
   });
 });
