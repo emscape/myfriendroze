@@ -138,6 +138,12 @@ async function main() {
     console.log(`  sender: ${template.sender?.name} <${template.sender?.email}>`);
     console.log(`  active: ${template.isActive}`);
     console.log(`  has content: ${Boolean(template.htmlContent && template.htmlContent.trim())}`);
+    // Social profile links in the body, so a handle change can be checked
+    // across templates without dumping their full HTML.
+    const socialLinks = [
+      ...new Set((template.htmlContent || '').match(/https?:\/\/(?:www\.)?(?:instagram|facebook)\.com\/[^\s"'<>)]*/gi) || []),
+    ];
+    console.log(`  social links: ${socialLinks.length ? socialLinks.join(', ') : '(none)'}`);
     return;
   }
 
