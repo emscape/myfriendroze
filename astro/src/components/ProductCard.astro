@@ -82,6 +82,18 @@ const { product, showQuickOrder = true } = Astro.props;
         >
           {product.inStock ? 'quick order' : 'sold out'}
         </button>
+        {product.inStock && (
+          <button
+            type="button"
+            class="product-card__cart-add"
+            data-cart-sku={product.id}
+            data-cart-category={product.category}
+          >
+            add to cart
+          </button>
+        )}
+        <span class="visually-hidden" role="status" data-cart-announce></span>
+        <p class="product-card__error" role="alert" data-quick-order-error hidden></p>
       </div>
     )}
   </div>
@@ -217,8 +229,90 @@ const { product, showQuickOrder = true } = Astro.props;
     width: 100%;
   }
 
+  .product-card__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .product-card__error {
+    margin: 0;
+    font-size: 1.3rem;
+  }
+
+  .product-card__error[hidden] {
+    display: none;
+  }
+
+  .product-card__cart-add {
+    width: 100%;
+    padding: 1rem 1.6rem;
+    background: transparent;
+    color: var(--color-foreground);
+    border: 0.2rem solid var(--color-foreground);
+    border-radius: var(--buttons-radius);
+    font: inherit;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .product-card__cart-add:hover,
+  .product-card__cart-add:focus-visible {
+    background-color: var(--color-foreground);
+    color: var(--color-background);
+  }
+
+  .product-card__cart-add:focus-visible {
+    outline: 0.2rem solid var(--color-foreground);
+    outline-offset: 0.3rem;
+  }
+
   .product-card__add-to-cart:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
 </style>
+
+<script>
+  import { addToCart, MAX_CART_ITEMS } from '../lib/cart.js';
+  import { loadCart, saveCart } from '../lib/cart-store.js';
+
+  // Astro bundles this once per page however many cards render, so one
+  // delegated listener covers every card's "add to cart" button.
+  const LABEL = 'add to cart';
+  const resetTimers = new WeakMap<HTMLButtonElement, number>();
+
+  function flash(button: HTMLButtonElement, label: string, announcement: string) {
+    button.textContent = label;
+    const announcer = button.closest('.product-card__actions')?.querySelector('[data-cart-announce]');
+    if (announcer) announcer.textContent = announcement;
+    window.clearTimeout(resetTimers.get(button));
+    resetTimers.set(button, window.setTimeout(() => (button.textContent = LABEL), 2500));
+  }
+
+  document.addEventListener('click', (event) => {
+    const button = (event.target as Element | null)?.closest<HTMLButtonElement>('.product-card__cart-add');
+    const sku = button?.dataset.cartSku;
+    if (!button || !sku) return;
+
+    const { cart, status } = addToCart(loadCart(), { sku, category: button.dataset.cartCategory });
+    if (status === 'full') {
+      flash(button, 'cart full', `Your cart can hold up to ${MAX_CART_ITEMS} different pieces.`);
+      return;
+    }
+    if (!saveCart(cart)) {
+      flash(button, "couldn't add", "Couldn't save your cart. Your browser may be blocking site storage.");
+      return;
+    }
+    const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
+    if (status === 'limited' && inCart === 1) {
+      flash(button, 'in your cart', 'This one-of-a-kind piece is already in your cart.');
+    } else if (status === 'limited') {
+      flash(button, `${inCart} in cart (max)`, `Your cart has the most you can order (${inCart}).`);
+    } else {
+      flash(button, 'added ✓', 'Added to your cart.');
+    }
+  });
+</script>

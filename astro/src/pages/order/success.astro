@@ -37,6 +37,13 @@ import Header from '../../components/Header.astro';
       <a href="/shop" class="button button--primary">Continue Shopping</a>
     </div>
   </section>
+
+  <script>
+    // Removes the pieces a cart checkout in this tab sent to Stripe. Does
+    // nothing after a quick order, which never touches the cart.
+    import { completeCartCheckout } from '../../lib/cart-store.js';
+    completeCartCheckout();
+  </script>
 </Layout>
 
 <style>

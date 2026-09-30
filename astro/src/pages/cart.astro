@@ -1,0 +1,249 @@
+---
+export const prerender = false;
+
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { fetchLiveProducts } from '../lib/products-live.js';
+import { getFirestoreDb } from '../lib/firestore-admin.js';
+import { catalogForCart } from '../lib/cart-view.js';
+
+// The cart itself lives in the visitor's browser, so this page ships the
+// live catalog (prices, stock, categories) and the script joins the two.
+// Rendered per request so prices and stock are always current.
+let catalog: ReturnType<typeof catalogForCart> = [];
+let loadFailed = false;
+try {
+  catalog = catalogForCart(await fetchLiveProducts(getFirestoreDb()));
+} catch (error) {
+  loadFailed = true;
+  console.error('[cart] Failed to fetch live products from Firestore.', error);
+}
+
+// Escaped so a product title can never close the <script> tag it's in.
+const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
+---
+
+<Layout title="Your Cart | myfriendroze" description="Review the pieces in your cart and check out.">
+  <Header slot="header" currentPath="/cart" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">your cart</h1>
+    </div>
+  </section>
+
+  <section class="cart section-padding">
+    <div class="page-width cart__wrapper">
+      {loadFailed && (
+        <p class="cart__notice" role="alert">
+          We couldn't load the shop just now, so your cart can't be checked out. Please refresh in a moment.
+        </p>
+      )}
+
+      <p class="cart__empty" data-cart-empty hidden>
+        Your cart is empty. <a href="/shop">Browse the shop</a>
+      </p>
+
+      <ul class="cart__lines" data-cart-lines></ul>
+
+      <p class="cart__notice" data-cart-problems role="status" hidden>
+        Some pieces in your cart can't be ordered right now. Remove them to check out.
+      </p>
+
+      <div class="cart__summary" data-cart-summary hidden>
+        <p class="cart__subtotal">
+          <span>subtotal</span>
+          <span data-cart-subtotal></span>
+        </p>
+        <button type="button" class="cart__checkout" data-cart-checkout disabled={loadFailed}>
+          check out
+        </button>
+        <p class="cart__note">
+          You'll enter your email, phone number and shipping address on Stripe's secure checkout page.
+        </p>
+        <p class="cart__message" data-cart-message role="alert" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <script type="application/json" id="cart-catalog" set:html={catalogJson}></script>
+  <script>
+    import { initCartPage } from '../lib/cart-page-ui.js';
+    initCartPage();
+  </script>
+</Layout>
+
+<style>
+  .cart__wrapper {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .cart__empty,
+  .cart__notice {
+    font-size: 1.6rem;
+    margin: 0 0 2rem;
+  }
+
+  .cart__empty a {
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+
+  .cart__notice {
+    padding: 1.2rem 1.6rem;
+    border: 0.2rem solid var(--color-foreground);
+    border-radius: 0.8rem;
+  }
+
+  .cart__lines {
+    list-style: none;
+    margin: 0 0 2.4rem;
+    padding: 0;
+  }
+
+  .cart__summary {
+    border-top: 0.2rem solid var(--color-foreground);
+    padding-top: 2rem;
+  }
+
+  .cart__subtotal {
+    display: flex;
+    justify-content: space-between;
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.8rem;
+  }
+
+  .cart__note {
+    font-size: 1.4rem;
+    margin: 1.2rem 0 0;
+  }
+
+  .cart__checkout {
+    width: 100%;
+    padding: 1.4rem 2rem;
+    background-color: var(--color-button);
+    color: var(--color-foreground);
+    border: 0.2rem solid var(--color-foreground);
+    border-radius: var(--buttons-radius);
+    font: inherit;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    box-shadow: 0 0.3rem 0 var(--color-foreground);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .cart__checkout:hover:not(:disabled),
+  .cart__checkout:focus-visible {
+    background-color: var(--color-foreground);
+    color: var(--color-background);
+  }
+
+  .cart__checkout:focus-visible {
+    outline: 0.2rem solid var(--color-foreground);
+    outline-offset: 0.4rem;
+  }
+
+  .cart__checkout:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cart__message {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  /* Lines are built by cart-page-ui.js, so these need :global to reach them. */
+  .cart__lines :global(.cart-line) {
+    display: grid;
+    grid-template-columns: 8rem 1fr auto;
+    gap: 1.2rem 1.6rem;
+    align-items: center;
+    padding: 1.6rem 0;
+    border-bottom: 0.1rem solid var(--color-foreground);
+  }
+
+  .cart__lines :global(.cart-line__image) {
+    width: 8rem;
+    height: 8rem;
+    object-fit: cover;
+    border-radius: 0.8rem;
+    display: block;
+  }
+
+  .cart__lines :global(.cart-line__image-placeholder) {
+    width: 8rem;
+    height: 8rem;
+  }
+
+  .cart__lines :global(.cart-line__title) {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+
+  .cart__lines :global(.cart-line__detail) {
+    font-size: 1.4rem;
+    margin: 0.4rem 0 0;
+  }
+
+  .cart__lines :global(.cart-line__controls) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem 1.6rem;
+    margin-top: 0.8rem;
+    font-size: 1.4rem;
+  }
+
+  .cart__lines :global(.cart-line__controls select) {
+    font: inherit;
+    padding: 0.4rem 0.8rem;
+    margin-left: 0.6rem;
+  }
+
+  .cart__lines :global(.cart-line__remove) {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--color-foreground);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .cart__lines :global(.cart-line__total) {
+    font-size: 1.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .cart__lines :global(.cart-line--sold-out),
+  .cart__lines :global(.cart-line--unavailable) {
+    opacity: 0.75;
+  }
+
+  @media (max-width: 480px) {
+    .cart__lines :global(.cart-line) {
+      grid-template-columns: 6.4rem 1fr;
+    }
+
+    .cart__lines :global(.cart-line__image),
+    .cart__lines :global(.cart-line__image-placeholder) {
+      width: 6.4rem;
+      height: 6.4rem;
+    }
+
+    .cart__lines :global(.cart-line__total) {
+      grid-column: 2;
+    }
+  }
+</style>

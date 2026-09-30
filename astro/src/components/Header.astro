@@ -64,7 +64,8 @@ const navigation = [
         </svg>
       </button>
       <a href="/cart" class="header__cart">
-        <span class="visually-hidden">Cart</span>
+        <span class="visually-hidden" data-cart-label>Cart</span>
+        <span class="header__cart-count" data-cart-count aria-hidden="true" hidden></span>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5H2M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17M17 13v4a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-4.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -189,6 +190,30 @@ const navigation = [
     color: var(--color-accent);
   }
 
+  .header__cart {
+    position: relative;
+  }
+
+  .header__cart-count {
+    position: absolute;
+    top: -0.2rem;
+    right: -0.4rem;
+    min-width: 1.8rem;
+    height: 1.8rem;
+    padding: 0 0.4rem;
+    border-radius: 0.9rem;
+    background-color: var(--color-foreground);
+    color: var(--color-background);
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.8rem;
+    text-align: center;
+  }
+
+  .header__cart-count[hidden] {
+    display: none;
+  }
+
   /* Mobile menu */
   .mobile-menu {
     background: var(--color-background);
@@ -284,6 +309,28 @@ const navigation = [
 </style>
 
 <script>
+  import { cartItemCount } from '../lib/cart.js';
+  import { loadCart, onCartChange } from '../lib/cart-store.js';
+
+  // Cart count badge. The cart lives in this browser's storage, so the
+  // count is filled in here rather than server-rendered.
+  const cartCount = document.querySelector<HTMLElement>('[data-cart-count]');
+  const cartLabel = document.querySelector<HTMLElement>('[data-cart-label]');
+
+  function showCartCount(cart: ReturnType<typeof loadCart>) {
+    const count = cartItemCount(cart);
+    if (cartCount) {
+      cartCount.textContent = count > 99 ? '99+' : String(count);
+      cartCount.hidden = count === 0;
+    }
+    if (cartLabel) {
+      cartLabel.textContent = count === 0 ? 'Cart' : `Cart, ${count} ${count === 1 ? 'item' : 'items'}`;
+    }
+  }
+
+  showCartCount(loadCart());
+  onCartChange(showCartCount);
+
   // Mobile menu functionality
   const menuToggle = document.querySelector('.header__menu-toggle');
   const mobileMenu = document.querySelector('.mobile-menu');

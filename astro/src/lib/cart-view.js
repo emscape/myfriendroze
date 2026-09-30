@@ -1,0 +1,100 @@
+// Pure logic behind the /cart page: joins the browser-stored cart with the
+// live product catalog the page is rendered with. Prices, titles, stock and
+// quantity limits always come from the live catalog, never from what was
+// stored when a piece was added. Money is handled in cents to avoid
+// floating-point drift in totals.
+
+import { maxQtyForCategory } from './cart.js';
+
+/**
+ * @typedef {{ id: string, handle: string, title: string, price: number,
+ *   image: string, inStock: boolean, category: string }} CartCatalogEntry
+ * @typedef {{ sku: string, title: string, href: string | null, image: string,
+ *   qty: number, maxQty: number, priceCents: number, lineTotalCents: number,
+ *   status: 'ok' | 'sold-out' | 'unavailable' }} CartLine
+ */
+
+/**
+ * The slice of each live product the cart page needs, small enough to embed
+ * in the page.
+ * @param {Array<{ id: string, handle: string, title: string, price: number,
+ *   images: string[], inStock: boolean, category: string }>} products
+ * @returns {CartCatalogEntry[]}
+ */
+export function catalogForCart(products) {
+  return products.map(({ id, handle, title, price, images, inStock, category }) => ({
+    id,
+    handle,
+    title,
+    price,
+    image: images[0] ?? '',
+    inStock,
+    category,
+  }));
+}
+
+function toCents(dollars) {
+  return Math.round(dollars * 100);
+}
+
+/**
+ * @param {import('./cart.js').Cart} cart
+ * @param {CartCatalogEntry[]} catalog
+ * @returns {{ lines: CartLine[], subtotalCents: number,
+ *   checkoutItems: { sku: string, qty: number }[], hasProblems: boolean }}
+ */
+export function buildCartView(cart, catalog) {
+  const bySku = new Map(catalog.map((entry) => [entry.id, entry]));
+
+  const lines = cart.items.map((item) => {
+    const product = bySku.get(item.sku);
+    // Inactive, deleted and not-yet-published products aren't in the live
+    // catalog at all.
+    if (!product) {
+      return {
+        sku: item.sku,
+        title: 'A piece that is no longer available',
+        href: null,
+        image: '',
+        qty: item.qty,
+        maxQty: item.qty,
+        priceCents: 0,
+        lineTotalCents: 0,
+        status: 'unavailable',
+      };
+    }
+    const maxQty = maxQtyForCategory(product.category);
+    const qty = Math.min(item.qty, maxQty);
+    const priceCents = toCents(product.price);
+    const status = product.inStock ? 'ok' : 'sold-out';
+    return {
+      sku: item.sku,
+      title: product.title,
+      href: `/products/${product.handle}`,
+      image: product.image,
+      qty,
+      maxQty,
+      priceCents,
+      lineTotalCents: status === 'ok' ? priceCents * qty : 0,
+      status,
+    };
+  });
+
+  const okLines = lines.filter((line) => line.status === 'ok');
+  return {
+    lines,
+    subtotalCents: okLines.reduce((sum, line) => sum + line.lineTotalCents, 0),
+    checkoutItems: okLines.map(({ sku, qty }) => ({ sku, qty })),
+    hasProblems: okLines.length !== lines.length,
+  };
+}
+
+const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+
+/**
+ * @param {number} cents
+ * @returns {string}
+ */
+export function formatPrice(cents) {
+  return USD.format(cents / 100);
+}

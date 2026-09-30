@@ -5,6 +5,7 @@ import ShippingCalculator from '../../components/ShippingCalculator.astro';
 import { fetchLiveProductByHandle } from '../../lib/products-live.js';
 import { getFirestoreDb } from '../../lib/firestore-admin.js';
 import { shopCategoryForValue } from '../../lib/shop-categories.js';
+import { maxQtyForCategory } from '../../lib/cart.js';
 
 // Rendered on demand (not prerendered/getStaticPaths-enumerated) so a
 // price/availability edit in the admin app shows up immediately instead of
@@ -34,6 +35,8 @@ if (!product) {
 // The shop page this product is listed on, for the breadcrumb, the
 // category badge, and which "shops" dropdown entry is highlighted.
 const shop = shopCategoryForValue(product.category);
+// One-of-a-kind pieces (limit 1) get no quantity picker.
+const maxQty = maxQtyForCategory(product.category);
 
 // Featured image is the first one
 const featuredImage = product.images[0];
@@ -150,7 +153,8 @@ const additionalImages = product.images.slice(1);
           </dl>
 
           <!-- Add to Cart Form -->
-          <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-title={product.title} data-product-price={product.price}>
+          <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-category={product.category}>
+            {maxQty > 1 && (
             <div class="form-group">
               <label for="quantity" class="form-label">Quantity:</label>
               <div class="quantity-selector">
@@ -166,7 +170,7 @@ const additionalImages = product.images.slice(1);
                   id="quantity"
                   name="quantity"
                   min="1"
-                  max="99"
+                  max={maxQty}
                   value="1"
                   class="quantity-input"
                 />
@@ -179,6 +183,7 @@ const additionalImages = product.images.slice(1);
                 </button>
               </div>
             </div>
+            )}
 
             <button
               type="submit"
@@ -188,6 +193,11 @@ const additionalImages = product.images.slice(1);
             >
               {product.inStock ? 'Add to Cart' : 'Sold Out'}
             </button>
+
+            <p class="product-detail__cart-status" id="cart-status" role="status" hidden>
+              <span id="cart-status-text"></span>
+              <a href="/cart" class="product-detail__cart-link">view cart</a>
+            </p>
           </form>
 
           <!-- Tags -->
@@ -563,6 +573,25 @@ const additionalImages = product.images.slice(1);
     box-shadow: 0 0.1rem 0 var(--color-button);
   }
 
+  .product-detail__cart-status {
+    margin: 1.2rem 0 0;
+    font-size: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.2rem;
+    align-items: baseline;
+  }
+
+  .product-detail__cart-status[hidden] {
+    display: none;
+  }
+
+  .product-detail__cart-link {
+    color: var(--color-foreground);
+    font-weight: 600;
+    text-decoration: underline;
+  }
+
   .product-detail__add-to-cart:focus-visible {
     outline: 0.2rem solid var(--color-foreground);
     outline-offset: 0.4rem;
@@ -645,6 +674,9 @@ const additionalImages = product.images.slice(1);
 </style>
 
 <script>
+  import { addToCart, MAX_CART_ITEMS } from '../../lib/cart.js';
+  import { loadCart, saveCart } from '../../lib/cart-store.js';
+
   // Image gallery thumbnail switching
   const thumbnailButtons = document.querySelectorAll('.product-detail__thumbnail');
   const featuredImage = document.getElementById('featured-image');
@@ -678,33 +710,54 @@ const additionalImages = product.images.slice(1);
     plusBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const current = parseInt(quantityInput.value) || 1;
-      quantityInput.value = Math.min(99, current + 1).toString();
+      const max = parseInt(quantityInput.max) || 1;
+      quantityInput.value = Math.min(max, current + 1).toString();
     });
   }
 
-  // Add to cart form submission
-  const form = document.getElementById('product-form') as HTMLFormElement;
+  // Add to cart. One-of-a-kind pieces have no quantity input, so they
+  // always add 1; the cart caps quantities at the category limit either way.
+  const form = document.getElementById('product-form') as HTMLFormElement | null;
+  const cartStatus = document.getElementById('cart-status');
+  const cartStatusText = document.getElementById('cart-status-text');
+
+  function showCartStatus(message: string) {
+    if (!cartStatus || !cartStatusText) return;
+    cartStatusText.textContent = message;
+    cartStatus.hidden = false;
+  }
+
   if (form) {
-    form.addEventListener('submit', async (e) => {
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
-      
-      const quantity = parseInt(quantityInput.value) || 1;
-      const productData = {
-        id: form.dataset.productId,
-        title: form.dataset.productTitle,
-        price: parseFloat(form.dataset.productPrice || '0'),
-        quantity: quantity
-      };
+      const sku = form.dataset.productId;
+      if (!sku) return;
 
-      // Dispatch custom event for cart handling
-      // This will be caught by a global cart manager
-      const event = new CustomEvent('product:add-to-cart', {
-        detail: productData
+      const qty = quantityInput ? parseInt(quantityInput.value) || 1 : 1;
+      const { cart, status } = addToCart(loadCart(), {
+        sku,
+        category: form.dataset.productCategory,
+        qty: Math.max(1, qty),
       });
-      window.dispatchEvent(event);
 
-      // Show feedback (placeholder - will be replaced with cart implementation)
-      alert(`Added ${quantity}x ${productData.title} to cart`);
+      if (status === 'full') {
+        showCartStatus(`Your cart can hold up to ${MAX_CART_ITEMS} different pieces.`);
+        return;
+      }
+      if (!saveCart(cart)) {
+        showCartStatus("Couldn't save your cart. Your browser may be blocking site storage.");
+        return;
+      }
+      const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
+      showCartStatus(
+        status === 'limited'
+          ? inCart === 1
+            ? 'This one-of-a-kind piece is in your cart.'
+            : `Your cart has the most you can order (${inCart}).`
+          : inCart === 1
+            ? 'Added to your cart.'
+            : `Added. Your cart has ${inCart}.`
+      );
     });
   }
 </script>
