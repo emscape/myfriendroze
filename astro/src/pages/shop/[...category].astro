@@ -27,9 +27,13 @@ if (!shop) {
 // "no products" state) instead of a 500 for every visitor until Firestore
 // recovers. Logged loudly since this is otherwise silent.
 let products: Awaited<ReturnType<typeof fetchLiveProducts>> = [];
+// Distinguishes "couldn't load" from a genuinely empty shop, so an
+// outage isn't shown to visitors as "nothing here yet".
+let loadFailed = false;
 try {
   products = productsInCategory(await fetchLiveProducts(getFirestoreDb()), shop.value);
 } catch (error) {
+  loadFailed = true;
   console.error('[shop] Failed to fetch live products from Firestore — showing an empty list.', error);
 }
 
@@ -182,7 +186,11 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
           ))}
         </div>
         {products.length === 0 && (
-          <p class="product-grid__empty">nothing here yet. check back soon!</p>
+          <p class="product-grid__empty">
+            {loadFailed
+              ? "we couldn't load the shop just now. please try again in a minute."
+              : 'nothing here yet. check back soon!'}
+          </p>
         )}
       </div>
     </div>

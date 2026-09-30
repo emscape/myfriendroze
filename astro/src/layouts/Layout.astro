@@ -30,8 +30,8 @@ const canonical = canonicalUrl(Astro.url.pathname);
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="keywords" content="succulents, cacti, ceramics, planters, handmade, myfriendroze" />
-    <meta property="og:title" content="myfriendroze" />
-    <meta property="og:description" content="Handcrafted ceramic planters and carefully curated succulents from myfriendroze." />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:url" content={canonical} />
 
