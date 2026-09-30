@@ -110,6 +110,33 @@ describe('handleCreateCheckoutSession', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
+  // Checked before any Firestore read, so an oversized or duplicated item
+  // list can't fan out into one product read per entry.
+  it('returns 400 for a duplicated sku without reading Firestore or calling Stripe', async () => {
+    const productGet = vi.fn();
+    const db = { collection: () => ({ doc: () => ({ get: productGet }) }) };
+    const sessionsCreate = vi.fn();
+    const stripeClient = { checkout: { sessions: { create: sessionsCreate } } };
+    const req = {
+      method: 'POST',
+      body: {
+        customer: { email: 'buyer@example.com', name: 'Buyer' },
+        items: [
+          { sku: 'sku-1', qty: 1 },
+          { sku: 'sku-1', qty: 1 },
+        ],
+      },
+    };
+    const res = fakeRes();
+
+    await handleCreateCheckoutSession(req, res, { db, stripeClient, siteOrigin: SITE_ORIGIN });
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'DUPLICATE_SKU' }));
+    expect(productGet).not.toHaveBeenCalled();
+    expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
   it('returns 400 for an unknown sku instead of calling Stripe', async () => {
     const db = fakeDb({}); // no products at all
     const sessionsCreate = vi.fn();

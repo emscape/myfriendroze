@@ -6,10 +6,25 @@ import { createRequire } from 'node:module';
 // loading it a second way here caused v8's coverage merging to
 // under-report real coverage for this file.
 const require = createRequire(import.meta.url);
-const { buildLineItemsFromCatalog, CatalogValidationError } = require('./pricing.js');
+const {
+  buildLineItemsFromCatalog,
+  validateItemList,
+  CatalogValidationError,
+  MAX_ITEMS,
+} = require('./pricing.js');
 
 function catalogWith(entries) {
   return new Map(Object.entries(entries));
+}
+
+// The CatalogValidationError code a call throws, or null if it doesn't throw.
+function errorCodeOf(fn) {
+  try {
+    fn();
+  } catch (error) {
+    return error instanceof CatalogValidationError ? error.code : `unexpected: ${error}`;
+  }
+  return null;
 }
 
 function fakeTimestamp(dateString) {
@@ -54,7 +69,7 @@ describe('buildLineItemsFromCatalog', () => {
 
   it('builds multiple line items in the order given, each priced independently', () => {
     const catalog = catalogWith({
-      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+      'sku-1': { title: 'Blue Branches', price: 70, isActive: true, category: 'plant' },
       'sku-2': { title: 'Pineapple Planter', price: 45.5, isActive: true },
     });
 
@@ -169,7 +184,7 @@ describe('buildLineItemsFromCatalog', () => {
 
   it.each([0, -1, 21, 999])('throws for an out-of-bounds quantity of %i', (qty) => {
     const catalog = catalogWith({
-      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+      'sku-1': { title: 'Echeveria', price: 12, isActive: true, category: 'plant' },
     });
 
     expect(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty }], catalog)).toThrow(
@@ -179,7 +194,7 @@ describe('buildLineItemsFromCatalog', () => {
 
   it.each([1, 20])('allows the boundary quantities %i', (qty) => {
     const catalog = catalogWith({
-      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+      'sku-1': { title: 'Echeveria', price: 12, isActive: true, category: 'plant' },
     });
 
     expect(() =>
@@ -250,5 +265,100 @@ describe('buildLineItemsFromCatalog', () => {
     expect(() => buildLineItemsFromCatalog(undefined, catalog)).toThrow(
       CatalogValidationError
     );
+  });
+
+  // Per-category quantity limits: pottery and "other" pieces are one of a
+  // kind; plants can be bought in multiples.
+  it('allows up to 20 of a plant', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Echeveria', price: 12, isActive: true, category: 'plant' },
+    });
+
+    const lineItems = buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 20 }], catalog);
+
+    expect(lineItems[0].quantity).toBe(20);
+  });
+
+  it('rejects more than 20 of a plant', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Echeveria', price: 12, isActive: true, category: 'plant' },
+    });
+
+    expect(errorCodeOf(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 21 }], catalog))).toBe(
+      'INVALID_QTY'
+    );
+  });
+
+  it.each(['pottery', 'other'])('rejects more than 1 of a one-of-a-kind %s product', (category) => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Blue Branches', price: 70, isActive: true, category },
+    });
+
+    expect(buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 1 }], catalog)[0].quantity).toBe(1);
+    expect(errorCodeOf(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 2 }], catalog))).toBe(
+      'INVALID_QTY'
+    );
+  });
+
+  // Matches the site, which lists a product with a missing or unknown
+  // category on the pottery shop page.
+  it.each([undefined, 'mystery'])('treats a product with category %j as pottery (limit 1)', (category) => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Uncategorised', price: 70, isActive: true, category },
+    });
+
+    expect(errorCodeOf(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 2 }], catalog))).toBe(
+      'INVALID_QTY'
+    );
+  });
+
+  // Listing a sku twice would otherwise let two separate line items each
+  // pass the per-product quantity limit.
+  it('rejects the same sku listed twice', () => {
+    const catalog = catalogWith({
+      'sku-1': { title: 'Blue Branches', price: 70, isActive: true },
+    });
+
+    expect(
+      errorCodeOf(() =>
+        buildLineItemsFromCatalog(
+          [
+            { sku: 'sku-1', qty: 1 },
+            { sku: 'sku-1', qty: 1 },
+          ],
+          catalog
+        )
+      )
+    ).toBe('DUPLICATE_SKU');
+  });
+});
+
+describe('validateItemList', () => {
+  function items(count) {
+    return Array.from({ length: count }, (_, i) => ({ sku: `sku-${i}`, qty: 1 }));
+  }
+
+  it(`accepts up to ${MAX_ITEMS} distinct items`, () => {
+    expect(errorCodeOf(() => validateItemList(items(MAX_ITEMS)))).toBeNull();
+  });
+
+  it(`rejects more than ${MAX_ITEMS} distinct items`, () => {
+    expect(errorCodeOf(() => validateItemList(items(MAX_ITEMS + 1)))).toBe('TOO_MANY_ITEMS');
+  });
+
+  it('rejects the same sku listed twice', () => {
+    expect(
+      errorCodeOf(() =>
+        validateItemList([
+          { sku: 'sku-1', qty: 1 },
+          { sku: 'sku-1', qty: 2 },
+        ])
+      )
+    ).toBe('DUPLICATE_SKU');
+  });
+
+  it('rejects an empty or missing items list', () => {
+    expect(errorCodeOf(() => validateItemList([]))).toBe('EMPTY_ITEMS');
+    expect(errorCodeOf(() => validateItemList(undefined))).toBe('EMPTY_ITEMS');
   });
 });

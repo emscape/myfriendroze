@@ -10,9 +10,17 @@
 // price field, if present at all, is never read.
 
 const MIN_QTY = 1;
-const MAX_QTY = 20; // abuse-protection bound for direct API POSTs, not a
-// business requirement — this site's checkout has only ever sent a
-// single-item cart with qty 1 in practice.
+// Most of any one product a single order can buy, by product category.
+// Pottery and "other" pieces are one of a kind; plants come in multiples.
+// A missing or unrecognised category counts as pottery, matching the
+// site's shop pages (astro/src/lib/shop-categories.js). Keep in step with
+// the cart's copy of these limits on the site.
+const MAX_QTY_BY_CATEGORY = { pottery: 1, plant: 20, other: 1 };
+const DEFAULT_CATEGORY = 'pottery';
+// Distinct products per order — an abuse bound for direct API POSTs (each
+// one costs a Firestore read), well under Stripe Checkout's own 100
+// line-item limit.
+const MAX_ITEMS = 50;
 
 class CatalogValidationError extends Error {
   constructor(code, message) {
@@ -24,6 +32,37 @@ class CatalogValidationError extends Error {
 
 function dollarsToCents(amount) {
   return Math.round(amount * 100);
+}
+
+function maxQtyFor(product) {
+  return Object.hasOwn(MAX_QTY_BY_CATEGORY, product.category)
+    ? MAX_QTY_BY_CATEGORY[product.category]
+    : MAX_QTY_BY_CATEGORY[DEFAULT_CATEGORY];
+}
+
+/**
+ * Shape checks on the item list that need no catalog, so the caller can
+ * run them before reading any product from Firestore.
+ *
+ * @param {{sku: string, qty: number}[]} items
+ * @throws {CatalogValidationError}
+ */
+function validateItemList(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new CatalogValidationError('EMPTY_ITEMS', 'At least one item is required');
+  }
+  if (items.length > MAX_ITEMS) {
+    throw new CatalogValidationError('TOO_MANY_ITEMS', `An order can include at most ${MAX_ITEMS} products`);
+  }
+  // A sku listed twice would let each copy pass the per-product quantity
+  // limit on its own; the cart always sends one entry per product.
+  const seen = new Set();
+  for (const { sku } of items) {
+    if (seen.has(sku)) {
+      throw new CatalogValidationError('DUPLICATE_SKU', `Product listed more than once: ${sku}`);
+    }
+    seen.add(sku);
+  }
 }
 
 /**
@@ -39,9 +78,7 @@ function dollarsToCents(amount) {
  * @throws {CatalogValidationError}
  */
 function buildLineItemsFromCatalog(items, catalog) {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new CatalogValidationError('EMPTY_ITEMS', 'At least one item is required');
-  }
+  validateItemList(items);
 
   return items.map(({ sku, qty }) => {
     const product = catalog.get(sku);
@@ -78,10 +115,11 @@ function buildLineItemsFromCatalog(items, catalog) {
     if (product.publishAt && product.publishAt.toMillis() > Date.now()) {
       throw new CatalogValidationError('NOT_YET_PUBLISHED', `Product is not yet published: ${sku}`);
     }
-    if (!Number.isInteger(qty) || qty < MIN_QTY || qty > MAX_QTY) {
+    const maxQty = maxQtyFor(product);
+    if (!Number.isInteger(qty) || qty < MIN_QTY || qty > maxQty) {
       throw new CatalogValidationError(
         'INVALID_QTY',
-        `Quantity must be an integer between ${MIN_QTY} and ${MAX_QTY} for sku: ${sku}`
+        `Quantity must be an integer between ${MIN_QTY} and ${maxQty} for sku: ${sku}`
       );
     }
 
@@ -96,4 +134,11 @@ function buildLineItemsFromCatalog(items, catalog) {
   });
 }
 
-module.exports = { buildLineItemsFromCatalog, CatalogValidationError, dollarsToCents };
+module.exports = {
+  buildLineItemsFromCatalog,
+  validateItemList,
+  CatalogValidationError,
+  dollarsToCents,
+  MAX_ITEMS,
+  MAX_QTY_BY_CATEGORY,
+};

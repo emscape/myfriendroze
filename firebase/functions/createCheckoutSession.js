@@ -11,7 +11,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
-const { buildLineItemsFromCatalog, CatalogValidationError } = require('./lib/pricing');
+const { buildLineItemsFromCatalog, validateItemList, CatalogValidationError } = require('./lib/pricing');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -50,6 +50,10 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
   }
 
   try {
+    // Before any Firestore read, so an oversized or duplicated list is
+    // rejected without one product read per entry.
+    validateItemList(items);
+
     const docs = await Promise.all(
       items.map((item) => db.collection('products').doc(item.sku).get())
     );

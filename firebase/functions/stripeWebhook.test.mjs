@@ -100,6 +100,32 @@ describe('handleStripeWebhook', () => {
     expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 
+  // Stripe's listLineItems returns 10 items per page unless asked for more,
+  // so this fake mirrors that default rather than handing back everything.
+  it('records every line item of an order with more than 10 items', async () => {
+    const allLineItems = Array.from({ length: 12 }, (_, i) => ({
+      description: `Piece ${i + 1}`,
+      quantity: 1,
+      amount_total: 1000,
+    }));
+    const listLineItems = vi.fn(async (_sessionId, params = {}) => {
+      const limit = params.limit ?? 10;
+      return { data: allLineItems.slice(0, limit), has_more: allLineItems.length > limit };
+    });
+    const stripeClient = { webhooks: realWebhooks, checkout: { sessions: { listLineItems } } };
+    const db = fakeDb();
+
+    await handleStripeWebhook(signedRequest(checkoutCompletedEvent()), fakeRes(), {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(db.state.written.items).toHaveLength(12);
+  });
+
   // The actual security guarantee this module exists to provide — a request
   // whose body doesn't match its signature must be rejected outright, with
   // no Firestore write and no email, regardless of how plausible it looks.
