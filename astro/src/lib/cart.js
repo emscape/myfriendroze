@@ -50,12 +50,14 @@ export function addToCart(cart, { sku, category, qty = 1 }) {
   }
 
   const wanted = (existing ? existing.qty : 0) + qty;
-  const itemCategory = normalizeCategory(existing ? existing.category : category);
+  // The caller's category is the product's current one; the stored one is
+  // only a fallback, since the product may have been recategorised.
+  const itemCategory = normalizeCategory(category ?? existing?.category);
   const newQty = clampQty(wanted, itemCategory);
   const status = newQty < wanted ? 'limited' : 'added';
 
   const items = existing
-    ? cart.items.map((item) => (item.sku === sku ? { ...item, qty: newQty } : item))
+    ? cart.items.map((item) => (item.sku === sku ? { ...item, category: itemCategory, qty: newQty } : item))
     : [...cart.items, { sku, category: itemCategory, qty: newQty }];
   return { cart: { items }, status };
 }

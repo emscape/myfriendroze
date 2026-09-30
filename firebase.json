@@ -45,6 +45,10 @@
         "headers": [{ "key": "Cache-Control", "value": "no-store" }]
       },
       {
+        "source": "/cart",
+        "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      },
+      {
         "source": "/events",
         "headers": [{ "key": "Cache-Control", "value": "no-store" }]
       },

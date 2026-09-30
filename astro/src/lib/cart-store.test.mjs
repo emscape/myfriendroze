@@ -150,6 +150,33 @@ describe('cart checkout completion', () => {
     expect(loadCart(storage).items.map((i) => i.sku)).toEqual(['bowl']);
   });
 
+  // e.g. 3 plants were checked out, then 2 more added in another tab
+  // before paying: only the 3 that were bought come out of the cart.
+  it('subtracts only the checked-out quantity from a line', () => {
+    const storage = fakeStorage({
+      [CART_STORAGE_KEY]: serializeCart({ items: [{ sku: 'p1', category: 'plant', qty: 5 }] }),
+    });
+    const session = fakeStorage();
+
+    markCartCheckoutStarted([{ sku: 'p1', qty: 3 }], session);
+    completeCartCheckout(storage, session, new EventTarget());
+
+    expect(loadCart(storage).items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
+  });
+
+  it('ignores malformed entries in the checkout note', () => {
+    const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
+    const session = fakeStorage();
+    session.setItem(
+      'myfriendroze-cart-checkout',
+      JSON.stringify([null, 'p1', { sku: 'p1' }, { sku: 'p1', qty: 0 }, { sku: 'bowl', qty: 1 }])
+    );
+
+    completeCartCheckout(storage, session, new EventTarget());
+
+    expect(loadCart(storage).items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
+  });
+
   it('only runs once: a second success-page load changes nothing', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
     const session = fakeStorage();

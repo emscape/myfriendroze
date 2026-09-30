@@ -80,6 +80,25 @@ describe('addToCart', () => {
     expect(cart.items).toHaveLength(MAX_CART_ITEMS);
   });
 
+  // The page passes the product's current category; a stored one may be
+  // stale if the product was recategorised after it was added.
+  it('applies the current category, not the stored one, when adding more of a product', () => {
+    const start = cartOf([{ sku: 'p1', category: 'plant', qty: 5 }]);
+
+    const { cart, status } = addToCart(start, { sku: 'p1', category: 'pottery' });
+
+    expect(status).toBe('limited');
+    expect(cart.items).toEqual([{ sku: 'p1', category: 'pottery', qty: 1 }]);
+  });
+
+  it('keeps the stored category when no category is given', () => {
+    const start = cartOf([{ sku: 'p1', category: 'plant', qty: 5 }]);
+
+    const { cart } = addToCart(start, { sku: 'p1', qty: 1 });
+
+    expect(cart.items).toEqual([{ sku: 'p1', category: 'plant', qty: 6 }]);
+  });
+
   it('does not change the cart it was given', () => {
     const start = cartOf([{ sku: 'p1', category: 'plant', qty: 1 }]);
 

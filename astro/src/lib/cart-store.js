@@ -6,7 +6,7 @@
 // missing entirely, so every access is guarded: the cart then behaves as
 // empty and saves report failure instead of breaking the page.
 
-import { EMPTY_CART, parseCart, serializeCart, cartItemCount, removeFromCart } from './cart.js';
+import { EMPTY_CART, parseCart, serializeCart, cartItemCount, setQuantity } from './cart.js';
 
 export const CART_STORAGE_KEY = 'myfriendroze-cart';
 export const CART_CHANGED_EVENT = 'cart:changed';
@@ -86,9 +86,9 @@ export function onCartChange(callback, storage = defaultStorage(), target = defa
 }
 
 // The order success page is shared by cart checkouts and single-piece quick
-// orders. A cart checkout notes (per tab) which skus it sent to Stripe, and
-// the success page removes only those, so a quick order never empties the
-// cart. The cancelled page and the quick-order form clear the note.
+// orders. A cart checkout notes (per tab) which items and quantities it sent
+// to Stripe, and the success page subtracts only those, so a quick order never
+// empties the cart and units added after checkout started stay in it. The cancelled page and the quick-order form clear the note.
 
 /**
  * @param {{ sku: string, qty: number }[]} items
@@ -96,7 +96,7 @@ export function onCartChange(callback, storage = defaultStorage(), target = defa
  */
 export function markCartCheckoutStarted(items, session = defaultSessionStorage()) {
   try {
-    session?.setItem(CART_CHECKOUT_KEY, JSON.stringify(items.map((item) => item.sku)));
+    session?.setItem(CART_CHECKOUT_KEY, JSON.stringify(items.map(({ sku, qty }) => ({ sku, qty }))));
   } catch {
     // Without the note the cart just isn't emptied after payment.
   }
@@ -112,9 +112,10 @@ export function clearCartCheckoutMark(session = defaultSessionStorage()) {
 }
 
 /**
- * Called on the order success page: removes the items a cart checkout in
- * this tab sent to Stripe, then forgets the note so a reload changes
- * nothing. Does nothing after a quick order.
+ * Called on the order success page: subtracts the quantities a cart
+ * checkout in this tab sent to Stripe (removing a line that reaches 0), then
+ * forgets the note so a reload changes nothing. Does nothing after a quick
+ * order.
  * @param {Storage | null} [storage]
  * @param {Storage | null} [session]
  * @param {EventTarget | null} [target]
@@ -124,18 +125,20 @@ export function completeCartCheckout(
   session = defaultSessionStorage(),
   target = defaultTarget()
 ) {
-  let skus;
+  let checkedOut;
   try {
-    skus = JSON.parse(session?.getItem(CART_CHECKOUT_KEY) ?? 'null');
+    checkedOut = JSON.parse(session?.getItem(CART_CHECKOUT_KEY) ?? 'null');
   } catch {
-    skus = null;
+    checkedOut = null;
   }
   clearCartCheckoutMark(session);
-  if (!Array.isArray(skus)) return;
+  if (!Array.isArray(checkedOut)) return;
 
   let cart = loadCart(storage);
-  for (const sku of skus) {
-    if (typeof sku === 'string') cart = removeFromCart(cart, sku);
+  for (const entry of checkedOut) {
+    if (!entry || typeof entry.sku !== 'string' || !Number.isInteger(entry.qty) || entry.qty < 1) continue;
+    const line = cart.items.find((item) => item.sku === entry.sku);
+    if (line) cart = setQuantity(cart, entry.sku, line.qty - entry.qty);
   }
   saveCart(cart, storage, target);
 }
