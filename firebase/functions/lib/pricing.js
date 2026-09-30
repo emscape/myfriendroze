@@ -35,7 +35,9 @@ function dollarsToCents(amount) {
 }
 
 function maxQtyFor(product) {
-  return Object.hasOwn(MAX_QTY_BY_CATEGORY, product.category)
+  // typeof first: Object.hasOwn coerces its key, so ['plant'] would
+  // otherwise match "plant" (the site's normalizeCategory compares strictly).
+  return typeof product.category === 'string' && Object.hasOwn(MAX_QTY_BY_CATEGORY, product.category)
     ? MAX_QTY_BY_CATEGORY[product.category]
     : MAX_QTY_BY_CATEGORY[DEFAULT_CATEGORY];
 }

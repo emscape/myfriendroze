@@ -302,7 +302,9 @@ describe('buildLineItemsFromCatalog', () => {
 
   // Matches the site, which lists a product with a missing or unknown
   // category on the pottery shop page.
-  it.each([undefined, 'mystery'])('treats a product with category %j as pottery (limit 1)', (category) => {
+  // Non-string values included: Object.hasOwn would coerce ['plant'] to
+  // "plant" and grant the plant limit.
+  it.each([undefined, 'mystery', ['plant'], { toString: () => 'plant' }, 7])('treats a product with category %j as pottery (limit 1)', (category) => {
     const catalog = catalogWith({
       'sku-1': { title: 'Uncategorised', price: 70, isActive: true, category },
     });
