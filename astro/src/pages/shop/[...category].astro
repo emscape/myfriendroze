@@ -762,7 +762,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
 </style>
 
 <script>
-  import { requestCheckoutUrl } from '../../lib/checkout-client.js';
+  import { requestCheckout } from '../../lib/checkout-client.js';
   import { clearCartCheckoutMark } from '../../lib/cart-store.js';
 
   // Quick order: straight to Stripe for this one piece. Stripe's checkout
@@ -779,7 +779,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
       button.textContent = 'opening checkout…';
       if (error) error.hidden = true;
       try {
-        const url = await requestCheckoutUrl([{ sku, qty: 1 }]);
+        const { url } = await requestCheckout([{ sku, qty: 1 }]);
         // A quick order must never empty the cart on the success page.
         clearCartCheckoutMark();
         window.location.href = url;

@@ -144,8 +144,8 @@ describe('cart checkout completion', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
     const session = fakeStorage();
 
-    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], session);
-    completeCartCheckout(storage, session, new EventTarget());
+    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], 'cs_1', session);
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     expect(loadCart(storage).items.map((i) => i.sku)).toEqual(['bowl']);
   });
@@ -158,8 +158,8 @@ describe('cart checkout completion', () => {
     });
     const session = fakeStorage();
 
-    markCartCheckoutStarted([{ sku: 'p1', qty: 3 }], session);
-    completeCartCheckout(storage, session, new EventTarget());
+    markCartCheckoutStarted([{ sku: 'p1', qty: 3 }], 'cs_1', session);
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     expect(loadCart(storage).items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
   });
@@ -169,22 +169,41 @@ describe('cart checkout completion', () => {
     const session = fakeStorage();
     session.setItem(
       'myfriendroze-cart-checkout',
-      JSON.stringify([null, 'p1', { sku: 'p1' }, { sku: 'p1', qty: 0 }, { sku: 'bowl', qty: 1 }])
+      JSON.stringify({
+        sessionId: 'cs_1',
+        items: [null, 'p1', { sku: 'p1' }, { sku: 'p1', qty: 0 }, { sku: 'bowl', qty: 1 }],
+      })
     );
 
-    completeCartCheckout(storage, session, new EventTarget());
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     expect(loadCart(storage).items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
+  });
+
+  // Stripe adds session_id to the success link only after that checkout
+  // completes, so a mismatched or missing id means this tab's checkout
+  // wasn't the one that was paid (e.g. the page was opened by hand).
+  it.each([['cs_other'], [null], ['']])("changes nothing when the success link's session id is %j", (sessionId) => {
+    const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
+    const session = fakeStorage();
+    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], 'cs_1', session);
+
+    completeCartCheckout(sessionId, storage, session, new EventTarget());
+
+    expect(loadCart(storage)).toEqual(TWO);
+    // The note is kept, so the real success page can still complete it.
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
+    expect(loadCart(storage).items.map((i) => i.sku)).toEqual(['bowl']);
   });
 
   it('only runs once: a second success-page load changes nothing', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
     const session = fakeStorage();
-    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], session);
-    completeCartCheckout(storage, session, new EventTarget());
+    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], 'cs_1', session);
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     saveCart(TWO, storage, new EventTarget());
-    completeCartCheckout(storage, session, new EventTarget());
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     expect(loadCart(storage)).toEqual(TWO);
   });
@@ -192,7 +211,7 @@ describe('cart checkout completion', () => {
   it('leaves the cart alone after a quick order (no cart checkout was started)', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
 
-    completeCartCheckout(storage, fakeStorage(), new EventTarget());
+    completeCartCheckout('cs_1', storage, fakeStorage(), new EventTarget());
 
     expect(loadCart(storage)).toEqual(TWO);
   });
@@ -201,9 +220,9 @@ describe('cart checkout completion', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
     const session = fakeStorage();
 
-    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], session);
+    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], 'cs_1', session);
     clearCartCheckoutMark(session);
-    completeCartCheckout(storage, session, new EventTarget());
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
 
     expect(loadCart(storage)).toEqual(TWO);
   });
@@ -213,10 +232,10 @@ describe('cart checkout completion', () => {
     const session = fakeStorage();
     session.setItem('myfriendroze-cart-checkout', 'not json');
 
-    expect(() => completeCartCheckout(storage, session, new EventTarget())).not.toThrow();
+    expect(() => completeCartCheckout('cs_1', storage, session, new EventTarget())).not.toThrow();
     expect(loadCart(storage)).toEqual(TWO);
-    expect(() => markCartCheckoutStarted([{ sku: 'p1', qty: 1 }], throwingStorage())).not.toThrow();
+    expect(() => markCartCheckoutStarted([{ sku: 'p1', qty: 1 }], 'cs_1', throwingStorage())).not.toThrow();
     expect(() => clearCartCheckoutMark(throwingStorage())).not.toThrow();
-    expect(() => completeCartCheckout(throwingStorage(), throwingStorage(), new EventTarget())).not.toThrow();
+    expect(() => completeCartCheckout('cs_1', throwingStorage(), throwingStorage(), new EventTarget())).not.toThrow();
   });
 });

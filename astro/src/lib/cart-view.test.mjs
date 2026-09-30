@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCartView, catalogForCart, formatPrice } from './cart-view.js';
+import { buildCartView, catalogForCart, formatPrice, reconcileCart } from './cart-view.js';
 
 const PRODUCTS = [
   { id: 'bowl', handle: 'speckled-bowl', title: 'Speckled Bowl', price: 48, images: ['/bowl.png', '/bowl2.png'], inStock: true, category: 'pottery' },
@@ -108,5 +108,38 @@ describe('formatPrice', () => {
     expect(formatPrice(8550)).toBe('$85.50');
     expect(formatPrice(0)).toBe('$0.00');
     expect(formatPrice(123456)).toBe('$1,234.56');
+  });
+});
+
+// The stored cart can lag the live catalog (a product recategorised after
+// it was added), and the cart page's controls and the post-payment cleanup
+// both read the stored cart, so the page first brings it in line.
+describe('reconcileCart', () => {
+  const catalog = catalogForCart(PRODUCTS);
+
+  it('adopts the live category and caps the quantity at its limit', () => {
+    const { cart, changed } = reconcileCart(cartOf([{ sku: 'bowl', category: 'plant', qty: 5 }]), catalog);
+
+    expect(changed).toBe(true);
+    expect(cart.items).toEqual([{ sku: 'bowl', category: 'pottery', qty: 1 }]);
+  });
+
+  it('lets a piece recategorised as a plant keep its quantity under the plant limit', () => {
+    const { cart, changed } = reconcileCart(cartOf([{ sku: 'eche', category: 'pottery', qty: 1 }]), catalog);
+
+    expect(changed).toBe(true);
+    expect(cart.items).toEqual([{ sku: 'eche', category: 'plant', qty: 1 }]);
+  });
+
+  it('reports no change for a cart that already matches, and leaves unknown pieces alone', () => {
+    const start = cartOf([
+      { sku: 'eche', category: 'plant', qty: 3 },
+      { sku: 'gone', category: 'pottery', qty: 1 },
+    ]);
+
+    const { cart, changed } = reconcileCart(start, catalog);
+
+    expect(changed).toBe(false);
+    expect(cart).toBe(start);
   });
 });

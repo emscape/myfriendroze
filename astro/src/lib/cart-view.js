@@ -5,6 +5,7 @@
 // floating-point drift in totals.
 
 import { maxQtyForCategory } from './cart.js';
+import { normalizeCategory } from './shop-categories.js';
 
 /**
  * @typedef {{ id: string, handle: string, title: string, price: number,
@@ -87,6 +88,32 @@ export function buildCartView(cart, catalog) {
     checkoutItems: okLines.map(({ sku, qty }) => ({ sku, qty })),
     hasProblems: okLines.length !== lines.length,
   };
+}
+
+/**
+ * Brings stored lines in line with the live catalog: each product's current
+ * category, and its quantity capped at that category's limit. The cart
+ * page's controls and the post-payment cleanup read the stored cart, so it
+ * must agree with what the page shows and checks out. Pieces missing from
+ * the catalog are left as they are (the page flags them). Returns the same
+ * cart object when nothing changed.
+ * @param {import('./cart.js').Cart} cart
+ * @param {CartCatalogEntry[]} catalog
+ * @returns {{ cart: import('./cart.js').Cart, changed: boolean }}
+ */
+export function reconcileCart(cart, catalog) {
+  const bySku = new Map(catalog.map((entry) => [entry.id, entry]));
+  let changed = false;
+  const items = cart.items.map((item) => {
+    const product = bySku.get(item.sku);
+    if (!product) return item;
+    const category = normalizeCategory(product.category);
+    const qty = Math.min(item.qty, maxQtyForCategory(category));
+    if (category === item.category && qty === item.qty) return item;
+    changed = true;
+    return { ...item, category, qty };
+  });
+  return changed ? { cart: { items }, changed } : { cart, changed };
 }
 
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });

@@ -10,7 +10,8 @@ import { EMPTY_CART, parseCart, serializeCart, cartItemCount, setQuantity } from
 
 export const CART_STORAGE_KEY = 'myfriendroze-cart';
 export const CART_CHANGED_EVENT = 'cart:changed';
-// Per-tab (sessionStorage) note of the items a cart checkout sent to Stripe.
+// Per-tab (sessionStorage) note of the Stripe session a cart checkout started
+// and the items it sent.
 export const CART_CHECKOUT_KEY = 'myfriendroze-cart-checkout';
 
 function defaultStorage() {
@@ -92,11 +93,15 @@ export function onCartChange(callback, storage = defaultStorage(), target = defa
 
 /**
  * @param {{ sku: string, qty: number }[]} items
+ * @param {string | null} sessionId the Stripe Checkout Session id
  * @param {Storage | null} [session]
  */
-export function markCartCheckoutStarted(items, session = defaultSessionStorage()) {
+export function markCartCheckoutStarted(items, sessionId, session = defaultSessionStorage()) {
   try {
-    session?.setItem(CART_CHECKOUT_KEY, JSON.stringify(items.map(({ sku, qty }) => ({ sku, qty }))));
+    session?.setItem(
+      CART_CHECKOUT_KEY,
+      JSON.stringify({ sessionId, items: items.map(({ sku, qty }) => ({ sku, qty })) })
+    );
   } catch {
     // Without the note the cart just isn't emptied after payment.
   }
@@ -112,30 +117,34 @@ export function clearCartCheckoutMark(session = defaultSessionStorage()) {
 }
 
 /**
- * Called on the order success page: subtracts the quantities a cart
- * checkout in this tab sent to Stripe (removing a line that reaches 0), then
- * forgets the note so a reload changes nothing. Does nothing after a quick
- * order.
+ * Called on the order success page with its session_id: if it matches the
+ * checkout this tab started, subtracts the quantities that checkout sent
+ * (removing a line that reaches 0) and forgets the note, so a reload changes
+ * nothing. Stripe adds session_id only after that checkout completes, so a
+ * missing or different id (a quick order, or the page opened by hand)
+ * changes nothing and keeps the note.
+ * @param {string | null} sessionId
  * @param {Storage | null} [storage]
  * @param {Storage | null} [session]
  * @param {EventTarget | null} [target]
  */
 export function completeCartCheckout(
+  sessionId,
   storage = defaultStorage(),
   session = defaultSessionStorage(),
   target = defaultTarget()
 ) {
-  let checkedOut;
+  let note;
   try {
-    checkedOut = JSON.parse(session?.getItem(CART_CHECKOUT_KEY) ?? 'null');
+    note = JSON.parse(session?.getItem(CART_CHECKOUT_KEY) ?? 'null');
   } catch {
-    checkedOut = null;
+    note = null;
   }
+  if (!sessionId || !note || note.sessionId !== sessionId || !Array.isArray(note.items)) return;
   clearCartCheckoutMark(session);
-  if (!Array.isArray(checkedOut)) return;
 
   let cart = loadCart(storage);
-  for (const entry of checkedOut) {
+  for (const entry of note.items) {
     if (!entry || typeof entry.sku !== 'string' || !Number.isInteger(entry.qty) || entry.qty < 1) continue;
     const line = cart.items.find((item) => item.sku === entry.sku);
     if (line) cart = setQuantity(cart, entry.sku, line.qty - entry.qty);

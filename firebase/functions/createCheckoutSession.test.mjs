@@ -30,7 +30,7 @@ describe('handleCreateCheckoutSession', () => {
     const db = fakeDb({
       'sku-1': fakeDoc(true, { title: 'Blue Branches', price: 70, isActive: true }),
     });
-    const sessionsCreate = vi.fn().mockResolvedValue({ url: 'https://checkout.stripe.com/pay/cs_test_123' });
+    const sessionsCreate = vi.fn().mockResolvedValue({ id: 'cs_test_123', url: 'https://checkout.stripe.com/pay/cs_test_123' });
     const stripeClient = { checkout: { sessions: { create: sessionsCreate } } };
     // Items only: Stripe's hosted page collects the shopper's details.
     const req = { method: 'POST', body: { items: [{ sku: 'sku-1', qty: 1 }] } };
@@ -67,7 +67,11 @@ describe('handleCreateCheckoutSession', () => {
       })
     );
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ url: 'https://checkout.stripe.com/pay/cs_test_123' });
+    expect(res.json).toHaveBeenCalledWith({
+      url: 'https://checkout.stripe.com/pay/cs_test_123',
+      // The site's success page matches this against Stripe's session_id.
+      id: 'cs_test_123',
+    });
 
     // Regression guard: `automatic_payment_methods` is a Payment Intents API
     // param, not valid on Checkout Session creation — passing it made every

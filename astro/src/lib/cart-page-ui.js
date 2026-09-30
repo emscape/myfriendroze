@@ -5,9 +5,9 @@
 // inject markup.
 
 import { setQuantity, removeFromCart } from './cart.js';
-import { buildCartView, formatPrice } from './cart-view.js';
+import { buildCartView, formatPrice, reconcileCart } from './cart-view.js';
 import { loadCart, saveCart, onCartChange, markCartCheckoutStarted } from './cart-store.js';
-import { requestCheckoutUrl } from './checkout-client.js';
+import { requestCheckout } from './checkout-client.js';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -100,7 +100,16 @@ export function initCartPage() {
   let view = buildCartView(loadCart(), catalog);
   let submitting = false;
 
-  function render(cart) {
+  const STORAGE_ERROR = "Couldn't save your cart. Your browser may be blocking site storage.";
+
+  function render(stored) {
+    // Adopt live categories and limits first, so the controls and the
+    // post-payment cleanup agree with what's shown. Rendering carries on
+    // with the reconciled cart either way (the first render runs before
+    // onCartChange is listening); any nested re-render finds nothing left
+    // to change.
+    const { cart, changed } = reconcileCart(stored, catalog);
+    if (changed) saveCart(cart);
     view = buildCartView(cart, catalog);
     // Re-rendering replaces the controls, so put keyboard focus back on the
     // equivalent control of the same line.
@@ -132,7 +141,11 @@ export function initCartPage() {
     const select = /** @type {HTMLSelectElement} */ (event.target);
     const sku = select.closest('.cart-line')?.getAttribute('data-sku');
     if (select.dataset.action === 'qty' && sku) {
-      saveCart(setQuantity(loadCart(), sku, Number(select.value)));
+      if (!saveCart(setQuantity(loadCart(), sku, Number(select.value)))) {
+        // Put the control back to what's actually saved.
+        showMessage(STORAGE_ERROR);
+        render(loadCart());
+      }
     }
   });
 
@@ -140,7 +153,10 @@ export function initCartPage() {
     const button = /** @type {HTMLElement} */ (event.target).closest('[data-action="remove"]');
     const sku = button?.closest('.cart-line')?.getAttribute('data-sku');
     if (sku) {
-      saveCart(removeFromCart(loadCart(), sku));
+      if (!saveCart(removeFromCart(loadCart(), sku))) {
+        showMessage(STORAGE_ERROR);
+        return;
+      }
       // The removed line's button is gone; keep focus in the cart.
       /** @type {HTMLElement | null} */ (linesList.querySelector('[data-action="remove"]') ?? checkoutButton)?.focus();
     }
@@ -157,9 +173,9 @@ export function initCartPage() {
     showMessage('');
 
     try {
-      const url = await requestCheckoutUrl(items);
-      // So the success page removes exactly these pieces from the cart.
-      markCartCheckoutStarted(items);
+      const { url, sessionId } = await requestCheckout(items);
+      // So the success page for this checkout removes exactly these pieces.
+      markCartCheckoutStarted(items, sessionId);
       window.location.href = url;
       return;
     } catch (error) {
