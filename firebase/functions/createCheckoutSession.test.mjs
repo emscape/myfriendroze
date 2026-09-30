@@ -49,7 +49,7 @@ describe('handleCreateCheckoutSession', () => {
             label: { type: 'custom', custom: 'Special requests' },
             type: 'text',
             optional: true,
-            text: { maximum_length: 500 },
+            text: { maximum_length: 255 },
           },
         ],
         success_url: `${SITE_ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,

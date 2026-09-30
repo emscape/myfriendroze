@@ -74,7 +74,8 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
           label: { type: 'custom', custom: 'Special requests' },
           type: 'text',
           optional: true,
-          text: { maximum_length: 500 },
+          // Stripe rejects a maximum_length above 255.
+          text: { maximum_length: 255 },
         },
       ],
       success_url: `${siteOrigin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
