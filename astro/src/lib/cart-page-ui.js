@@ -109,7 +109,10 @@ export function initCartPage() {
     // onCartChange is listening); any nested re-render finds nothing left
     // to change.
     const { cart, changed } = reconcileCart(stored, catalog);
-    if (changed) saveCart(cart);
+    // If the corrected cart can't be saved, checking it out would leave the
+    // stored cart and the purchase out of step, so checkout stays off.
+    const reconcileFailed = changed && !saveCart(cart);
+    if (reconcileFailed) showMessage(STORAGE_ERROR);
     view = buildCartView(cart, catalog);
     // Re-rendering replaces the controls, so put keyboard focus back on the
     // equivalent control of the same line.
@@ -123,7 +126,8 @@ export function initCartPage() {
     if (summary) summary.hidden = empty;
     if (problemsNote) problemsNote.hidden = !view.hasProblems;
     if (subtotal) subtotal.textContent = formatPrice(view.subtotalCents);
-    checkoutButton.disabled = !catalogLoaded || submitting || view.hasProblems || view.checkoutItems.length === 0;
+    checkoutButton.disabled =
+      !catalogLoaded || submitting || reconcileFailed || view.hasProblems || view.checkoutItems.length === 0;
 
     if (focusSku && focusAction) {
       const line = [...linesList.children].find((li) => li.getAttribute('data-sku') === focusSku);

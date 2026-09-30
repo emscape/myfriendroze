@@ -196,6 +196,33 @@ describe('cart checkout completion', () => {
     expect(loadCart(storage).items.map((i) => i.sku)).toEqual(['bowl']);
   });
 
+  // Fewer units than were checked out means the line changed after
+  // checkout started (e.g. removed, then re-added): those units are new.
+  it('leaves a line alone when it now holds fewer units than were checked out', () => {
+    const storage = fakeStorage({
+      [CART_STORAGE_KEY]: serializeCart({ items: [{ sku: 'p1', category: 'plant', qty: 2 }] }),
+    });
+    const session = fakeStorage();
+    markCartCheckoutStarted([{ sku: 'p1', qty: 3 }], 'cs_1', session);
+
+    completeCartCheckout('cs_1', storage, session, new EventTarget());
+
+    expect(loadCart(storage).items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
+  });
+
+  it('keeps the checkout note when the cart cannot be saved, so a reload can retry', () => {
+    const readOnly = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
+    readOnly.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    const session = fakeStorage();
+    markCartCheckoutStarted([{ sku: 'p1', qty: 2 }], 'cs_1', session);
+
+    completeCartCheckout('cs_1', readOnly, session, new EventTarget());
+
+    expect(session.getItem('myfriendroze-cart-checkout')).not.toBeNull();
+  });
+
   it('only runs once: a second success-page load changes nothing', () => {
     const storage = fakeStorage({ [CART_STORAGE_KEY]: serializeCart(TWO) });
     const session = fakeStorage();

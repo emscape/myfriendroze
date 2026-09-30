@@ -141,13 +141,15 @@ export function completeCartCheckout(
     note = null;
   }
   if (!sessionId || !note || note.sessionId !== sessionId || !Array.isArray(note.items)) return;
-  clearCartCheckoutMark(session);
 
   let cart = loadCart(storage);
   for (const entry of note.items) {
     if (!entry || typeof entry.sku !== 'string' || !Number.isInteger(entry.qty) || entry.qty < 1) continue;
     const line = cart.items.find((item) => item.sku === entry.sku);
-    if (line) cart = setQuantity(cart, entry.sku, line.qty - entry.qty);
+    // Fewer units than were checked out means the line changed after
+    // checkout started (e.g. removed, then re-added): leave those units.
+    if (line && line.qty >= entry.qty) cart = setQuantity(cart, entry.sku, line.qty - entry.qty);
   }
-  saveCart(cart, storage, target);
+  // Forget the note only once the cart is saved, so a reload can retry.
+  if (saveCart(cart, storage, target)) clearCartCheckoutMark(session);
 }
