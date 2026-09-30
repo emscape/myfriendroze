@@ -17,6 +17,12 @@ function centsToDollars(cents) {
  * @param {Array<{description: string, quantity: number, amount_total: number}>} lineItems
  * @returns {object} Firestore order-doc shape
  */
+// The optional "Special requests" field createCheckoutSession adds.
+function notesField(session) {
+  const field = session.custom_fields?.find((f) => f.key === 'notes');
+  return field?.text?.value || null;
+}
+
 function sessionToOrderData(session, lineItems) {
   const address = session.shipping_details?.address;
 
@@ -26,8 +32,14 @@ function sessionToOrderData(session, lineItems) {
     stripePaymentIntentId: session.payment_intent,
     customer: {
       email: session.customer_details?.email ?? session.customer_email ?? null,
-      name: session.metadata?.customerName ?? null,
-      phone: session.metadata?.customerPhone ?? null,
+      // metadata only exists on sessions created before checkout went
+      // straight to Stripe; newer ones carry what Stripe collected.
+      name:
+        session.metadata?.customerName ??
+        session.customer_details?.name ??
+        session.shipping_details?.name ??
+        null,
+      phone: session.metadata?.customerPhone ?? session.customer_details?.phone ?? null,
     },
     items: lineItems.map((li) => ({
       name: li.description,
@@ -47,7 +59,7 @@ function sessionToOrderData(session, lineItems) {
           country: address?.country ?? null,
         }
       : null,
-    notes: session.metadata?.notes ?? null,
+    notes: session.metadata?.notes ?? notesField(session),
   };
 }
 

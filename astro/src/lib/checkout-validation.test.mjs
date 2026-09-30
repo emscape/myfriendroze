@@ -14,26 +14,15 @@ describe('validateCheckoutRequest', () => {
     expect(validateCheckoutRequest(validBody())).toEqual({ valid: true });
   });
 
-  it('rejects a missing customer', () => {
-    const result = validateCheckoutRequest(validBody({ customer: undefined }));
-    expect(result.valid).toBe(false);
+  // Stripe's checkout page collects the shopper's details now.
+  it('accepts a request with only items', () => {
+    expect(validateCheckoutRequest({ items: [{ sku: 'sku-1', qty: 1 }] })).toEqual({ valid: true });
   });
 
-  it('rejects a missing or invalid email', () => {
-    expect(
-      validateCheckoutRequest(validBody({ customer: { email: '', name: 'Buyer' } })).valid
-    ).toBe(false);
-    expect(
-      validateCheckoutRequest(validBody({ customer: { email: 'not-an-email', name: 'Buyer' } }))
-        .valid
-    ).toBe(false);
-  });
-
-  it('rejects a missing name', () => {
-    const result = validateCheckoutRequest(
-      validBody({ customer: { email: 'buyer@example.com', name: '' } })
-    );
-    expect(result.valid).toBe(false);
+  it('does not reject incomplete customer details from an older client', () => {
+    expect(validateCheckoutRequest(validBody({ customer: { email: '', name: '' } }))).toEqual({
+      valid: true,
+    });
   });
 
   it('rejects a missing or empty items array', () => {

@@ -32,14 +32,8 @@ describe('handleCreateCheckoutSession', () => {
     });
     const sessionsCreate = vi.fn().mockResolvedValue({ url: 'https://checkout.stripe.com/pay/cs_test_123' });
     const stripeClient = { checkout: { sessions: { create: sessionsCreate } } };
-    const req = {
-      method: 'POST',
-      body: {
-        customer: { email: 'buyer@example.com', name: 'Buyer', phone: '555-1234' },
-        items: [{ sku: 'sku-1', qty: 1 }],
-        notes: 'gift wrap please',
-      },
-    };
+    // Items only: Stripe's hosted page collects the shopper's details.
+    const req = { method: 'POST', body: { items: [{ sku: 'sku-1', qty: 1 }] } };
     const res = fakeRes();
 
     await handleCreateCheckoutSession(req, res, { db, stripeClient, siteOrigin: SITE_ORIGIN });
@@ -47,8 +41,17 @@ describe('handleCreateCheckoutSession', () => {
     expect(sessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'payment',
-        customer_email: 'buyer@example.com',
         shipping_address_collection: { allowed_countries: ['US'] },
+        phone_number_collection: { enabled: true },
+        custom_fields: [
+          {
+            key: 'notes',
+            label: { type: 'custom', custom: 'Special requests' },
+            type: 'text',
+            optional: true,
+            text: { maximum_length: 500 },
+          },
+        ],
         success_url: `${SITE_ORIGIN}/order/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${SITE_ORIGIN}/order/cancelled`,
         line_items: [
@@ -90,14 +93,30 @@ describe('handleCreateCheckoutSession', () => {
     expect(res.status).toHaveBeenCalledWith(405);
   });
 
-  it('returns 400 when customer email is missing', async () => {
-    const res = fakeRes();
+  // Customer details from an older client are neither required nor passed
+  // on: Stripe collects them, and client-supplied values aren't trusted.
+  it('ignores customer details and notes sent by the client', async () => {
+    const db = fakeDb({
+      'sku-1': fakeDoc(true, { title: 'Blue Branches', price: 70, isActive: true }),
+    });
+    const sessionsCreate = vi.fn().mockResolvedValue({ url: 'https://checkout.stripe.com/pay/cs_test_123' });
+    const stripeClient = { checkout: { sessions: { create: sessionsCreate } } };
     const req = {
       method: 'POST',
-      body: { customer: { name: 'Buyer' }, items: [{ sku: 'sku-1', qty: 1 }] },
+      body: {
+        customer: { email: 'buyer@example.com', name: 'Buyer', phone: '555-1234' },
+        items: [{ sku: 'sku-1', qty: 1 }],
+        notes: 'gift wrap please',
+      },
     };
-    await handleCreateCheckoutSession(req, res, { db: fakeDb({}), stripeClient: {}, siteOrigin: SITE_ORIGIN });
-    expect(res.status).toHaveBeenCalledWith(400);
+    const res = fakeRes();
+
+    await handleCreateCheckoutSession(req, res, { db, stripeClient, siteOrigin: SITE_ORIGIN });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const params = sessionsCreate.mock.calls[0][0];
+    expect(params).not.toHaveProperty('customer_email');
+    expect(params).not.toHaveProperty('metadata');
   });
 
   it('returns 400 when items is missing or empty', async () => {

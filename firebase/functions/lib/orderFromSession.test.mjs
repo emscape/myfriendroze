@@ -94,8 +94,37 @@ describe('sessionToOrderData', () => {
     ]);
   });
 
-  it('defaults customer name/phone and notes to null when metadata is entirely absent', () => {
-    const session = baseSession({ metadata: undefined });
+  // Checkouts now go straight to Stripe, which collects these itself;
+  // metadata is only present on sessions created before that change.
+  it('takes name, phone and notes from what Stripe collected', () => {
+    const session = baseSession({
+      metadata: {},
+      customer_details: { email: 'buyer@example.com', name: 'Card Name', phone: '+15551234567' },
+      custom_fields: [{ key: 'notes', type: 'text', text: { value: 'gift wrap' } }],
+    });
+
+    const order = sessionToOrderData(session, lineItems);
+
+    expect(order.customer).toEqual({ email: 'buyer@example.com', name: 'Card Name', phone: '+15551234567' });
+    expect(order.notes).toBe('gift wrap');
+  });
+
+  it('falls back to the shipping name when Stripe has no customer name', () => {
+    const session = baseSession({ metadata: undefined, customer_details: { email: 'buyer@example.com' } });
+
+    expect(sessionToOrderData(session, lineItems).customer.name).toBe('Buyer Name');
+  });
+
+  it('treats an empty special-requests field as no notes', () => {
+    const session = baseSession({
+      custom_fields: [{ key: 'notes', type: 'text', text: { value: null } }],
+    });
+
+    expect(sessionToOrderData(session, lineItems).notes).toBeNull();
+  });
+
+  it('defaults customer name/phone and notes to null when nothing supplies them', () => {
+    const session = baseSession({ metadata: undefined, shipping_details: undefined });
 
     const order = sessionToOrderData(session, lineItems);
 
