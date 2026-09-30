@@ -15,7 +15,7 @@ export function validateCheckoutRequest(body) {
     return { valid: false, error: 'At least one item is required' };
   }
   for (const item of items) {
-    if (!item.sku) {
+    if (!item || typeof item.sku !== 'string' || !item.sku) {
       return { valid: false, error: 'Each item must have a sku' };
     }
     if (!Number.isInteger(item.qty) || item.qty < 1) {

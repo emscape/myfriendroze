@@ -30,6 +30,10 @@ describe('validateCheckoutRequest', () => {
     expect(validateCheckoutRequest(validBody({ items: [] })).valid).toBe(false);
   });
 
+  it.each([null, 'sku-1', 42, { sku: '' }, { sku: 7 }])('rejects a malformed item %j without throwing', (item) => {
+    expect(validateCheckoutRequest(validBody({ items: [item] })).valid).toBe(false);
+  });
+
   it('rejects an item missing a sku', () => {
     const result = validateCheckoutRequest(validBody({ items: [{ qty: 1 }] }));
     expect(result.valid).toBe(false);

@@ -359,6 +359,12 @@ describe('validateItemList', () => {
     ).toBe('DUPLICATE_SKU');
   });
 
+  // Items arrive as client JSON, so a malformed entry must be a 400
+  // (CatalogValidationError), not a TypeError that surfaces as a 500.
+  it.each([null, 'sku-1', 42, [], {}, { sku: '' }, { sku: 7 }])('rejects a malformed item %j', (item) => {
+    expect(errorCodeOf(() => validateItemList([item]))).toBe('INVALID_ITEM');
+  });
+
   it('rejects an empty or missing items list', () => {
     expect(errorCodeOf(() => validateItemList([]))).toBe('EMPTY_ITEMS');
     expect(errorCodeOf(() => validateItemList(undefined))).toBe('EMPTY_ITEMS');

@@ -59,7 +59,13 @@ function validateItemList(items) {
   // A sku listed twice would let each copy pass the per-product quantity
   // limit on its own; the cart always sends one entry per product.
   const seen = new Set();
-  for (const { sku } of items) {
+  for (const item of items) {
+    // Client JSON: a null, primitive or sku-less entry must be a 400 here,
+    // not a TypeError further on that surfaces as a 500.
+    if (!item || typeof item !== 'object' || typeof item.sku !== 'string' || item.sku === '') {
+      throw new CatalogValidationError('INVALID_ITEM', 'Each item must be an object with a sku');
+    }
+    const { sku } = item;
     if (seen.has(sku)) {
       throw new CatalogValidationError('DUPLICATE_SKU', `Product listed more than once: ${sku}`);
     }
