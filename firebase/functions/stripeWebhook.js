@@ -67,7 +67,11 @@ async function handleStripeWebhook(
   }
 
   const session = event.data.object;
-  const lineItemsResponse = await stripeClient.checkout.sessions.listLineItems(session.id);
+  const lineItemsResponse = await stripeClient.checkout.sessions.listLineItems(session.id, {
+    // Stripe returns 10 per page by default; a Checkout Session holds at
+    // most 100 line items, so one page of 100 always covers the order.
+    limit: 100,
+  });
   const orderData = sessionToOrderData(session, lineItemsResponse.data);
 
   // The Checkout Session ID doubles as the Firestore document ID — a

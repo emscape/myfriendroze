@@ -11,7 +11,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
-const { buildLineItemsFromCatalog, CatalogValidationError } = require('./lib/pricing');
+const { buildLineItemsFromCatalog, validateItemList, CatalogValidationError } = require('./lib/pricing');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -23,10 +23,6 @@ const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 // (unsubscribe.js/eventNotification.js hardcode the domain inline) — same
 // pattern here, with an env override for local/emulator testing.
 const SITE_ORIGIN = process.env.SITE_ORIGIN || 'https://myfriendroze.com';
-
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 /**
  * Testable core — takes its dependencies (Firestore, Stripe client, site
@@ -40,16 +36,20 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
     return res.status(405).send('Method Not Allowed');
   }
 
-  const { customer, items, notes } = req.body || {};
+  // Only the items are read. Stripe's hosted page collects the shopper's
+  // email, name, phone and address (and optional special requests), so any
+  // customer details an older client still sends are ignored.
+  const { items } = req.body || {};
 
-  if (!customer || !customer.email || !isValidEmail(customer.email) || !customer.name) {
-    return res.status(400).json({ error: 'customer.email and customer.name are required' });
-  }
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items must be a non-empty array' });
   }
 
   try {
+    // Before any Firestore read, so an oversized or duplicated list is
+    // rejected without one product read per entry.
+    validateItemList(items);
+
     const docs = await Promise.all(
       items.map((item) => db.collection('products').doc(item.sku).get())
     );
@@ -67,14 +67,19 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
       mode: 'payment',
       line_items: lineItems,
       shipping_address_collection: { allowed_countries: ['US'] },
-      customer_email: customer.email,
+      phone_number_collection: { enabled: true },
+      custom_fields: [
+        {
+          key: 'notes',
+          label: { type: 'custom', custom: 'Special requests' },
+          type: 'text',
+          optional: true,
+          // Stripe rejects a maximum_length above 255.
+          text: { maximum_length: 255 },
+        },
+      ],
       success_url: `${siteOrigin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteOrigin}/order/cancelled`,
-      metadata: {
-        customerName: customer.name,
-        ...(customer.phone && { customerPhone: customer.phone }),
-        ...(notes && { notes }),
-      },
     });
 
     return res.status(200).json({ url: session.url });
