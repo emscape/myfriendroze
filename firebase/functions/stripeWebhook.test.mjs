@@ -23,6 +23,7 @@ function checkoutCompletedEvent(sessionOverrides = {}) {
       object: {
         id: 'cs_test_abc123',
         payment_intent: 'pi_test_xyz',
+        payment_status: 'paid',
         customer_details: { email: 'buyer@example.com' },
         amount_total: 7000,
         currency: 'usd',
@@ -263,17 +264,90 @@ describe('handleStripeWebhook', () => {
     const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery' };
     const VASE = { title: 'Tall Vase', price: 90, isActive: true, category: 'other' };
 
-    async function deliver(event, db) {
+    const NOW = 1_800_000_000_000;
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+    async function deliver(event, db, sendConfirmationEmail = vi.fn().mockResolvedValue(undefined)) {
       const res = fakeRes();
       await handleStripeWebhook(signedRequest(event), res, {
         stripeClient: fakeStripeClient(),
         webhookSecret: WEBHOOK_SECRET,
         db,
-        sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+        sendConfirmationEmail,
         serverTimestamp: () => 'SERVER_TIMESTAMP',
+        now: () => NOW,
       });
       return res;
     }
+
+    function sessionEvent(type, sessionOverrides) {
+      return { ...checkoutCompletedEvent(sessionOverrides), type };
+    }
+
+    // Delayed payment methods (bank debits) complete the checkout before
+    // the money arrives; Stripe reports the outcome later with
+    // checkout.session.async_payment_succeeded or ..._failed.
+    describe('delayed payments', () => {
+      it('holds the pieces while the payment is pending, without an order, email or sale', async () => {
+        const db = fakeDb({
+          docs: {
+            'products/bowl': BOWL,
+            'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: 1 },
+          },
+        });
+        const email = vi.fn();
+
+        const res = await deliver(checkoutCompletedEvent({ payment_status: 'unpaid' }), db, email);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(db.state.written).toBeNull();
+        expect(email).not.toHaveBeenCalled();
+        expect(db.dump('products/bowl')).toEqual(BOWL);
+        expect(db.dump('checkoutHolds/bowl')).toEqual({
+          sessionId: 'cs_test_abc123',
+          heldUntil: NOW + FOURTEEN_DAYS_MS,
+        });
+      });
+
+      it('writes the order, emails and marks pieces sold when the delayed payment succeeds', async () => {
+        const db = fakeDb({
+          docs: {
+            'products/bowl': BOWL,
+            'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: NOW + FOURTEEN_DAYS_MS },
+          },
+        });
+        const email = vi.fn().mockResolvedValue(undefined);
+
+        await deliver(sessionEvent('checkout.session.async_payment_succeeded', { payment_status: 'paid' }), db, email);
+
+        expect(db.state.written.status).toBe('paid');
+        expect(email).toHaveBeenCalledTimes(1);
+        expect(db.dump('products/bowl')).toEqual({ ...BOWL, inStock: false });
+        expect(db.has('checkoutHolds/bowl')).toBe(false);
+      });
+
+      it('releases the pieces when the delayed payment fails', async () => {
+        const db = fakeDb({
+          docs: {
+            'products/bowl': BOWL,
+            'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: NOW + FOURTEEN_DAYS_MS },
+          },
+        });
+        const email = vi.fn();
+
+        const res = await deliver(
+          sessionEvent('checkout.session.async_payment_failed', { payment_status: 'unpaid' }),
+          db,
+          email
+        );
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(db.has('checkoutHolds/bowl')).toBe(false);
+        expect(db.dump('products/bowl')).toEqual(BOWL);
+        expect(db.state.written).toBeNull();
+        expect(email).not.toHaveBeenCalled();
+      });
+    });
 
     it("marks the paid checkout's pieces sold and releases its holds when the order is written", async () => {
       const db = fakeDb({

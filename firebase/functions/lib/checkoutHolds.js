@@ -22,6 +22,10 @@ const CHECKOUT_LIFETIME_SECONDS = 31 * 60;
 // at expiry is marked sold before anyone else can hold the piece. Holds
 // are normally released earlier, when Stripe reports the expiry.
 const HOLD_GRACE_MS = 5 * 60 * 1000;
+// A delayed payment method (bank debit) completes the checkout before the
+// money arrives; its pieces stay held until Stripe reports the outcome,
+// which can take several business days.
+const PENDING_PAYMENT_HOLD_MS = 14 * 24 * 60 * 60 * 1000;
 
 function isOneOfAKind(product) {
   return maxQtyFor(product) === 1;
@@ -128,6 +132,20 @@ async function releaseHolds(db, sessionId) {
 }
 
 /**
+ * Moves sessionId's holds to a new heldUntil, e.g. while its payment settles.
+ *
+ * @param {FirebaseFirestore.Firestore} db
+ * @param {string} sessionId
+ * @param {number} heldUntil epoch ms
+ */
+async function extendHolds(db, sessionId, heldUntil) {
+  await db.runTransaction(async (tx) => {
+    const held = await tx.get(db.collection(HOLDS_COLLECTION).where('sessionId', '==', sessionId));
+    held.docs.forEach((doc) => tx.update(doc.ref, { heldUntil }));
+  });
+}
+
+/**
  * The read half of marking a paid checkout's pieces sold, for use inside
  * the caller's transaction before any of its writes.
  *
@@ -161,8 +179,10 @@ module.exports = {
   checkHolds,
   reservePieces,
   releaseHolds,
+  extendHolds,
   readSessionHolds,
   writePiecesSold,
   CHECKOUT_LIFETIME_SECONDS,
   HOLD_GRACE_MS,
+  PENDING_PAYMENT_HOLD_MS,
 };

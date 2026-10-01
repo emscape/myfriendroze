@@ -4,16 +4,25 @@
 // writes an order. That split is deliberate: an "order" should only ever
 // exist for a transaction Stripe has confirmed was actually paid.
 //
-// It also handles checkout.session.expired, releasing the holds that
+// An order is written only once the payment is collected:
+// checkout.session.completed with payment_status 'paid', or
+// checkout.session.async_payment_succeeded for a delayed payment method.
+// checkout.session.expired and async_payment_failed release the holds that
 // createCheckoutSession put on one-of-a-kind pieces (lib/checkoutHolds.js).
-// The Stripe webhook endpoint must be subscribed to both events.
+// The Stripe webhook endpoint must be subscribed to all four events.
 
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
 const { sessionToOrderData } = require('./lib/orderFromSession');
-const { releaseHolds, readSessionHolds, writePiecesSold } = require('./lib/checkoutHolds');
+const {
+  releaseHolds,
+  extendHolds,
+  readSessionHolds,
+  writePiecesSold,
+  PENDING_PAYMENT_HOLD_MS,
+} = require('./lib/checkoutHolds');
 // sendOrderConfirmationEmail/orderDataToConfirmationEmailParams are only
 // used inside the v8-ignored wrapper below, never by the testable core
 // (which receives sendConfirmationEmail as an injected parameter) —
@@ -47,7 +56,7 @@ const brevoTemplates = defineSecret('BREVO_TEMPLATES');
 async function handleStripeWebhook(
   req,
   res,
-  { stripeClient, webhookSecret, db, sendConfirmationEmail, serverTimestamp }
+  { stripeClient, webhookSecret, db, sendConfirmationEmail, serverTimestamp, now = Date.now }
 ) {
   let event;
   try {
@@ -67,17 +76,24 @@ async function handleStripeWebhook(
   // (v1.1 backlog item — see project_backlog memory): Firestore order
   // status can go stale relative to a Dashboard-issued refund with no
   // automatic reconciliation today.
-  if (event.type === 'checkout.session.expired') {
+  const session = event.data.object;
+  if (event.type === 'checkout.session.expired' || event.type === 'checkout.session.async_payment_failed') {
     // Unpaid: free its one-of-a-kind pieces for other shoppers. Holds also
     // lapse on their own (lib/checkoutHolds.js) if this event never arrives.
-    await releaseHolds(db, event.data.object.id);
+    await releaseHolds(db, session.id);
     return res.status(200).json({ received: true });
   }
-  if (event.type !== 'checkout.session.completed') {
+  if (event.type !== 'checkout.session.completed' && event.type !== 'checkout.session.async_payment_succeeded') {
+    return res.status(200).json({ received: true });
+  }
+  // A delayed payment method completes the checkout before the money
+  // arrives. Keep its pieces held, with no order yet; Stripe follows up
+  // with async_payment_succeeded (handled below) or async_payment_failed.
+  if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+    await extendHolds(db, session.id, now() + PENDING_PAYMENT_HOLD_MS);
     return res.status(200).json({ received: true });
   }
 
-  const session = event.data.object;
   const lineItemsResponse = await stripeClient.checkout.sessions.listLineItems(session.id, {
     // Stripe returns 10 per page by default; a Checkout Session holds at
     // most 100 line items, so one page of 100 always covers the order.

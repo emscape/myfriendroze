@@ -10,10 +10,12 @@ const {
   checkHolds,
   reservePieces,
   releaseHolds,
+  extendHolds,
   readSessionHolds,
   writePiecesSold,
   CHECKOUT_LIFETIME_SECONDS,
   HOLD_GRACE_MS,
+  PENDING_PAYMENT_HOLD_MS,
 } = require('./checkoutHolds.js');
 const { CatalogValidationError } = require('./pricing.js');
 
@@ -45,6 +47,11 @@ describe('lifetimes', () => {
   it('asks Stripe for a 31-minute checkout and keeps holds 5 minutes past it', () => {
     expect(CHECKOUT_LIFETIME_SECONDS).toBe(31 * 60);
     expect(HOLD_GRACE_MS).toBe(5 * 60 * 1000);
+  });
+
+  // Bank debits can take several business days to settle.
+  it('keeps a hold 14 days for a payment still settling', () => {
+    expect(PENDING_PAYMENT_HOLD_MS).toBe(14 * 24 * 60 * 60 * 1000);
   });
 });
 
@@ -165,6 +172,18 @@ describe('releaseHolds', () => {
     await releaseHolds(db, 'cs_gone');
     expect(db.has('checkoutHolds/bowl')).toBe(false);
     expect(db.has('checkoutHolds/vase')).toBe(false);
+    expect(db.dump('checkoutHolds/jug')).toEqual({ sessionId: 'cs_other', heldUntil: NOW + 1 });
+  });
+});
+
+describe('extendHolds', () => {
+  it("moves only the given checkout's holds to the new time", async () => {
+    const db = memoryFirestore({
+      'checkoutHolds/bowl': { sessionId: 'cs_pending', heldUntil: NOW + 1 },
+      'checkoutHolds/jug': { sessionId: 'cs_other', heldUntil: NOW + 1 },
+    });
+    await extendHolds(db, 'cs_pending', NOW + 999);
+    expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_pending', heldUntil: NOW + 999 });
     expect(db.dump('checkoutHolds/jug')).toEqual({ sessionId: 'cs_other', heldUntil: NOW + 1 });
   });
 });
