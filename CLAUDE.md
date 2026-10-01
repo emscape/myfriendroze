@@ -20,6 +20,7 @@
   - `astro/src/components/Header.astro` — site navigation (nav array is the source of truth for menu items)
   - `astro/src/data/events.js` — recurring/hardcoded event entries, merged with live Firestore events (see `events.astro`)
   - `astro/src/lib/product-mapping.js` / `products-live.js` — live per-request Firestore reads for shop products (no build-time snapshot)
+  - `astro/src/pages/cart.astro` + `astro/src/lib/cart*.js` — shopping cart, stored in the visitor's browser (localStorage); per-category quantity limits mirror `firebase/functions/lib/pricing.js`. Cart checkout and shop-card quick order both go straight to Stripe Checkout, which collects the shopper's details (no site form).
   - `firebase/functions/` — Cloud Functions (order emails, newsletter, shipping calc)
   - `firestore.rules` — Firestore security rules
 

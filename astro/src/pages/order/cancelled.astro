@@ -23,6 +23,13 @@ import Header from '../../components/Header.astro';
       <a href="/shop" class="button button--primary">Back to Shop</a>
     </div>
   </section>
+
+  <script>
+    // The cart is left as it was; forget the pending cart checkout so a
+    // later quick order in this tab can't empty it.
+    import { clearCartCheckoutMark } from '../../lib/cart-store.js';
+    clearCartCheckoutMark();
+  </script>
 </Layout>
 
 <style>

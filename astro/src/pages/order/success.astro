@@ -37,6 +37,14 @@ import Header from '../../components/Header.astro';
       <a href="/shop" class="button button--primary">Continue Shopping</a>
     </div>
   </section>
+
+  <script>
+    // Removes the pieces a cart checkout in this tab sent to Stripe, but
+    // only if Stripe's session_id matches that checkout. Does nothing after
+    // a quick order, which never touches the cart.
+    import { completeCartCheckout } from '../../lib/cart-store.js';
+    completeCartCheckout(new URLSearchParams(window.location.search).get('session_id'));
+  </script>
 </Layout>
 
 <style>

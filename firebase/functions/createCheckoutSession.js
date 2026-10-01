@@ -82,7 +82,9 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
       cancel_url: `${siteOrigin}/order/cancelled`,
     });
 
-    return res.status(200).json({ url: session.url });
+    // The id lets the site's success page confirm it was this checkout
+    // (Stripe adds it to success_url as session_id) before touching the cart.
+    return res.status(200).json({ url: session.url, id: session.id });
   } catch (error) {
     if (error instanceof CatalogValidationError) {
       return res.status(400).json({ error: error.message, code: error.code });
