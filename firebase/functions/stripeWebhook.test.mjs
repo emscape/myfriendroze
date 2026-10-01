@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import stripePkg from 'stripe';
 import { handleStripeWebhook } from './stripeWebhook.js';
+import { memoryFirestore } from './test-support/memoryFirestore.mjs';
 
 const realWebhooks = stripePkg.webhooks;
 const WEBHOOK_SECRET = 'whsec_test_secret_for_unit_tests_only';
@@ -41,24 +42,27 @@ function fakeRes() {
   return res;
 }
 
-function fakeDb({ existingOrder } = {}) {
-  const state = { existingOrder, written: null };
-  return {
-    state,
-    collection: () => ({ doc: (id) => ({ id }) }),
-    runTransaction: async (fn) => {
-      const tx = {
-        get: async () => ({
-          exists: !!state.existingOrder,
-          data: () => state.existingOrder,
-        }),
+// In-memory Firestore; state.written records the order doc a transaction
+// set, so tests can tell "no write" apart from "rewrote the same data".
+function fakeDb({ existingOrder, docs = {} } = {}) {
+  const db = memoryFirestore({
+    ...(existingOrder ? { 'orders/cs_test_abc123': existingOrder } : {}),
+    ...docs,
+  });
+  const state = { written: null };
+  const runTransaction = db.runTransaction;
+  db.runTransaction = (fn) =>
+    runTransaction((tx) =>
+      fn({
+        ...tx,
         set: (ref, data) => {
-          state.written = data;
+          if (ref.path.startsWith('orders/')) state.written = data;
+          return tx.set(ref, data);
         },
-      };
-      return fn(tx);
-    },
-  };
+      })
+    );
+  db.state = state;
+  return db;
 }
 
 function fakeStripeClient({ listLineItemsResult } = {}) {
@@ -253,5 +257,81 @@ describe('handleStripeWebhook', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(db.state.written).toBeNull(); // shipped order must not be overwritten
     expect(sendConfirmationEmail).not.toHaveBeenCalled();
+  });
+
+  describe('checkout holds on one-of-a-kind pieces', () => {
+    const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery' };
+    const VASE = { title: 'Tall Vase', price: 90, isActive: true, category: 'other' };
+
+    async function deliver(event, db) {
+      const res = fakeRes();
+      await handleStripeWebhook(signedRequest(event), res, {
+        stripeClient: fakeStripeClient(),
+        webhookSecret: WEBHOOK_SECRET,
+        db,
+        sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+        serverTimestamp: () => 'SERVER_TIMESTAMP',
+      });
+      return res;
+    }
+
+    it("marks the paid checkout's pieces sold and releases its holds when the order is written", async () => {
+      const db = fakeDb({
+        docs: {
+          'products/bowl': BOWL,
+          'products/vase': VASE,
+          'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: 1 },
+          'checkoutHolds/vase': { sessionId: 'cs_someone_else', heldUntil: 1 },
+        },
+      });
+
+      const res = await deliver(checkoutCompletedEvent(), db);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(db.state.written.stripeSessionId).toBe('cs_test_abc123');
+      expect(db.dump('products/bowl')).toEqual({ ...BOWL, inStock: false });
+      expect(db.has('checkoutHolds/bowl')).toBe(false);
+      expect(db.dump('products/vase')).toEqual(VASE);
+      expect(db.dump('checkoutHolds/vase')).toEqual({ sessionId: 'cs_someone_else', heldUntil: 1 });
+    });
+
+    // Roze may have put a piece back on sale (e.g. after a refund) by the
+    // time a duplicate delivery arrives; it must not be marked sold again.
+    it('leaves products alone on a duplicate delivery', async () => {
+      const db = fakeDb({
+        existingOrder: { status: 'paid', stripeSessionId: 'cs_test_abc123' },
+        docs: {
+          'products/bowl': { ...BOWL, inStock: true },
+          'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: 1 },
+        },
+      });
+
+      await deliver(checkoutCompletedEvent(), db);
+
+      expect(db.dump('products/bowl')).toEqual({ ...BOWL, inStock: true });
+    });
+
+    it('releases the holds of an expired checkout without writing an order', async () => {
+      const db = fakeDb({
+        docs: {
+          'products/bowl': BOWL,
+          'checkoutHolds/bowl': { sessionId: 'cs_test_expired', heldUntil: 1 },
+          'checkoutHolds/vase': { sessionId: 'cs_someone_else', heldUntil: 1 },
+        },
+      });
+      const event = {
+        id: 'evt_3',
+        type: 'checkout.session.expired',
+        data: { object: { id: 'cs_test_expired', status: 'expired' } },
+      };
+
+      const res = await deliver(event, db);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(db.has('checkoutHolds/bowl')).toBe(false);
+      expect(db.dump('checkoutHolds/vase')).toEqual({ sessionId: 'cs_someone_else', heldUntil: 1 });
+      expect(db.dump('products/bowl')).toEqual(BOWL);
+      expect(db.state.written).toBeNull();
+    });
   });
 });

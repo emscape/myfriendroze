@@ -1,14 +1,19 @@
 // Receives Stripe's checkout.session.completed webhook and is the only
 // place an order actually gets created — createCheckoutSession.js only
-// starts a payment attempt, it never writes to Firestore. That split is
-// deliberate: an "order" should only ever exist for a transaction Stripe
-// has confirmed was actually paid.
+// starts a payment attempt (and holds one-of-a-kind pieces), it never
+// writes an order. That split is deliberate: an "order" should only ever
+// exist for a transaction Stripe has confirmed was actually paid.
+//
+// It also handles checkout.session.expired, releasing the holds that
+// createCheckoutSession put on one-of-a-kind pieces (lib/checkoutHolds.js).
+// The Stripe webhook endpoint must be subscribed to both events.
 
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
 const { sessionToOrderData } = require('./lib/orderFromSession');
+const { releaseHolds, readSessionHolds, writePiecesSold } = require('./lib/checkoutHolds');
 // sendOrderConfirmationEmail/orderDataToConfirmationEmailParams are only
 // used inside the v8-ignored wrapper below, never by the testable core
 // (which receives sendConfirmationEmail as an injected parameter) —
@@ -62,6 +67,12 @@ async function handleStripeWebhook(
   // (v1.1 backlog item — see project_backlog memory): Firestore order
   // status can go stale relative to a Dashboard-issued refund with no
   // automatic reconciliation today.
+  if (event.type === 'checkout.session.expired') {
+    // Unpaid: free its one-of-a-kind pieces for other shoppers. Holds also
+    // lapse on their own (lib/checkoutHolds.js) if this event never arrives.
+    await releaseHolds(db, event.data.object.id);
+    return res.status(200).json({ received: true });
+  }
   if (event.type !== 'checkout.session.completed') {
     return res.status(200).json({ received: true });
   }
@@ -91,6 +102,10 @@ async function handleStripeWebhook(
     if (doc.exists) {
       return true;
     }
+    // Same transaction as the order, so a paid checkout's one-of-a-kind
+    // pieces are sold exactly when its order exists.
+    const held = await readSessionHolds(tx, db, session.id);
+    writePiecesSold(tx, held);
     tx.set(orderRef, {
       ...orderData,
       createdAt: serverTimestamp(),

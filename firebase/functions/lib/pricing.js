@@ -147,6 +147,7 @@ module.exports = {
   validateItemList,
   CatalogValidationError,
   dollarsToCents,
+  maxQtyFor,
   MAX_ITEMS,
   MAX_QTY_BY_CATEGORY,
 };

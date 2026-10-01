@@ -81,6 +81,22 @@ describe('POST /api/checkout', () => {
     expect(data.error).toBe('No product found for sku: bad-sku');
   });
 
+  // The function refuses a one-of-a-kind piece another checkout is holding
+  // with 409, and replacesSessionId is how a shopper's own earlier
+  // checkout is replaced; both must pass through unchanged.
+  it('forwards replacesSessionId and passes a 409 hold refusal back to the shopper', async () => {
+    const message =
+      "Someone is checking out Blue Bowl right now. If they don't finish, it'll be available again in about half an hour.";
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ error: message, code: 'RESERVED' }), { status: 409 }));
+    const body = { items: [{ sku: 'bowl', qty: 1 }], replacesSessionId: 'cs_test_old' };
+
+    const response = await POST({ request: requestWith(body) });
+
+    expect(JSON.parse(fetchSpy.mock.calls[0][1].body)).toEqual(body);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: message, code: 'RESERVED' });
+  });
+
   it('returns 500 when the Cloud Function call itself fails (e.g. network error)', async () => {
     fetchSpy.mockRejectedValue(new Error('fetch failed'));
 
