@@ -139,7 +139,10 @@ async function handleCreateCheckoutSession(
       }
     }
 
-    const expiresAt = Math.floor(startedAt / 1000) + CHECKOUT_LIFETIME_SECONDS;
+    // Read the clock again: Stripe measures its 30-minute minimum from when
+    // it receives this call, after the hold reads and any Stripe calls above.
+    const createdAt = now();
+    const expiresAt = Math.floor(createdAt / 1000) + CHECKOUT_LIFETIME_SECONDS;
     const session = await stripeClient.checkout.sessions.create({
       mode: 'payment',
       expires_at: expiresAt,
@@ -168,7 +171,7 @@ async function handleCreateCheckoutSession(
           sessionId: session.id,
           heldUntil: expiresAt * 1000 + HOLD_GRACE_MS,
           tokenHash: hashToken(token),
-          now: startedAt,
+          now: createdAt,
           replaceTokenHash,
           catalog,
         });

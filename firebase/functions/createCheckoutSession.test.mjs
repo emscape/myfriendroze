@@ -304,6 +304,32 @@ describe('handleCreateCheckoutSession', () => {
       });
     });
 
+    // Stripe measures the 30-minute minimum from when it receives the
+    // create call, so the expiry is computed just before it, after any
+    // hold reads and Stripe calls that took time.
+    it('computes the expiry from the time just before creating the Stripe session', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'open' } });
+      const LATER = NOW + 90_000;
+      const times = [NOW, LATER];
+      const res = fakeRes();
+
+      await handleCreateCheckoutSession(
+        { method: 'POST', body: { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN } },
+        res,
+        { db, stripeClient, siteOrigin: SITE_ORIGIN, now: () => times.shift() ?? LATER, newToken: () => NEW_TOKEN }
+      );
+
+      const expiresAt = Math.floor(LATER / 1000) + 31 * 60;
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(stripeClient.checkout.sessions.create.mock.calls[0][0].expires_at).toBe(expiresAt);
+      expect(db.dump('checkoutHolds/bowl')).toEqual({
+        sessionId: 'cs_new',
+        heldUntil: expiresAt * 1000 + 5 * 60 * 1000,
+        tokenHash: sha256(NEW_TOKEN),
+      });
+    });
+
     it('does not hold plants', async () => {
       const db = fakeDb({ fern: fakeDoc(true, FERN), bowl: fakeDoc(true, BOWL) });
 
