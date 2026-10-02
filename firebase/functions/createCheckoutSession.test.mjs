@@ -445,6 +445,11 @@ describe('handleCreateCheckoutSession', () => {
         code: 'PAYMENT_PENDING',
       });
       expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+      // The webhook may not have arrived yet; the hold must already reflect
+      // the pending payment so it neither lapses nor misleads other shoppers.
+      expect(db.dump('checkoutHolds/bowl')).toEqual(
+        myHold({ heldUntil: NOW + 14 * 24 * 60 * 60 * 1000, pendingPayment: true })
+      );
     });
 
     // The session id appears in the Stripe checkout URL, so knowing it must

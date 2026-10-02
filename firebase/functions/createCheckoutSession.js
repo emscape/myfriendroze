@@ -19,6 +19,8 @@ const {
   checkHolds,
   reservePieces,
   hashToken,
+  holdForPendingPayment,
+  PENDING_PAYMENT_HOLD_MS,
   CHECKOUT_LIFETIME_SECONDS,
   HOLD_GRACE_MS,
 } = require('./lib/checkoutHolds');
@@ -46,10 +48,12 @@ function newReplaceToken() {
 // from checking out again. Expiring it first means only the new checkout
 // can be paid. A paid one means the piece has sold, even if the webhook
 // hasn't landed yet; one paid by a delayed method is still settling.
-async function closeReplacedCheckout(stripeClient, sessionId, product) {
+async function closeReplacedCheckout({ stripeClient, db, now }, sessionId, product) {
   const previous = await stripeClient.checkout.sessions.retrieve(sessionId);
   if (previous.status === 'complete') {
     if (previous.payment_status === 'unpaid') {
+      // As the webhook does, in case it hasn't arrived yet.
+      await holdForPendingPayment(db, sessionId, now + PENDING_PAYMENT_HOLD_MS);
       throw new CatalogValidationError(
         'PAYMENT_PENDING',
         `A payment for ${product.title} is being processed. If it doesn't go through, it'll be available again.`
@@ -127,7 +131,11 @@ async function handleCreateCheckoutSession(
       const replacedSessionId = checkHolds(holds, catalog, { now: startedAt, replaceTokenHash });
       if (replacedSessionId) {
         const replacedSku = uniqueSkus.find((sku) => holds.get(sku)?.sessionId === replacedSessionId);
-        await closeReplacedCheckout(stripeClient, replacedSessionId, catalog.get(replacedSku));
+        await closeReplacedCheckout(
+          { stripeClient, db, now: startedAt },
+          replacedSessionId,
+          catalog.get(replacedSku)
+        );
       }
     }
 
