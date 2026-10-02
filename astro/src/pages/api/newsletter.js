@@ -1,6 +1,5 @@
 // Proxies to the newsletterSignup Cloud Function, same
-// browser-never-calls-Firebase-directly pattern as api/checkout.js and
-// api/shipping.js.
+// browser-never-calls-Firebase-directly pattern as api/checkout.js.
 //
 // Previously called createSubscription (firebase/functions/subscribe.js),
 // a function that was never actually exported/deployed -- every real

@@ -39,17 +39,22 @@ function rememberToken(storage, token) {
  * @param {{ sku: string, qty: number }[]} items
  * @param {typeof fetch} [fetchImpl]
  * @param {Pick<Storage, 'getItem' | 'setItem'> | null} [storage]
+ * @param {string | null} [localZip] - a Los Angeles ZIP from the cart, so
+ *   checkout offers local pickup (the server checks it)
  * @returns {Promise<{ url: string, sessionId: string | null }>}
  * @throws {Error} with a message suitable to show the shopper
  */
-export async function requestCheckout(items, fetchImpl = fetch, storage = defaultStorage()) {
+export async function requestCheckout(items, fetchImpl = fetch, storage = defaultStorage(), localZip = null) {
   const replaceToken = readToken(storage);
+  const body = { items };
+  if (replaceToken) body.replaceToken = replaceToken;
+  if (localZip) body.localZip = localZip;
   let response;
   try {
     response = await fetchImpl('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(replaceToken ? { items, replaceToken } : { items }),
+      body: JSON.stringify(body),
     });
   } catch {
     throw new Error("Couldn't start checkout. Check your connection and try again.");

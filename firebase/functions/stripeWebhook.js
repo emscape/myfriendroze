@@ -99,7 +99,15 @@ async function handleStripeWebhook(
     // most 100 line items, so one page of 100 always covers the order.
     limit: 100,
   });
-  const orderData = sessionToOrderData(session, lineItemsResponse.data);
+  // The session carries only the chosen shipping rate's id; its metadata
+  // says which option it was (free shipping and pickup both cost $0).
+  const shippingRateId = session.shipping_cost?.shipping_rate;
+  const shippingRate = shippingRateId ? await stripeClient.shippingRates.retrieve(shippingRateId) : null;
+  const orderData = sessionToOrderData(session, lineItemsResponse.data, shippingRate);
+  if (orderData.shipping?.outsideLocalArea) {
+    // Session id only: no customer details in logs.
+    logger.warn('Local pickup order with an address outside Los Angeles:', session.id);
+  }
 
   // The Checkout Session ID doubles as the Firestore document ID — a
   // duplicate webhook delivery (Stripe does not guarantee exactly-once

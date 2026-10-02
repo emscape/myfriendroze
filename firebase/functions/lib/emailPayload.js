@@ -44,6 +44,16 @@ function formatItemsText(items) {
     .join('<br>');
 }
 
+function shippingLabel(shipping) {
+  return escapeHtml(shipping.label || 'Shipping');
+}
+
+// Appended to ITEMS_TEXT so the confirmation email shows shipping with the
+// template it already has.
+function formatShippingLine(shipping) {
+  return shipping ? `<br>${shippingLabel(shipping)} — $${shipping.amount.toFixed(2)}` : '';
+}
+
 /**
  * @param {ReturnType<typeof import('./orderFromSession.js').sessionToOrderData>} order
  */
@@ -54,8 +64,9 @@ function orderDataToConfirmationEmailParams(order) {
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
     CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,
-    ITEMS_TEXT: formatItemsText(order.items),
+    ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping),
     SHIPPING_ADDRESS: formatAddress(order.shippingAddress),
+    SHIPPING_METHOD: order.shipping ? shippingLabel(order.shipping) : '',
   };
 }
 

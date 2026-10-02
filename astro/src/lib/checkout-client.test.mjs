@@ -21,6 +21,16 @@ describe('requestCheckout', () => {
     });
   });
 
+  it('sends the local ZIP along with the items when one is given', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', id: 'cs_1' }));
+
+    await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, null, '90065');
+
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ items: [{ sku: 'bowl', qty: 1 }], localZip: '90065' });
+  });
+
   it("throws the server's error message when checkout can't start", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(400, { error: 'Product is out of stock: bowl' }));
 

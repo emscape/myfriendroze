@@ -58,7 +58,97 @@ describe('sessionToOrderData', () => {
         country: 'US',
       },
       notes: null,
+      shipping: null,
     });
+  });
+
+  it("records the chosen shipping option's method, name and amount", () => {
+    const session = baseSession({ shipping_cost: { amount_total: 1000, shipping_rate: 'shr_123' } });
+    const shippingRate = { id: 'shr_123', display_name: 'Shipping', metadata: { method: 'shipping' } };
+
+    const order = sessionToOrderData(session, lineItems, shippingRate);
+
+    expect(order.shipping).toEqual({ method: 'shipping', label: 'Shipping', amount: 10, outsideLocalArea: false });
+  });
+
+  it('tells a free local pickup apart from free shipping by the method, not the amount', () => {
+    const session = baseSession({ shipping_cost: { amount_total: 0, shipping_rate: 'shr_456' } });
+    const shippingRate = { id: 'shr_456', display_name: 'Local pickup — Los Angeles', metadata: { method: 'local_pickup' } };
+
+    const order = sessionToOrderData(session, lineItems, shippingRate);
+
+    expect(order.shipping).toEqual({
+      method: 'local_pickup',
+      label: 'Local pickup — Los Angeles',
+      amount: 0,
+      outsideLocalArea: false,
+    });
+  });
+
+  it('reads the shipping address from collected_information, where current Stripe API versions put it', () => {
+    const session = baseSession({
+      shipping_details: undefined,
+      collected_information: {
+        shipping_details: {
+          name: 'Buyer Name',
+          address: { line1: '9 Elm St', city: 'Pasadena', state: 'CA', postal_code: '91101', country: 'US' },
+        },
+      },
+    });
+
+    const order = sessionToOrderData(session, lineItems);
+
+    expect(order.shippingAddress).toEqual({
+      name: 'Buyer Name',
+      line1: '9 Elm St',
+      line2: null,
+      city: 'Pasadena',
+      state: 'CA',
+      postalCode: '91101',
+      country: 'US',
+    });
+  });
+
+  describe('flagging pickup orders outside Los Angeles', () => {
+    const pickup = { id: 'shr_p', display_name: 'Local pickup — Los Angeles', metadata: { method: 'local_pickup' } };
+    const shipping = { id: 'shr_s', display_name: 'Shipping', metadata: { method: 'shipping' } };
+    const cost = { shipping_cost: { amount_total: 0, shipping_rate: 'shr_p' } };
+
+    function sessionTo(postalCode) {
+      return baseSession({
+        ...cost,
+        shipping_details: { name: 'Buyer Name', address: { line1: '1 St', postal_code: postalCode, country: 'US' } },
+      });
+    }
+
+    it('flags pickup by a shopper in another state', () => {
+      expect(sessionToOrderData(sessionTo('10001'), lineItems, pickup).shipping.outsideLocalArea).toBe(true);
+    });
+
+    it('flags pickup by a shopper elsewhere in California', () => {
+      expect(sessionToOrderData(sessionTo('94103'), lineItems, pickup).shipping.outsideLocalArea).toBe(true);
+    });
+
+    it('does not flag a pickup order with a Los Angeles address, including ZIP+4', () => {
+      expect(sessionToOrderData(sessionTo('90065-1234'), lineItems, pickup).shipping.outsideLocalArea).toBe(false);
+    });
+
+    it('flags a pickup order whose address is missing, since it cannot be confirmed', () => {
+      const session = baseSession({ ...cost, shipping_details: undefined });
+      expect(sessionToOrderData(session, lineItems, pickup).shipping.outsideLocalArea).toBe(true);
+    });
+
+    it('never flags mail shipping, wherever it goes', () => {
+      expect(sessionToOrderData(sessionTo('10001'), lineItems, shipping).shipping.outsideLocalArea).toBe(false);
+    });
+  });
+
+  it('keeps the shipping amount when the shipping rate could not be looked up', () => {
+    const session = baseSession({ shipping_cost: { amount_total: 3000, shipping_rate: 'shr_789' } });
+
+    const order = sessionToOrderData(session, lineItems);
+
+    expect(order.shipping).toEqual({ method: null, label: null, amount: 30, outsideLocalArea: false });
   });
 
   it('does not throw and sets shippingAddress to null when shipping_details is absent', () => {

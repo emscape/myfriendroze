@@ -1,6 +1,6 @@
 // Proxies to the createCheckoutSession Cloud Function, same
-// browser-never-calls-Firebase-directly pattern as api/orders.js and
-// api/shipping.js. Unlike api/orders.js, dev mode is NOT faked here — it
+// browser-never-calls-Firebase-directly pattern as api/newsletter.js. Dev
+// mode is not faked here — it
 // hits the local Firebase emulator instead, so local dev actually
 // exercises the real path end-to-end.
 

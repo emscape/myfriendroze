@@ -54,7 +54,43 @@ describe('orderDataToConfirmationEmailParams', () => {
       ITEMS: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
       ITEMS_TEXT: 'Blue Branches (x1) — $70.00',
       SHIPPING_ADDRESS: '123 Main St, Springfield, CA 90210, US',
+      SHIPPING_METHOD: '',
     });
+  });
+
+  it('adds the shipping option and its cost to ITEMS_TEXT and SHIPPING_METHOD', () => {
+    const order = fullOrder({ shipping: { method: 'shipping', label: 'Shipping', amount: 10 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $10.00');
+    expect(params.SHIPPING_METHOD).toBe('Shipping');
+  });
+
+  it('shows a free option as $0.00', () => {
+    const order = fullOrder({ shipping: { method: 'local_pickup', label: 'Local pickup — Los Angeles', amount: 0 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Local pickup — Los Angeles — $0.00');
+  });
+
+  it('labels a shipping charge whose option name is unknown as "Shipping"', () => {
+    const order = fullOrder({ shipping: { method: null, label: null, amount: 30 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $30.00');
+    expect(params.SHIPPING_METHOD).toBe('Shipping');
+  });
+
+  it('escapes HTML in the shipping option name', () => {
+    const order = fullOrder({ shipping: { method: 'shipping', label: '<b>x</b>', amount: 10 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_METHOD).toBe('&lt;b&gt;x&lt;/b&gt;');
+    expect(params.ITEMS_TEXT).toContain('&lt;b&gt;x&lt;/b&gt; — $10.00');
   });
 
   it('joins multiple items in ITEMS_TEXT with <br> — plain email templates render '

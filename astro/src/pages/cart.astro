@@ -6,6 +6,7 @@ import Header from '../components/Header.astro';
 import { fetchLiveProducts } from '../lib/products-live.js';
 import { getFirestoreDb } from '../lib/firestore-admin.js';
 import { catalogForCart } from '../lib/cart-view.js';
+import { shippingSummary } from '../lib/shipping-policy.js';
 
 // The cart itself lives in the visitor's browser, so this page ships the
 // live catalog (prices, stock, categories) and the script joins the two.
@@ -55,9 +56,26 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
           <span>subtotal</span>
           <span data-cart-subtotal></span>
         </p>
+        <div class="cart__local">
+          <label for="cart-local-zip" class="cart__local-label">
+            In Los Angeles? Enter your ZIP code for free local pickup (optional)
+          </label>
+          <input
+            id="cart-local-zip"
+            class="cart__local-input"
+            data-cart-local-zip
+            type="text"
+            inputmode="numeric"
+            autocomplete="postal-code"
+            maxlength="5"
+            aria-describedby="cart-local-hint"
+          />
+          <p id="cart-local-hint" class="cart__note" data-cart-local-hint aria-live="polite"></p>
+        </div>
         <button type="button" class="cart__checkout" data-cart-checkout disabled={loadFailed}>
           check out
         </button>
+        <p class="cart__note">{shippingSummary()}</p>
         <p class="cart__note">
           You'll enter your email, phone number and shipping address on Stripe's secure checkout page.
         </p>
@@ -74,6 +92,22 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
 </Layout>
 
 <style>
+  /* Same title treatment as the small print, events and gallery pages. */
+  .page-hero {
+    background-color: var(--color-background);
+    text-align: center;
+    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+  }
+
+  .page-hero__title {
+    font-family: var(--font-heading-family);
+    font-size: clamp(2rem, 4vw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0;
+    color: var(--color-foreground);
+  }
+
   .cart__wrapper {
     max-width: 760px;
     margin: 0 auto;
@@ -118,6 +152,36 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
   .cart__note {
     font-size: 1.4rem;
     margin: 1.2rem 0 0;
+  }
+
+  .cart__local {
+    margin: 0 0 1.6rem;
+  }
+
+  .cart__local-label {
+    display: block;
+    font-size: 1.4rem;
+    margin: 0 0 0.6rem;
+  }
+
+  .cart__local-input {
+    width: 12rem;
+    padding: 0.8rem 1rem;
+    font: inherit;
+    font-size: 1.6rem;
+    border: 0.2rem solid var(--color-foreground);
+    border-radius: var(--inputs-radius);
+    background: var(--color-background);
+    color: var(--color-foreground);
+  }
+
+  .cart__local-input:focus-visible {
+    outline: 0.2rem solid var(--color-foreground);
+    outline-offset: 0.2rem;
+  }
+
+  .cart__local .cart__note:empty {
+    display: none;
   }
 
   .cart__checkout {
