@@ -3,13 +3,13 @@
 // sent; Stripe's page collects the shopper's details and the server prices
 // everything from Firestore. Shared by the cart page and quick order.
 //
-// The server holds one-of-a-kind pieces while a checkout is open, so the
-// last checkout this browser started is remembered and sent as
-// replacesSessionId: a shopper who backs out of Stripe and checks out again
-// replaces their own checkout instead of being blocked by it.
+// The server holds one-of-a-kind pieces while a checkout is open and returns
+// a replaceToken with each checkout. The latest one is remembered and sent
+// back, so a shopper who backs out of Stripe and checks out again replaces
+// their own checkout instead of being blocked by it.
 
 const GENERAL_ERROR = "Couldn't start checkout. Please try again.";
-export const LAST_CHECKOUT_KEY = 'myfriendroze-last-checkout';
+export const CHECKOUT_TOKEN_KEY = 'myfriendroze-checkout-token';
 
 function defaultStorage() {
   try {
@@ -19,17 +19,17 @@ function defaultStorage() {
   }
 }
 
-function readLastCheckout(storage) {
+function readToken(storage) {
   try {
-    return storage?.getItem(LAST_CHECKOUT_KEY) || null;
+    return storage?.getItem(CHECKOUT_TOKEN_KEY) || null;
   } catch {
     return null;
   }
 }
 
-function rememberCheckout(storage, sessionId) {
+function rememberToken(storage, token) {
   try {
-    if (sessionId) storage?.setItem(LAST_CHECKOUT_KEY, sessionId);
+    if (typeof token === 'string' && token) storage?.setItem(CHECKOUT_TOKEN_KEY, token);
   } catch {
     // Without it, checking out again waits for the earlier hold to lapse.
   }
@@ -43,13 +43,13 @@ function rememberCheckout(storage, sessionId) {
  * @throws {Error} with a message suitable to show the shopper
  */
 export async function requestCheckout(items, fetchImpl = fetch, storage = defaultStorage()) {
-  const replacesSessionId = readLastCheckout(storage);
+  const replaceToken = readToken(storage);
   let response;
   try {
     response = await fetchImpl('/api/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(replacesSessionId ? { items, replacesSessionId } : { items }),
+      body: JSON.stringify(replaceToken ? { items, replaceToken } : { items }),
     });
   } catch {
     throw new Error("Couldn't start checkout. Check your connection and try again.");
@@ -62,9 +62,8 @@ export async function requestCheckout(items, fetchImpl = fetch, storage = defaul
     // Fall through to the general message.
   }
   if (response.ok && typeof result.url === 'string' && result.url) {
-    const sessionId = typeof result.id === 'string' ? result.id : null;
-    rememberCheckout(storage, sessionId);
-    return { url: result.url, sessionId };
+    rememberToken(storage, result.replaceToken);
+    return { url: result.url, sessionId: typeof result.id === 'string' ? result.id : null };
   }
   throw new Error(typeof result.error === 'string' && result.error ? result.error : GENERAL_ERROR);
 }

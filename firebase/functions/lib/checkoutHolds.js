@@ -3,15 +3,19 @@
 // writes the holds; stripeWebhook.js marks the pieces sold when the
 // checkout is paid and releases the holds when it expires.
 //
-// A hold is checkoutHolds/{sku}: { sessionId, heldUntil (epoch ms) }. It
-// lives in its own collection rather than on the product because products
-// are publicly readable (firestore.rules) and a Stripe session id is what
-// lets a shopper replace their own checkout. No rule matches this
-// collection, so only the Admin SDK can read or write it.
+// A hold is checkoutHolds/{sku}: { sessionId, heldUntil (epoch ms),
+// tokenHash, pendingPayment? }. tokenHash is the SHA-256 of a random token
+// returned only to the browser that started the checkout; presenting the
+// token is what lets a shopper replace their own checkout. The session id
+// is not enough, since it appears in the Stripe checkout page's URL. Holds
+// live in their own collection because products are publicly readable
+// (firestore.rules); no rule matches this one, so only the Admin SDK can
+// read or write it.
 //
 // Plants come in multiples with no stock count, so only pieces whose
 // quantity limit is 1 are held.
 
+const { createHash } = require('node:crypto');
 const { CatalogValidationError, maxQtyFor } = require('./pricing');
 
 const HOLDS_COLLECTION = 'checkoutHolds';
@@ -31,6 +35,10 @@ function isOneOfAKind(product) {
   return maxQtyFor(product) === 1;
 }
 
+function hashToken(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
 function holdRef(db, sku) {
   return db.collection(HOLDS_COLLECTION).doc(sku);
 }
@@ -46,6 +54,13 @@ function reservedError(product) {
   );
 }
 
+function paymentPendingError(product) {
+  return new CatalogValidationError(
+    'PAYMENT_PENDING',
+    `A payment for ${product.title} is being processed. If it doesn't go through, it'll be available again.`
+  );
+}
+
 function soldError(product) {
   return new CatalogValidationError('OUT_OF_STOCK', `${product.title} has just sold.`);
 }
@@ -53,7 +68,7 @@ function soldError(product) {
 /**
  * @param {FirebaseFirestore.Firestore} db
  * @param {string[]} skus
- * @returns {Promise<Map<string, {sessionId: string, heldUntil: number}>>} holds by sku
+ * @returns {Promise<Map<string, object>>} holds by sku
  */
 async function readHolds(db, skus) {
   const snaps = await Promise.all(skus.map((sku) => holdRef(db, sku).get()));
@@ -65,25 +80,27 @@ async function readHolds(db, skus) {
 }
 
 /**
- * Refuses if any piece is held by a checkout other than replacesSessionId.
+ * Refuses if any piece is held by a checkout other than the shopper's own
+ * (the one whose token hashes to replaceTokenHash).
  *
- * @param {Map<string, {sessionId: string, heldUntil: number}>} holds
+ * @param {Map<string, {sessionId: string, heldUntil: number, tokenHash?: string, pendingPayment?: boolean}>} holds
  * @param {Map<string, {title: string}>} catalog
- * @param {{now: number, replacesSessionId: string | null}} options
- * @returns {boolean} whether replacesSessionId still holds any of the pieces
- * @throws {CatalogValidationError} RESERVED
+ * @param {{now: number, replaceTokenHash: string | null}} options
+ * @returns {string | null} the shopper's own checkout still holding a piece, if any
+ * @throws {CatalogValidationError} RESERVED or PAYMENT_PENDING
  */
-function checkHolds(holds, catalog, { now, replacesSessionId }) {
-  let replacesHeldPiece = false;
+function checkHolds(holds, catalog, { now, replaceTokenHash }) {
+  let replacedSessionId = null;
   for (const [sku, hold] of holds) {
     if (!isActiveHold(hold, now)) continue;
-    if (replacesSessionId && hold.sessionId === replacesSessionId) {
-      replacesHeldPiece = true;
+    if (hold.pendingPayment) throw paymentPendingError(catalog.get(sku));
+    if (replaceTokenHash && hold.tokenHash === replaceTokenHash) {
+      replacedSessionId = hold.sessionId;
     } else {
       throw reservedError(catalog.get(sku));
     }
   }
-  return replacesHeldPiece;
+  return replacedSessionId;
 }
 
 /**
@@ -91,11 +108,11 @@ function checkHolds(holds, catalog, { now, replacesSessionId }) {
  * products are re-read too, since one may have sold since the caller's read.
  *
  * @param {FirebaseFirestore.Firestore} db
- * @param {{skus: string[], sessionId: string, heldUntil: number, now: number,
- *   replacesSessionId: string | null, catalog: Map<string, {title: string}>}} options
- * @throws {CatalogValidationError} RESERVED or OUT_OF_STOCK
+ * @param {{skus: string[], sessionId: string, heldUntil: number, tokenHash: string, now: number,
+ *   replaceTokenHash: string | null, catalog: Map<string, {title: string}>}} options
+ * @throws {CatalogValidationError} RESERVED, PAYMENT_PENDING or OUT_OF_STOCK
  */
-async function reservePieces(db, { skus, sessionId, heldUntil, now, replacesSessionId, catalog }) {
+async function reservePieces(db, { skus, sessionId, heldUntil, tokenHash, now, replaceTokenHash, catalog }) {
   await db.runTransaction(async (tx) => {
     const products = await Promise.all(skus.map((sku) => tx.get(db.collection('products').doc(sku))));
     const holdSnaps = await Promise.all(skus.map((sku) => tx.get(holdRef(db, sku))));
@@ -109,10 +126,10 @@ async function reservePieces(db, { skus, sessionId, heldUntil, now, replacesSess
     holdSnaps.forEach((snap, i) => {
       if (snap.exists) holds.set(skus[i], snap.data());
     });
-    checkHolds(holds, catalog, { now, replacesSessionId });
+    checkHolds(holds, catalog, { now, replaceTokenHash });
 
     for (const sku of skus) {
-      tx.set(holdRef(db, sku), { sessionId, heldUntil });
+      tx.set(holdRef(db, sku), { sessionId, heldUntil, tokenHash });
     }
   });
 }
@@ -132,16 +149,17 @@ async function releaseHolds(db, sessionId) {
 }
 
 /**
- * Moves sessionId's holds to a new heldUntil, e.g. while its payment settles.
+ * Keeps sessionId's holds until heldUntil while its delayed payment
+ * settles, marked so other shoppers are told a payment is processing.
  *
  * @param {FirebaseFirestore.Firestore} db
  * @param {string} sessionId
  * @param {number} heldUntil epoch ms
  */
-async function extendHolds(db, sessionId, heldUntil) {
+async function holdForPendingPayment(db, sessionId, heldUntil) {
   await db.runTransaction(async (tx) => {
     const held = await tx.get(db.collection(HOLDS_COLLECTION).where('sessionId', '==', sessionId));
-    held.docs.forEach((doc) => tx.update(doc.ref, { heldUntil }));
+    held.docs.forEach((doc) => tx.update(doc.ref, { heldUntil, pendingPayment: true }));
   });
 }
 
@@ -179,7 +197,8 @@ module.exports = {
   checkHolds,
   reservePieces,
   releaseHolds,
-  extendHolds,
+  holdForPendingPayment,
+  hashToken,
   readSessionHolds,
   writePiecesSold,
   CHECKOUT_LIFETIME_SECONDS,

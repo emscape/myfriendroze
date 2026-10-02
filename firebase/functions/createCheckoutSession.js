@@ -7,6 +7,7 @@
 // a Cloud Function: it computes USPS Ground Advantage rates itself, in
 // Astro's own SSR runtime (see astro/src/lib/usps-rate-fetcher.js).
 
+const { randomBytes } = require('node:crypto');
 const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
@@ -17,6 +18,7 @@ const {
   readHolds,
   checkHolds,
   reservePieces,
+  hashToken,
   CHECKOUT_LIFETIME_SECONDS,
   HOLD_GRACE_MS,
 } = require('./lib/checkoutHolds');
@@ -32,15 +34,27 @@ const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
 // pattern here, with an env override for local/emulator testing.
 const SITE_ORIGIN = process.env.SITE_ORIGIN || 'https://myfriendroze.com';
 
-const STRIPE_SESSION_ID = /^cs_[A-Za-z0-9_]{1,255}$/;
+// Shape of the tokens newReplaceToken issues; anything else is ignored.
+const REPLACE_TOKEN = /^[0-9a-f]{64}$/;
 
-// The shopper's earlier checkout (the site remembers the last one it
-// started) gets replaced rather than blocking them from checking out again.
-// Expiring it first means only the new checkout can be paid. A paid one
-// means the piece has sold, even if the webhook hasn't landed yet.
+function newReplaceToken() {
+  return randomBytes(32).toString('hex');
+}
+
+// The shopper's earlier checkout (the site remembers the token returned
+// with the last one it started) gets replaced rather than blocking them
+// from checking out again. Expiring it first means only the new checkout
+// can be paid. A paid one means the piece has sold, even if the webhook
+// hasn't landed yet; one paid by a delayed method is still settling.
 async function closeReplacedCheckout(stripeClient, sessionId, product) {
   const previous = await stripeClient.checkout.sessions.retrieve(sessionId);
   if (previous.status === 'complete') {
+    if (previous.payment_status === 'unpaid') {
+      throw new CatalogValidationError(
+        'PAYMENT_PENDING',
+        `A payment for ${product.title} is being processed. If it doesn't go through, it'll be available again.`
+      );
+    }
     throw new CatalogValidationError('OUT_OF_STOCK', `${product.title} has just sold.`);
   }
   if (previous.status === 'open') {
@@ -65,7 +79,11 @@ async function expireUnusedCheckout(stripeClient, sessionId) {
  * themselves. The exported onRequest handler below is the only thing that
  * wires in the real dependencies.
  */
-async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOrigin, now = Date.now }) {
+async function handleCreateCheckoutSession(
+  req,
+  res,
+  { db, stripeClient, siteOrigin, now = Date.now, newToken = newReplaceToken }
+) {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -73,12 +91,10 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
   // Only the items are read. Stripe's hosted page collects the shopper's
   // email, name, phone and address (and optional special requests), so any
   // customer details an older client still sends are ignored.
-  const { items, replacesSessionId: rawReplacesSessionId } = req.body || {};
-  // Only a hint: anything that isn't a checkout session id is ignored.
-  const replacesSessionId =
-    typeof rawReplacesSessionId === 'string' && STRIPE_SESSION_ID.test(rawReplacesSessionId)
-      ? rawReplacesSessionId
-      : null;
+  const { items, replaceToken } = req.body || {};
+  // Only a hint: anything that isn't a token this function issued is ignored.
+  const replaceTokenHash =
+    typeof replaceToken === 'string' && REPLACE_TOKEN.test(replaceToken) ? hashToken(replaceToken) : null;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'items must be a non-empty array' });
@@ -108,9 +124,10 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
     const uniqueSkus = items.map((item) => item.sku).filter((sku) => isOneOfAKind(catalog.get(sku)));
     if (uniqueSkus.length > 0) {
       const holds = await readHolds(db, uniqueSkus);
-      if (checkHolds(holds, catalog, { now: startedAt, replacesSessionId })) {
-        const replacedSku = uniqueSkus.find((sku) => holds.get(sku)?.sessionId === replacesSessionId);
-        await closeReplacedCheckout(stripeClient, replacesSessionId, catalog.get(replacedSku));
+      const replacedSessionId = checkHolds(holds, catalog, { now: startedAt, replaceTokenHash });
+      if (replacedSessionId) {
+        const replacedSku = uniqueSkus.find((sku) => holds.get(sku)?.sessionId === replacedSessionId);
+        await closeReplacedCheckout(stripeClient, replacedSessionId, catalog.get(replacedSku));
       }
     }
 
@@ -135,14 +152,16 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
       cancel_url: `${siteOrigin}/order/cancelled`,
     });
 
+    const token = newToken();
     if (uniqueSkus.length > 0) {
       try {
         await reservePieces(db, {
           skus: uniqueSkus,
           sessionId: session.id,
           heldUntil: expiresAt * 1000 + HOLD_GRACE_MS,
+          tokenHash: hashToken(token),
           now: startedAt,
-          replacesSessionId,
+          replaceTokenHash,
           catalog,
         });
       } catch (error) {
@@ -153,10 +172,11 @@ async function handleCreateCheckoutSession(req, res, { db, stripeClient, siteOri
 
     // The id lets the site's success page confirm it was this checkout
     // (Stripe adds it to success_url as session_id) before touching the cart.
-    return res.status(200).json({ url: session.url, id: session.id });
+    // replaceToken lets this browser replace this checkout later.
+    return res.status(200).json({ url: session.url, id: session.id, replaceToken: token });
   } catch (error) {
     if (error instanceof CatalogValidationError) {
-      const status = error.code === 'RESERVED' ? 409 : 400;
+      const status = error.code === 'RESERVED' || error.code === 'PAYMENT_PENDING' ? 409 : 400;
       return res.status(status).json({ error: error.message, code: error.code });
     }
     logger.error('createCheckoutSession error:', error);

@@ -18,7 +18,7 @@ const logger = require('firebase-functions/logger');
 const { sessionToOrderData } = require('./lib/orderFromSession');
 const {
   releaseHolds,
-  extendHolds,
+  holdForPendingPayment,
   readSessionHolds,
   writePiecesSold,
   PENDING_PAYMENT_HOLD_MS,
@@ -90,7 +90,7 @@ async function handleStripeWebhook(
   // arrives. Keep its pieces held, with no order yet; Stripe follows up
   // with async_payment_succeeded (handled below) or async_payment_failed.
   if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
-    await extendHolds(db, session.id, now() + PENDING_PAYMENT_HOLD_MS);
+    await holdForPendingPayment(db, session.id, now() + PENDING_PAYMENT_HOLD_MS);
     return res.status(200).json({ received: true });
   }
 

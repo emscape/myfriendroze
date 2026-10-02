@@ -306,6 +306,7 @@ describe('handleStripeWebhook', () => {
         expect(db.dump('checkoutHolds/bowl')).toEqual({
           sessionId: 'cs_test_abc123',
           heldUntil: NOW + FOURTEEN_DAYS_MS,
+          pendingPayment: true,
         });
       });
 

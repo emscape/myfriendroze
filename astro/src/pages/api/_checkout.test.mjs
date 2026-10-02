@@ -82,13 +82,13 @@ describe('POST /api/checkout', () => {
   });
 
   // The function refuses a one-of-a-kind piece another checkout is holding
-  // with 409, and replacesSessionId is how a shopper's own earlier
-  // checkout is replaced; both must pass through unchanged.
-  it('forwards replacesSessionId and passes a 409 hold refusal back to the shopper', async () => {
+  // with 409, and replaceToken is how a shopper's own earlier checkout is
+  // replaced; both must pass through unchanged.
+  it('forwards replaceToken and passes a 409 hold refusal back to the shopper', async () => {
     const message =
       "Someone is checking out Blue Bowl right now. If they don't finish, it'll be available again in about half an hour.";
     fetchSpy.mockResolvedValue(new Response(JSON.stringify({ error: message, code: 'RESERVED' }), { status: 409 }));
-    const body = { items: [{ sku: 'bowl', qty: 1 }], replacesSessionId: 'cs_test_old' };
+    const body = { items: [{ sku: 'bowl', qty: 1 }], replaceToken: 'a'.repeat(64) };
 
     const response = await POST({ request: requestWith(body) });
 

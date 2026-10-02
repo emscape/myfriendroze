@@ -10,7 +10,8 @@ const {
   checkHolds,
   reservePieces,
   releaseHolds,
-  extendHolds,
+  holdForPendingPayment,
+  hashToken,
   readSessionHolds,
   writePiecesSold,
   CHECKOUT_LIFETIME_SECONDS,
@@ -74,21 +75,34 @@ describe('readHolds', () => {
   });
 });
 
+function thrown(fn) {
+  try {
+    fn();
+  } catch (e) {
+    return e;
+  }
+  return null;
+}
+
+describe('hashToken', () => {
+  it('is the hex SHA-256 of the token', () => {
+    expect(hashToken('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+});
+
+// A hold belongs to the shopper who started its checkout: the server gave
+// them a random token and keeps only its hash on the hold. The Stripe
+// session id is not proof, since it appears in the checkout page's URL.
 describe('checkHolds', () => {
-  it('passes when no piece is held, and reports no replaced hold', () => {
-    expect(checkHolds(new Map(), catalog, { now: NOW, replacesSessionId: null })).toBe(false);
+  const MINE = hashToken('my-token');
+
+  it('passes when no piece is held, and reports no replaced checkout', () => {
+    expect(checkHolds(new Map(), catalog, { now: NOW, replaceTokenHash: null })).toBeNull();
   });
 
   it('refuses a piece another checkout is holding, naming it and when it may free up', () => {
-    const holds = new Map([['bowl', { sessionId: 'cs_other', heldUntil: NOW + 1 }]]);
-    const err = (() => {
-      try {
-        checkHolds(holds, catalog, { now: NOW, replacesSessionId: null });
-      } catch (e) {
-        return e;
-      }
-      return null;
-    })();
+    const holds = new Map([['bowl', { sessionId: 'cs_other', heldUntil: NOW + 1, tokenHash: 'theirs' }]]);
+    const err = thrown(() => checkHolds(holds, catalog, { now: NOW, replaceTokenHash: MINE }));
     expect(err).toBeInstanceOf(CatalogValidationError);
     expect(err.code).toBe('RESERVED');
     expect(err.message).toBe(
@@ -96,43 +110,66 @@ describe('checkHolds', () => {
     );
   });
 
+  it('refuses a piece held for a payment that is still settling, saying so', () => {
+    const holds = new Map([['bowl', { sessionId: 'cs_other', heldUntil: NOW + 1, pendingPayment: true }]]);
+    const err = thrown(() => checkHolds(holds, catalog, { now: NOW, replaceTokenHash: null }));
+    expect(err.code).toBe('PAYMENT_PENDING');
+    expect(err.message).toBe(
+      "A payment for Blue Bowl is being processed. If it doesn't go through, it'll be available again."
+    );
+  });
+
   it('treats a hold whose time has passed as free', () => {
-    const holds = new Map([['bowl', { sessionId: 'cs_other', heldUntil: NOW }]]);
-    expect(checkHolds(holds, catalog, { now: NOW, replacesSessionId: null })).toBe(false);
+    const holds = new Map([['bowl', { sessionId: 'cs_other', heldUntil: NOW, tokenHash: 'theirs' }]]);
+    expect(checkHolds(holds, catalog, { now: NOW, replaceTokenHash: null })).toBeNull();
   });
 
-  it("lets the shopper's own earlier checkout be replaced, and says so", () => {
-    const holds = new Map([['bowl', { sessionId: 'cs_mine', heldUntil: NOW + 1 }]]);
-    expect(checkHolds(holds, catalog, { now: NOW, replacesSessionId: 'cs_mine' })).toBe(true);
+  it("returns the session of the shopper's own earlier checkout, matched by token", () => {
+    const holds = new Map([['bowl', { sessionId: 'cs_mine', heldUntil: NOW + 1, tokenHash: MINE }]]);
+    expect(checkHolds(holds, catalog, { now: NOW, replaceTokenHash: MINE })).toBe('cs_mine');
   });
 
-  it('reports no replaced hold when the named earlier checkout holds only lapsed pieces', () => {
-    const holds = new Map([['bowl', { sessionId: 'cs_mine', heldUntil: NOW - 1 }]]);
-    expect(checkHolds(holds, catalog, { now: NOW, replacesSessionId: 'cs_mine' })).toBe(false);
+  it('never treats a hold without a token as the shopper\'s own', () => {
+    const holds = new Map([['bowl', { sessionId: 'cs_old', heldUntil: NOW + 1 }]]);
+    expect(thrown(() => checkHolds(holds, catalog, { now: NOW, replaceTokenHash: null })).code).toBe('RESERVED');
+  });
+
+  it('reports no replaced checkout when its holds have all lapsed', () => {
+    const holds = new Map([['bowl', { sessionId: 'cs_mine', heldUntil: NOW - 1, tokenHash: MINE }]]);
+    expect(checkHolds(holds, catalog, { now: NOW, replaceTokenHash: MINE })).toBeNull();
   });
 });
 
 describe('reservePieces', () => {
-  const base = { sessionId: 'cs_new', heldUntil: NOW + 36 * 60 * 1000, now: NOW, replacesSessionId: null, catalog };
+  const base = {
+    sessionId: 'cs_new',
+    heldUntil: NOW + 36 * 60 * 1000,
+    tokenHash: 'new-hash',
+    now: NOW,
+    replaceTokenHash: null,
+    catalog,
+  };
+  const newHold = { sessionId: 'cs_new', heldUntil: base.heldUntil, tokenHash: 'new-hash' };
 
   it('writes a hold for every piece', async () => {
     const db = memoryFirestore({ 'products/bowl': BOWL, 'products/vase': VASE });
     await reservePieces(db, { ...base, skus: ['bowl', 'vase'] });
-    expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_new', heldUntil: base.heldUntil });
-    expect(db.dump('checkoutHolds/vase')).toEqual({ sessionId: 'cs_new', heldUntil: base.heldUntil });
+    expect(db.dump('checkoutHolds/bowl')).toEqual(newHold);
+    expect(db.dump('checkoutHolds/vase')).toEqual(newHold);
   });
 
   it('writes nothing if any piece is held by another checkout', async () => {
+    const theirs = { sessionId: 'cs_other', heldUntil: NOW + 1, tokenHash: 'theirs' };
     const db = memoryFirestore({
       'products/bowl': BOWL,
       'products/vase': VASE,
-      'checkoutHolds/vase': { sessionId: 'cs_other', heldUntil: NOW + 1 },
+      'checkoutHolds/vase': theirs,
     });
     const err = await rejection(() => reservePieces(db, { ...base, skus: ['bowl', 'vase'] }));
     expect(err.code).toBe('RESERVED');
     expect(err.message).toContain('Tall Vase');
     expect(db.has('checkoutHolds/bowl')).toBe(false);
-    expect(db.dump('checkoutHolds/vase')).toEqual({ sessionId: 'cs_other', heldUntil: NOW + 1 });
+    expect(db.dump('checkoutHolds/vase')).toEqual(theirs);
   });
 
   // The piece can sell (another checkout's webhook) between the handler's
@@ -155,10 +192,10 @@ describe('reservePieces', () => {
   it("takes over the shopper's own earlier hold", async () => {
     const db = memoryFirestore({
       'products/bowl': BOWL,
-      'checkoutHolds/bowl': { sessionId: 'cs_mine', heldUntil: NOW + 1 },
+      'checkoutHolds/bowl': { sessionId: 'cs_mine', heldUntil: NOW + 1, tokenHash: 'mine' },
     });
-    await reservePieces(db, { ...base, skus: ['bowl'], replacesSessionId: 'cs_mine' });
-    expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_new', heldUntil: base.heldUntil });
+    await reservePieces(db, { ...base, skus: ['bowl'], replaceTokenHash: 'mine' });
+    expect(db.dump('checkoutHolds/bowl')).toEqual(newHold);
   });
 });
 
@@ -176,14 +213,19 @@ describe('releaseHolds', () => {
   });
 });
 
-describe('extendHolds', () => {
-  it("moves only the given checkout's holds to the new time", async () => {
+describe('holdForPendingPayment', () => {
+  it("extends only the given checkout's holds and marks them as awaiting payment", async () => {
     const db = memoryFirestore({
-      'checkoutHolds/bowl': { sessionId: 'cs_pending', heldUntil: NOW + 1 },
+      'checkoutHolds/bowl': { sessionId: 'cs_pending', heldUntil: NOW + 1, tokenHash: 'h' },
       'checkoutHolds/jug': { sessionId: 'cs_other', heldUntil: NOW + 1 },
     });
-    await extendHolds(db, 'cs_pending', NOW + 999);
-    expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_pending', heldUntil: NOW + 999 });
+    await holdForPendingPayment(db, 'cs_pending', NOW + 999);
+    expect(db.dump('checkoutHolds/bowl')).toEqual({
+      sessionId: 'cs_pending',
+      heldUntil: NOW + 999,
+      tokenHash: 'h',
+      pendingPayment: true,
+    });
     expect(db.dump('checkoutHolds/jug')).toEqual({ sessionId: 'cs_other', heldUntil: NOW + 1 });
   });
 });
