@@ -1,18 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleCreateCheckoutSession } from './createCheckoutSession.js';
+import { createHash } from 'node:crypto';
+import { memoryFirestore } from './test-support/memoryFirestore.mjs';
+
+const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
 function fakeDoc(exists, data) {
   return { exists, data: () => data };
 }
 
-function fakeDb(docsBySku) {
-  return {
-    collection: () => ({
-      doc: (sku) => ({
-        get: () => Promise.resolve(docsBySku[sku] || fakeDoc(false)),
-      }),
-    }),
-  };
+// Products keyed by sku, plus any other documents by full path (holds).
+function fakeDb(docsBySku, otherDocs = {}) {
+  const docs = { ...otherDocs };
+  for (const [sku, doc] of Object.entries(docsBySku)) {
+    if (doc.exists) docs[`products/${sku}`] = doc.data();
+  }
+  return memoryFirestore(docs);
 }
 
 function fakeRes() {
@@ -71,6 +74,8 @@ describe('handleCreateCheckoutSession', () => {
       url: 'https://checkout.stripe.com/pay/cs_test_123',
       // The site's success page matches this against Stripe's session_id.
       id: 'cs_test_123',
+      // Proof that a later checkout from this browser may replace this one.
+      replaceToken: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
 
     // Regression guard: `automatic_payment_methods` is a Payment Intents API
@@ -239,5 +244,275 @@ describe('handleCreateCheckoutSession', () => {
 
     const callArgs = sessionsCreate.mock.calls[0][0];
     expect(callArgs.line_items[0].price_data.unit_amount).toBe(7000);
+  });
+
+  describe('holding one-of-a-kind pieces', () => {
+    const NOW = 1_800_000_000_000;
+    const EXPIRES_AT = Math.floor(NOW / 1000) + 31 * 60;
+    const HELD_UNTIL = EXPIRES_AT * 1000 + 5 * 60 * 1000;
+    const NEW_TOKEN = 'a'.repeat(64);
+    const MY_TOKEN = 'b'.repeat(64);
+    const NEW_HOLD = { sessionId: 'cs_new', heldUntil: HELD_UNTIL, tokenHash: sha256(NEW_TOKEN) };
+    const myHold = (extra = {}) => ({ sessionId: 'cs_mine', heldUntil: NOW + 60_000, tokenHash: sha256(MY_TOKEN), ...extra });
+    const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery' };
+    const FERN = { title: 'Fern', price: 12, isActive: true, category: 'plant' };
+
+    function stripeFake({ created = { id: 'cs_new', url: 'https://checkout.stripe.com/c/pay/cs_new' }, previous } = {}) {
+      return {
+        checkout: {
+          sessions: {
+            create: vi.fn().mockResolvedValue(created),
+            retrieve: vi.fn().mockResolvedValue(previous),
+            expire: vi.fn().mockResolvedValue({}),
+          },
+        },
+      };
+    }
+
+    async function checkout(db, stripeClient, body) {
+      const res = fakeRes();
+      await handleCreateCheckoutSession({ method: 'POST', body }, res, {
+        db,
+        stripeClient,
+        siteOrigin: SITE_ORIGIN,
+        now: () => NOW,
+        newToken: () => NEW_TOKEN,
+      });
+      return res;
+    }
+
+    function stealHoldDuringCreate(db, stripeClient) {
+      stripeClient.checkout.sessions.create.mockImplementation(async () => {
+        await db.collection('checkoutHolds').doc('bowl').set({ sessionId: 'cs_rival', heldUntil: NOW + 60_000 });
+        return { id: 'cs_new', url: 'https://checkout.stripe.com/c/pay/cs_new' };
+      });
+    }
+
+    it('gives the Stripe checkout a 31-minute life and holds the piece until 5 minutes after', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) });
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(stripeClient.checkout.sessions.create.mock.calls[0][0].expires_at).toBe(EXPIRES_AT);
+      expect(db.dump('checkoutHolds/bowl')).toEqual(NEW_HOLD);
+      expect(res.json).toHaveBeenCalledWith({
+        url: 'https://checkout.stripe.com/c/pay/cs_new',
+        id: 'cs_new',
+        replaceToken: NEW_TOKEN,
+      });
+    });
+
+    // Stripe measures the 30-minute minimum from when it receives the
+    // create call, so the expiry is computed just before it, after any
+    // hold reads and Stripe calls that took time.
+    it('computes the expiry from the time just before creating the Stripe session', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'open' } });
+      const LATER = NOW + 90_000;
+      const times = [NOW, LATER];
+      const res = fakeRes();
+
+      await handleCreateCheckoutSession(
+        { method: 'POST', body: { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN } },
+        res,
+        { db, stripeClient, siteOrigin: SITE_ORIGIN, now: () => times.shift() ?? LATER, newToken: () => NEW_TOKEN }
+      );
+
+      const expiresAt = Math.floor(LATER / 1000) + 31 * 60;
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(stripeClient.checkout.sessions.create.mock.calls[0][0].expires_at).toBe(expiresAt);
+      expect(db.dump('checkoutHolds/bowl')).toEqual({
+        sessionId: 'cs_new',
+        heldUntil: expiresAt * 1000 + 5 * 60 * 1000,
+        tokenHash: sha256(NEW_TOKEN),
+      });
+    });
+
+    it('does not hold plants', async () => {
+      const db = fakeDb({ fern: fakeDoc(true, FERN), bowl: fakeDoc(true, BOWL) });
+
+      const res = await checkout(db, stripeFake(), {
+        items: [
+          { sku: 'fern', qty: 3 },
+          { sku: 'bowl', qty: 1 },
+        ],
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(db.has('checkoutHolds/fern')).toBe(false);
+      expect(db.dump('checkoutHolds/bowl')).toEqual(NEW_HOLD);
+    });
+
+    it('refuses with 409 and the reason while another checkout holds the piece, without calling Stripe', async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL) },
+        { 'checkoutHolds/bowl': { sessionId: 'cs_other', heldUntil: NOW + 60_000 } }
+      );
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          "Someone is checking out Blue Bowl right now. If they don't finish, it'll be available again in about half an hour.",
+        code: 'RESERVED',
+      });
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_other', heldUntil: NOW + 60_000 });
+    });
+
+    it('allows a piece whose hold has lapsed', async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL) },
+        { 'checkoutHolds/bowl': { sessionId: 'cs_other', heldUntil: NOW - 1 } }
+      );
+
+      const res = await checkout(db, stripeFake(), { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(db.dump('checkoutHolds/bowl')).toEqual(NEW_HOLD);
+    });
+
+    // Two shoppers can pass the first check at the same moment; the
+    // transaction decides, and the loser's new Stripe session is expired so
+    // its url (never returned) can't be paid either.
+    it('expires its new Stripe session and returns 409 when another checkout wins the hold first', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) });
+      const stripeClient = stripeFake();
+      stealHoldDuringCreate(db, stripeClient);
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'RESERVED' }));
+      expect(stripeClient.checkout.sessions.expire).toHaveBeenCalledWith('cs_new');
+      expect(db.dump('checkoutHolds/bowl')).toEqual({ sessionId: 'cs_rival', heldUntil: NOW + 60_000 });
+    });
+
+    it('still returns 409 when expiring the losing session fails', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) });
+      const stripeClient = stripeFake();
+      stealHoldDuringCreate(db, stripeClient);
+      stripeClient.checkout.sessions.expire.mockRejectedValue(new Error('Stripe is down'));
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    });
+
+    it('refuses with 409 and says a payment is processing when the piece awaits a delayed payment', async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL) },
+        { 'checkoutHolds/bowl': { sessionId: 'cs_other', heldUntil: NOW + 60_000, pendingPayment: true } }
+      );
+
+      const res = await checkout(db, stripeFake(), { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "A payment for Blue Bowl is being processed. If it doesn't go through, it'll be available again.",
+        code: 'PAYMENT_PENDING',
+      });
+    });
+
+    // A shopper who backs out of Stripe and checks out again must not be
+    // blocked by their own first checkout, which is expired so only the new
+    // one can be paid. The proof is the token this function returned with
+    // that checkout, not its session id (which is in the checkout URL).
+    it("replaces the shopper's own open checkout: expires it, then takes over its hold", async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'open' } });
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN });
+
+      expect(stripeClient.checkout.sessions.retrieve).toHaveBeenCalledWith('cs_mine');
+      expect(stripeClient.checkout.sessions.expire).toHaveBeenCalledWith('cs_mine');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(db.dump('checkoutHolds/bowl')).toEqual(NEW_HOLD);
+    });
+
+    it('does not expire the earlier checkout again if Stripe already expired it', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'expired' } });
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN });
+
+      expect(stripeClient.checkout.sessions.expire).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    // Paid, but the webhook that marks it sold hasn't landed yet.
+    it('refuses when the earlier checkout was already paid', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'complete', payment_status: 'paid' } });
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Blue Bowl has just sold.', code: 'OUT_OF_STOCK' });
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(stripeClient.checkout.sessions.expire).not.toHaveBeenCalled();
+    });
+
+    // Completed with a delayed payment method: the money hasn't arrived and
+    // may not, so the piece isn't sold, but it can't be bought again yet.
+    it("refuses with a payment-processing message when the earlier checkout's payment is still settling", async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'complete', payment_status: 'unpaid' } });
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: MY_TOKEN });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "A payment for Blue Bowl is being processed. If it doesn't go through, it'll be available again.",
+        code: 'PAYMENT_PENDING',
+      });
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+      // The webhook may not have arrived yet; the hold must already reflect
+      // the pending payment so it neither lapses nor misleads other shoppers.
+      expect(db.dump('checkoutHolds/bowl')).toEqual(
+        myHold({ heldUntil: NOW + 14 * 24 * 60 * 60 * 1000, pendingPayment: true })
+      );
+    });
+
+    // The session id appears in the Stripe checkout URL, so knowing it must
+    // not let anyone expire that checkout or take its hold.
+    it('does not let a session id alone replace a checkout', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake({ previous: { id: 'cs_mine', status: 'open' } });
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replacesSessionId: 'cs_mine' });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(stripeClient.checkout.sessions.retrieve).not.toHaveBeenCalled();
+      expect(stripeClient.checkout.sessions.expire).not.toHaveBeenCalled();
+      expect(db.dump('checkoutHolds/bowl')).toEqual(myHold());
+    });
+
+    it("refuses another checkout's hold even when a valid token for a different checkout is sent", async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { 'checkoutHolds/bowl': myHold() });
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: 'c'.repeat(64) });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(stripeClient.checkout.sessions.retrieve).not.toHaveBeenCalled();
+    });
+
+    it('ignores a replaceToken that is not a token this function issues', async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL) },
+        { 'checkoutHolds/bowl': myHold({ tokenHash: sha256('short') }) }
+      );
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }], replaceToken: 'short' });
+
+      expect(stripeClient.checkout.sessions.retrieve).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+    });
   });
 });

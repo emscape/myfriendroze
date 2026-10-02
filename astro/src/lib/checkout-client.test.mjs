@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { requestCheckout } from './checkout-client.js';
+import { requestCheckout, CHECKOUT_TOKEN_KEY } from './checkout-client.js';
 
 function jsonResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -43,5 +43,93 @@ describe('requestCheckout', () => {
     const fetchImpl = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
     await expect(requestCheckout([{ sku: 'b', qty: 1 }], fetchImpl)).rejects.toThrow(/connection/i);
+  });
+
+  // The server holds one-of-a-kind pieces for an open checkout and returns
+  // a replaceToken with each one. Sending back the token from the last
+  // checkout this browser started lets the shopper check out again (after
+  // backing out of Stripe) instead of being blocked by their own hold.
+  describe('remembering the last checkout', () => {
+    function memoryStorage(initial = {}) {
+      const values = new Map(Object.entries(initial));
+      return {
+        getItem: (key) => (values.has(key) ? values.get(key) : null),
+        setItem: (key, value) => values.set(key, String(value)),
+        removeItem: (key) => values.delete(key),
+        values,
+      };
+    }
+
+    const OLD = 'a'.repeat(64);
+    const NEW = 'b'.repeat(64);
+
+    it("sends the last checkout's token as replaceToken, then remembers the new one", async () => {
+      const storage = memoryStorage({ [CHECKOUT_TOKEN_KEY]: OLD });
+      const fetchImpl = vi.fn().mockResolvedValue(
+        jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_new', id: 'cs_new', replaceToken: NEW })
+      );
+
+      const checkout = await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, storage);
+
+      expect(fetchImpl.mock.calls[0][1].body).toBe(
+        JSON.stringify({ items: [{ sku: 'bowl', qty: 1 }], replaceToken: OLD })
+      );
+      expect(storage.getItem(CHECKOUT_TOKEN_KEY)).toBe(NEW);
+      // The token stays out of what the pages see.
+      expect(checkout).toEqual({ url: 'https://checkout.stripe.com/c/pay/cs_new', sessionId: 'cs_new' });
+    });
+
+    it('sends only the items when no checkout was started before', async () => {
+      const storage = memoryStorage();
+      const fetchImpl = vi.fn().mockResolvedValue(
+        jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', id: 'cs_1', replaceToken: NEW })
+      );
+
+      await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, storage);
+
+      expect(fetchImpl.mock.calls[0][1].body).toBe(JSON.stringify({ items: [{ sku: 'bowl', qty: 1 }] }));
+      expect(storage.getItem(CHECKOUT_TOKEN_KEY)).toBe(NEW);
+    });
+
+    it('keeps the remembered token when a new checkout is refused', async () => {
+      const storage = memoryStorage({ [CHECKOUT_TOKEN_KEY]: OLD });
+      const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(409, { error: 'Someone is checking out Blue Bowl' }));
+
+      await expect(requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, storage)).rejects.toThrow(
+        'Someone is checking out Blue Bowl'
+      );
+      expect(storage.getItem(CHECKOUT_TOKEN_KEY)).toBe(OLD);
+    });
+
+    it('keeps the remembered token when a response carries none', async () => {
+      const storage = memoryStorage({ [CHECKOUT_TOKEN_KEY]: OLD });
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', id: 'cs_1' }));
+
+      await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, storage);
+
+      expect(storage.getItem(CHECKOUT_TOKEN_KEY)).toBe(OLD);
+    });
+
+    it('still checks out when site storage is blocked', async () => {
+      const blocked = {
+        getItem: () => {
+          throw new Error('SecurityError');
+        },
+        setItem: () => {
+          throw new Error('SecurityError');
+        },
+      };
+      const fetchImpl = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', id: 'cs_1' }));
+
+      await expect(requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, blocked)).resolves.toEqual({
+        url: 'https://checkout.stripe.com/c/pay/cs_1',
+        sessionId: 'cs_1',
+      });
+      expect(fetchImpl.mock.calls[0][1].body).toBe(JSON.stringify({ items: [{ sku: 'bowl', qty: 1 }] }));
+    });
   });
 });
