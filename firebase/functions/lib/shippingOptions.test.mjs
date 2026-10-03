@@ -104,6 +104,14 @@ describe('buildShippingOptions', () => {
     expect(buildShippingOptions(9000, ONE_POT)[0].shipping_rate_data.metadata.method).toBe('free_shipping');
   });
 
+  // Free shipping is ground shipping; faster options may be sold later.
+  it('names the mail options as ground shipping', () => {
+    const nameOf = (options) => options[0].shipping_rate_data.display_name;
+
+    expect(nameOf(buildShippingOptions(1000, ONE_POT))).toBe('Ground shipping');
+    expect(nameOf(buildShippingOptions(9000, ONE_POT))).toBe('Free ground shipping');
+  });
+
   it('names pickup as Los Angeles and offers no local delivery', () => {
     const names = Object.fromEntries(
       buildShippingOptions(1000, ONE_POT, LOCAL).map((o) => [o.shipping_rate_data.metadata.method, o.shipping_rate_data.display_name])

@@ -1,5 +1,5 @@
 // Fixed shipping options for Stripe Checkout. Shipping is not quoted per
-// order: orders of $50 or more ship free; smaller orders pay a base fee
+// order: orders of $50 or more ship free by ground; smaller orders pay a base fee
 // that covers one item, plus a bundle surcharge for each item after it.
 // Shoppers who give a Los Angeles ZIP can choose free local pickup instead. Local delivery is
 // arranged by email, not sold here. Roze buys the actual postage separately
@@ -79,8 +79,8 @@ function buildShippingOptions(itemSubtotalCents, units, { local = false } = {}) 
   }
   const mail =
     itemSubtotalCents >= FREE_SHIPPING_THRESHOLD_CENTS
-      ? option('free_shipping', 'Free shipping', 0)
-      : option('shipping', 'Shipping', mailShippingCents(units));
+      ? option('free_shipping', 'Free ground shipping', 0)
+      : option('shipping', 'Ground shipping', mailShippingCents(units));
   return local ? [mail, option('local_pickup', 'Local pickup — Los Angeles', 0)] : [mail];
 }
 
