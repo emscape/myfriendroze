@@ -76,6 +76,8 @@ function sessionToOrderData(session, lineItems, shippingRate = null) {
       amountTotal: centsToDollars(li.amount_total),
     })),
     total: centsToDollars(session.amount_total),
+    // Sales tax Stripe Tax added; null when Stripe didn't say.
+    tax: Number.isInteger(session.total_details?.amount_tax) ? centsToDollars(session.total_details.amount_tax) : null,
     currency: session.currency,
     shippingAddress: shippingDetails
       ? {

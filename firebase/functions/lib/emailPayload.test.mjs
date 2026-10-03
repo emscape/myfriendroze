@@ -107,6 +107,22 @@ describe('orderDataToConfirmationEmailParams', () => {
     expect(params.SHIPPING_METHOD).toBe('Shipping');
   });
 
+  it('adds a sales tax line after shipping in ITEMS_TEXT', () => {
+    const order = fullOrder({ shipping: { method: 'shipping', label: 'Shipping', amount: 10 }, tax: 6.67 });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $10.00<br>Sales tax — $6.67');
+  });
+
+  it('leaves out the sales tax line when no tax was charged or it is unknown', () => {
+    for (const tax of [0, null, undefined]) {
+      const params = orderDataToConfirmationEmailParams(fullOrder({ tax }));
+
+      expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00');
+    }
+  });
+
   it('shows a free option as $0.00', () => {
     const order = fullOrder({ shipping: { method: 'local_pickup', label: 'Local pickup — Los Angeles', amount: 0 } });
 

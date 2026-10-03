@@ -12,6 +12,7 @@ const {
   CatalogValidationError,
   MAX_ITEMS,
 } = require('./pricing.js');
+const { PRODUCT_TAX_CODE } = require('./taxCodes.js');
 
 function catalogWith(entries) {
   return new Map(Object.entries(entries));
@@ -44,8 +45,10 @@ describe('buildLineItemsFromCatalog', () => {
       {
         price_data: {
           currency: 'usd',
-          product_data: { name: 'Blue Branches' },
+          product_data: { name: 'Blue Branches', tax_code: PRODUCT_TAX_CODE },
           unit_amount: 7000,
+          // Listed prices are before tax; Stripe Tax adds tax on top.
+          tax_behavior: 'exclusive',
         },
         quantity: 1,
       },

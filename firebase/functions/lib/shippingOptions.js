@@ -9,6 +9,8 @@
 // Pure, like lib/pricing.js: the caller passes in a subtotal it computed
 // from Firestore prices, never one sent by the browser.
 
+const { SHIPPING_TAX_CODE, TAX_BEHAVIOR } = require('./taxCodes');
+
 const FREE_SHIPPING_THRESHOLD_CENTS = 5000;
 const FLAT_SHIPPING_CENTS = 1000;
 
@@ -20,6 +22,8 @@ function option(method, displayName, amount) {
       type: 'fixed_amount',
       fixed_amount: { amount, currency: 'usd' },
       display_name: displayName,
+      tax_behavior: TAX_BEHAVIOR,
+      tax_code: SHIPPING_TAX_CODE,
       metadata: { method },
     },
   };

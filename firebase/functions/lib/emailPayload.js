@@ -54,6 +54,12 @@ function formatShippingLine(shipping) {
   return shipping ? `<br>${shippingLabel(shipping)} — $${shipping.amount.toFixed(2)}` : '';
 }
 
+// Also appended to ITEMS_TEXT, after shipping. Left out when no tax was
+// charged (out of state) or the order predates tax collection.
+function formatTaxLine(tax) {
+  return typeof tax === 'number' && tax > 0 ? `<br>Sales tax — $${tax.toFixed(2)}` : '';
+}
+
 // The order-confirmation template shows SHIPPING_HEADING and SHIPPING_NOTE
 // in its shipping section (it has no conditionals), so pickup orders don't
 // read as being shipped.
@@ -82,7 +88,7 @@ function orderDataToConfirmationEmailParams(order) {
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
     CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,
-    ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping),
+    ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping) + formatTaxLine(order.tax),
     SHIPPING_ADDRESS: pickup ? '' : formatAddress(order.shippingAddress),
     SHIPPING_METHOD: order.shipping ? shippingLabel(order.shipping) : '',
     SHIPPING_HEADING: section.heading,
