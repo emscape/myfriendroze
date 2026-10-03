@@ -16,7 +16,7 @@ function centsToDollars(cents) {
 
 /**
  * @param {object} session - Stripe Checkout Session (expanded or not)
- * @param {Array<{description: string, quantity: number, amount_total: number}>} lineItems
+ * @param {Array<{description: string, quantity: number, amount_subtotal?: number, amount_total: number}>} lineItems
  * @param {{display_name?: string, metadata?: {method?: string}}|null} [shippingRate]
  * @returns {object} Firestore order-doc shape
  */
@@ -73,6 +73,9 @@ function sessionToOrderData(session, lineItems, shippingRate = null) {
     items: lineItems.map((li) => ({
       name: li.description,
       qty: li.quantity,
+      // Before tax: amount_total includes the item's share of sales tax,
+      // which the confirmation email lists on its own line.
+      amountSubtotal: Number.isInteger(li.amount_subtotal) ? centsToDollars(li.amount_subtotal) : null,
       amountTotal: centsToDollars(li.amount_total),
     })),
     total: centsToDollars(session.amount_total),

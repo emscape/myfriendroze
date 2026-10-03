@@ -45,7 +45,7 @@ describe('sessionToOrderData', () => {
       stripeSessionId: 'cs_test_abc123',
       stripePaymentIntentId: 'pi_test_xyz789',
       customer: { email: 'buyer@example.com', name: 'Buyer Name', phone: null },
-      items: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
+      items: [{ name: 'Blue Branches', qty: 1, amountSubtotal: null, amountTotal: 70 }],
       total: 70,
       // No total_details on this session, so the tax is unknown.
       tax: null,
@@ -62,6 +62,20 @@ describe('sessionToOrderData', () => {
       notes: null,
       shipping: null,
     });
+  });
+
+  it("records each item's amount before tax alongside its total after tax", () => {
+    const taxed = [{ description: 'Blue Branches', quantity: 1, amount_subtotal: 7000, amount_total: 7718 }];
+
+    const order = sessionToOrderData(baseSession(), taxed);
+
+    expect(order.items).toEqual([{ name: 'Blue Branches', qty: 1, amountSubtotal: 70, amountTotal: 77.18 }]);
+  });
+
+  it('leaves amountSubtotal null when Stripe gives no before-tax amount', () => {
+    const order = sessionToOrderData(baseSession(), lineItems);
+
+    expect(order.items[0].amountSubtotal).toBeNull();
   });
 
   it('records the sales tax Stripe charged, in dollars', () => {
@@ -186,15 +200,15 @@ describe('sessionToOrderData', () => {
 
   it('maps multiple line items independently', () => {
     const twoLineItems = [
-      { description: 'Blue Branches', quantity: 2, amount_total: 14000 },
-      { description: 'Pineapple Planter', quantity: 1, amount_total: 4550 },
+      { description: 'Blue Branches', quantity: 2, amount_subtotal: 14000, amount_total: 14000 },
+      { description: 'Pineapple Planter', quantity: 1, amount_subtotal: 4550, amount_total: 4550 },
     ];
 
     const order = sessionToOrderData(baseSession(), twoLineItems);
 
     expect(order.items).toEqual([
-      { name: 'Blue Branches', qty: 2, amountTotal: 140 },
-      { name: 'Pineapple Planter', qty: 1, amountTotal: 45.5 },
+      { name: 'Blue Branches', qty: 2, amountSubtotal: 140, amountTotal: 140 },
+      { name: 'Pineapple Planter', qty: 1, amountSubtotal: 45.5, amountTotal: 45.5 },
     ]);
   });
 

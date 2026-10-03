@@ -232,6 +232,14 @@ describe('handleSendOrderShippedNotification', () => {
   // orderShippedEmailParams applies its own single escaping pass --
   // formatAddress (which escapes internally) would double-escape, e.g.
   // "&" -> "&amp;" -> "&amp;amp;" (found in PR #46 review).
+  it('uses the short order number in the email when the order has one', async () => {
+    const deps = baseDeps({ db: fakeDb({ order: realOrder({ orderNumber: 1002 }) }) });
+
+    await handleSendOrderShippedNotification(baseRequest(), deps);
+
+    expect(deps.sendBrevoEmail.mock.calls[0][0].params.ORDER_NUMBER).toBe('1002');
+  });
+
   it('escapes the shipping address exactly once, even with HTML-significant characters', async () => {
     const deps = baseDeps({
       db: fakeDb({

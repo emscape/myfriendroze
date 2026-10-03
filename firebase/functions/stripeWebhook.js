@@ -36,6 +36,9 @@ const {
 const ORDERS_SENDER =
   process.env.EMAIL_ORDERS || '{"email":"orders@myfriendroze.com","name":"myfriendroze Orders"}';
 
+// Order numbers count up from here (counters/orders holds the next one).
+const FIRST_ORDER_NUMBER = 1001;
+
 if (!admin.apps.length) {
   admin.initializeApp();
 }
@@ -123,7 +126,10 @@ async function handleStripeWebhook(
   // delivery) becomes a harmless repeat read instead of a duplicate order.
   const orderRef = db.collection('orders').doc(session.id);
 
-  const alreadyHandled = await db.runTransaction(async (tx) => {
+  const counterRef = db.collection('counters').doc('orders');
+
+  // null when this checkout already has an order (a duplicate delivery).
+  const claimed = await db.runTransaction(async (tx) => {
     const doc = await tx.get(orderRef);
     // doc.exists alone, not status === 'paid': this doc is only ever
     // created once, right here, keyed by session ID -- any existing doc
@@ -133,22 +139,30 @@ async function handleStripeWebhook(
     // the order back to 'paid' and wipe its shippingDetails/shippedAt
     // (found in PR #46 review).
     if (doc.exists) {
-      return true;
+      return null;
     }
     // Same transaction as the order, so a paid checkout's one-of-a-kind
     // pieces are sold exactly when its order exists.
     const held = await readSessionHolds(tx, db, session.id);
+    // Short, customer-facing order number, taken in the same transaction
+    // so concurrent orders never share one and a duplicate delivery
+    // (returned above) never uses one up. Read before any write, as
+    // Firestore transactions require.
+    const counter = await tx.get(counterRef);
+    const orderNumber = counter.exists ? counter.data().next : FIRST_ORDER_NUMBER;
     writePiecesSold(tx, held);
+    tx.set(counterRef, { next: orderNumber + 1 });
     tx.set(orderRef, {
       ...orderData,
+      orderNumber,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    return false;
+    return { orderNumber };
   });
 
-  if (!alreadyHandled) {
-    await sendConfirmationEmail(orderData);
+  if (claimed) {
+    await sendConfirmationEmail({ ...orderData, orderNumber: claimed.orderNumber });
   }
 
   return res.status(200).json({ received: true });

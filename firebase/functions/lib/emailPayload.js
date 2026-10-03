@@ -40,7 +40,8 @@ function formatAddressRaw(address) {
 // space in HTML rendering — it needs a real line-break tag to show up.
 function formatItemsText(items) {
   return items
-    .map((item) => `${escapeHtml(item.name)} (x${item.qty}) — $${item.amountTotal.toFixed(2)}`)
+    // amountSubtotal is before tax; orders saved before it existed had no tax.
+    .map((item) => `${escapeHtml(item.name)} (x${item.qty}) — $${(item.amountSubtotal ?? item.amountTotal).toFixed(2)}`)
     .join('<br>');
 }
 
@@ -84,7 +85,8 @@ function orderDataToConfirmationEmailParams(order) {
   const section = shippingSection(order.shipping);
   return {
     EMAIL: order.customer.email,
-    ORDER_NUMBER: order.stripeSessionId,
+    // Orders saved before order numbers existed show their session id.
+    ORDER_NUMBER: String(order.orderNumber ?? order.stripeSessionId),
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
     CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,

@@ -361,6 +361,49 @@ describe('handleStripeWebhook', () => {
     expect(sendConfirmationEmail).not.toHaveBeenCalled();
   });
 
+  describe('order numbers', () => {
+    async function deliver(db, sessionId = 'cs_test_abc123') {
+      const sendConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+      await handleStripeWebhook(signedRequest(checkoutCompletedEvent({ id: sessionId })), fakeRes(), {
+        stripeClient: fakeStripeClient(),
+        webhookSecret: WEBHOOK_SECRET,
+        db,
+        sendConfirmationEmail,
+        serverTimestamp: () => 'SERVER_TIMESTAMP',
+      });
+      return sendConfirmationEmail;
+    }
+
+    it('gives the first order number 1001 and emails it', async () => {
+      const db = fakeDb();
+
+      const sendConfirmationEmail = await deliver(db);
+
+      expect(db.dump('orders/cs_test_abc123').orderNumber).toBe(1001);
+      expect(sendConfirmationEmail.mock.calls[0][0].orderNumber).toBe(1001);
+    });
+
+    it('numbers each new order one higher than the last', async () => {
+      const db = fakeDb();
+
+      await deliver(db, 'cs_test_first');
+      await deliver(db, 'cs_test_second');
+
+      expect(db.dump('orders/cs_test_first').orderNumber).toBe(1001);
+      expect(db.dump('orders/cs_test_second').orderNumber).toBe(1002);
+    });
+
+    it('does not use up a number on a duplicate delivery', async () => {
+      const db = fakeDb();
+
+      await deliver(db, 'cs_test_first');
+      await deliver(db, 'cs_test_first');
+      await deliver(db, 'cs_test_second');
+
+      expect(db.dump('orders/cs_test_second').orderNumber).toBe(1002);
+    });
+  });
+
   describe('checkout holds on one-of-a-kind pieces', () => {
     const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery' };
     const VASE = { title: 'Tall Vase', price: 90, isActive: true, category: 'other' };
