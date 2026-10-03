@@ -100,6 +100,14 @@ describe('groundAdvantageAmount', () => {
     }
   });
 
+  it('returns null for a zero or negative amount, which no postage costs', () => {
+    const rate = (amount) => ({ rates: [{ servicelevel: { token: 'usps_ground_advantage' }, amount }] });
+    for (const amount of ['0', '0.00', '-5.98', -1]) {
+      expect(groundAdvantageAmount(rate(amount)), String(amount)).toBeNull();
+    }
+    expect(groundAdvantageAmount(rate('0.01'))).toBe(0.01);
+  });
+
   it('returns null for a malformed response instead of throwing', () => {
     for (const shipment of [null, undefined, 'oops', { rates: null }, { rates: 'x' }, { rates: [null, 5] }]) {
       expect(groundAdvantageAmount(shipment), JSON.stringify(shipment)).toBeNull();

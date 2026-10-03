@@ -100,10 +100,11 @@ function groundAdvantageAmount(shipment) {
   const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
   const rate = rates.find((r) => r?.servicelevel?.token === 'usps_ground_advantage');
   // Shippo sends amounts as decimal strings; Number('') and Number(null)
-  // are 0, so anything blank counts as missing rather than free.
+  // are 0, so anything blank counts as missing rather than free. Postage is
+  // never free or negative, so those count as missing too.
   const raw = rate?.amount;
   const amount = (typeof raw === 'string' && raw.trim() !== '') || typeof raw === 'number' ? Number(raw) : NaN;
-  return Number.isFinite(amount) ? amount : null;
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
 }
 
 function suggestedShipping(farAmount) {
