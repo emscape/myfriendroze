@@ -21,7 +21,8 @@
   - `astro/src/data/events.js` — recurring/hardcoded event entries, merged with live Firestore events (see `events.astro`)
   - `astro/src/lib/product-mapping.js` / `products-live.js` — live per-request Firestore reads for shop products (no build-time snapshot)
   - `astro/src/pages/cart.astro` + `astro/src/lib/cart*.js` — shopping cart, stored in the visitor's browser (localStorage); per-category quantity limits mirror `firebase/functions/lib/pricing.js`. Cart checkout and shop-card quick order both go straight to Stripe Checkout, which collects the shopper's details (no site form). One-of-a-kind pieces (quantity limit 1) are held for an open checkout (`firebase/functions/lib/checkoutHolds.js`, `checkoutHolds` collection) and marked `inStock: false` by `stripeWebhook` once the payment is collected.
-  - `firebase/functions/` — Cloud Functions (order emails, newsletter, shipping calc)
+  - `firebase/functions/` — Cloud Functions (order emails, newsletter, checkout)
+  - Shipping is fixed options on Stripe Checkout, not a carrier quote: free at $50+ item subtotal, $10 flat under $50, free local pickup only when the cart sends a Los Angeles County ZIP (`firebase/functions/lib/shippingOptions.js`, `lib/localArea.js`; the site's copies in `astro/src/lib/shipping-policy.js` and `local-area.js` must match). Local delivery is arranged by email, not sold at checkout. A pickup order whose Stripe address isn't in LA is saved with `shipping.outsideLocalArea: true`. Pottery prices include shipping. Roze buys postage separately through Pirate Ship.
   - `firestore.rules` — Firestore security rules
 
 ---
@@ -84,7 +85,7 @@ myfriendroze/
 ├── astro/                  ← Astro static site
 │   ├── src/
 │   │   ├── pages/          ← Routes (index, shop, events, products/[handle])
-│   │   ├── components/     ← Header, ProductCard, ShippingCalculator, Footer
+│   │   ├── components/     ← Header, ProductCard, Footer
 │   │   ├── data/           ← events.js (recurring/hardcoded event entries)
 │   │   ├── layouts/        ← Layout.astro (wraps all pages)
 │   │   └── styles/         ← Global CSS variables and base styles

@@ -44,18 +44,49 @@ function formatItemsText(items) {
     .join('<br>');
 }
 
+function shippingLabel(shipping) {
+  return escapeHtml(shipping.label || 'Shipping');
+}
+
+// Appended to ITEMS_TEXT so the confirmation email shows shipping with the
+// template it already has.
+function formatShippingLine(shipping) {
+  return shipping ? `<br>${shippingLabel(shipping)} — $${shipping.amount.toFixed(2)}` : '';
+}
+
+// The order-confirmation template shows SHIPPING_HEADING and SHIPPING_NOTE
+// in its shipping section (it has no conditionals), so pickup orders don't
+// read as being shipped.
+const MAIL_NOTE =
+  "We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.";
+const PICKUP_NOTE = "We'll email you to arrange a pickup time in Los Angeles.";
+const UNKNOWN_NOTE = "We'll email you about shipping or pickup.";
+
+// method is null when the webhook couldn't look up the chosen rate, so the
+// order could be pickup or mail: say neither.
+function shippingSection(shipping) {
+  if (shipping?.method === 'local_pickup') return { heading: 'Local pickup', note: PICKUP_NOTE };
+  if (shipping && !shipping.method) return { heading: 'Delivery', note: UNKNOWN_NOTE };
+  return { heading: 'Shipping to:', note: MAIL_NOTE };
+}
+
 /**
  * @param {ReturnType<typeof import('./orderFromSession.js').sessionToOrderData>} order
  */
 function orderDataToConfirmationEmailParams(order) {
+  const pickup = order.shipping?.method === 'local_pickup';
+  const section = shippingSection(order.shipping);
   return {
     EMAIL: order.customer.email,
     ORDER_NUMBER: order.stripeSessionId,
     ORDER_TOTAL: `$${order.total.toFixed(2)}`,
     CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,
-    ITEMS_TEXT: formatItemsText(order.items),
-    SHIPPING_ADDRESS: formatAddress(order.shippingAddress),
+    ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping),
+    SHIPPING_ADDRESS: pickup ? '' : formatAddress(order.shippingAddress),
+    SHIPPING_METHOD: order.shipping ? shippingLabel(order.shipping) : '',
+    SHIPPING_HEADING: section.heading,
+    SHIPPING_NOTE: section.note,
   };
 }
 

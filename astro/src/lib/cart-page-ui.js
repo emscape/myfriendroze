@@ -8,6 +8,7 @@ import { setQuantity, removeFromCart } from './cart.js';
 import { buildCartView, formatPrice, reconcileCart } from './cart-view.js';
 import { loadCart, saveCart, onCartChange, markCartCheckoutStarted } from './cart-store.js';
 import { requestCheckout } from './checkout-client.js';
+import { isLocalZip, localZipHint } from './local-area.js';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -92,7 +93,14 @@ export function initCartPage() {
   const subtotal = document.querySelector('[data-cart-subtotal]');
   const checkoutButton = document.querySelector('[data-cart-checkout]');
   const message = document.querySelector('[data-cart-message]');
+  const localZipInput = /** @type {HTMLInputElement | null} */ (document.querySelector('[data-cart-local-zip]'));
+  const localZipNote = document.querySelector('[data-cart-local-hint]');
   if (!linesList || !checkoutButton) return;
+
+  localZipInput?.addEventListener('input', () => {
+    localZipInput.value = localZipInput.value.replace(/\D/g, '').slice(0, 5);
+    if (localZipNote) localZipNote.textContent = localZipHint(localZipInput.value);
+  });
 
   const catalog = readCatalog();
   // The page was rendered with checkout disabled if the catalog failed to load.
@@ -177,7 +185,9 @@ export function initCartPage() {
     showMessage('');
 
     try {
-      const { url, sessionId } = await requestCheckout(items);
+      // Only an LA ZIP is sent; checkout re-checks it before offering local options.
+      const zip = localZipInput?.value ?? '';
+      const { url, sessionId } = await requestCheckout(items, undefined, undefined, isLocalZip(zip) ? zip : null);
       // So the success page for this checkout removes exactly these pieces.
       markCartCheckoutStarted(items, sessionId);
       window.location.href = url;

@@ -19,6 +19,10 @@ const {
   formatAddressRaw,
 } = require('./emailPayload.js');
 
+// The order-confirmation template's existing copy for mailed orders.
+const MAIL_NOTE =
+  "We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.";
+
 function fullOrder(overrides = {}) {
   return {
     status: 'paid',
@@ -54,7 +58,79 @@ describe('orderDataToConfirmationEmailParams', () => {
       ITEMS: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
       ITEMS_TEXT: 'Blue Branches (x1) — $70.00',
       SHIPPING_ADDRESS: '123 Main St, Springfield, CA 90210, US',
+      SHIPPING_METHOD: '',
+      SHIPPING_HEADING: 'Shipping to:',
+      SHIPPING_NOTE: MAIL_NOTE,
     });
+  });
+
+  it('tells a pickup customer pickup will be arranged, without a "Shipping to" address', () => {
+    const order = fullOrder({
+      shipping: { method: 'local_pickup', label: 'Local pickup — Los Angeles', amount: 0, outsideLocalArea: false },
+    });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Local pickup');
+    expect(params.SHIPPING_NOTE).toBe("We'll email you to arrange a pickup time in Los Angeles.");
+    expect(params.SHIPPING_ADDRESS).toBe('');
+  });
+
+  // The webhook saves method: null when the shipping-rate lookup fails, so
+  // a pickup order can't be told apart from a mailed one.
+  it('uses neutral wording, keeping the address, when the shipping method is unknown', () => {
+    const order = fullOrder({ shipping: { method: null, label: null, amount: 0, outsideLocalArea: false } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Delivery');
+    expect(params.SHIPPING_NOTE).toBe("We'll email you about shipping or pickup.");
+    expect(params.SHIPPING_ADDRESS).toBe('123 Main St, Springfield, CA 90210, US');
+  });
+
+  it('keeps the shipping wording for mailed orders', () => {
+    const order = fullOrder({ shipping: { method: 'free_shipping', label: 'Free shipping', amount: 0 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Shipping to:');
+    expect(params.SHIPPING_NOTE).toBe(MAIL_NOTE);
+    expect(params.SHIPPING_ADDRESS).toBe('123 Main St, Springfield, CA 90210, US');
+  });
+
+  it('adds the shipping option and its cost to ITEMS_TEXT and SHIPPING_METHOD', () => {
+    const order = fullOrder({ shipping: { method: 'shipping', label: 'Shipping', amount: 10 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $10.00');
+    expect(params.SHIPPING_METHOD).toBe('Shipping');
+  });
+
+  it('shows a free option as $0.00', () => {
+    const order = fullOrder({ shipping: { method: 'local_pickup', label: 'Local pickup — Los Angeles', amount: 0 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Local pickup — Los Angeles — $0.00');
+  });
+
+  it('labels a shipping charge whose option name is unknown as "Shipping"', () => {
+    const order = fullOrder({ shipping: { method: null, label: null, amount: 30 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $30.00');
+    expect(params.SHIPPING_METHOD).toBe('Shipping');
+  });
+
+  it('escapes HTML in the shipping option name', () => {
+    const order = fullOrder({ shipping: { method: 'shipping', label: '<b>x</b>', amount: 10 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_METHOD).toBe('&lt;b&gt;x&lt;/b&gt;');
+    expect(params.ITEMS_TEXT).toContain('&lt;b&gt;x&lt;/b&gt; — $10.00');
   });
 
   it('joins multiple items in ITEMS_TEXT with <br> — plain email templates render '

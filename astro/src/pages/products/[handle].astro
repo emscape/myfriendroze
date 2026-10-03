@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
-import ShippingCalculator from '../../components/ShippingCalculator.astro';
+import { shippingSummary } from '../../lib/shipping-policy.js';
 import { fetchLiveProductByHandle } from '../../lib/products-live.js';
 import { getFirestoreDb } from '../../lib/firestore-admin.js';
 import { shopCategoryForValue } from '../../lib/shop-categories.js';
@@ -213,12 +213,13 @@ const additionalImages = product.images.slice(1);
     </div>
   </section>
 
-  <!-- Shipping Calculator Section -->
   {product.inStock && (
     <section class="shipping-section color-background-1 gradient section-padding">
       <div class="page-width">
-        <h2 class="section-title">Calculate Shipping</h2>
-        <ShippingCalculator weight={product.weight} />
+        <h2 class="section-title">Shipping</h2>
+        <p class="shipping-section__summary">
+          {shippingSummary()} <a href="/small-print">Shipping details</a>
+        </p>
       </div>
     </section>
   )}
@@ -637,6 +638,12 @@ const additionalImages = product.images.slice(1);
     .shipping-section .page-width {
       padding: 0 5rem;
     }
+  }
+
+  .shipping-section__summary {
+    margin: 0;
+    font-size: 1.5rem;
+    text-align: center;
   }
 
   .section-title {

@@ -246,6 +246,57 @@ describe('handleCreateCheckoutSession', () => {
     expect(callArgs.line_items[0].price_data.unit_amount).toBe(7000);
   });
 
+  describe('shipping options', () => {
+    async function shippingMethodsFor(products, items, extraBody = {}) {
+      const db = fakeDb(Object.fromEntries(Object.entries(products).map(([sku, p]) => [sku, fakeDoc(true, p)])));
+      const sessionsCreate = vi.fn().mockResolvedValue({ id: 'cs_x', url: 'https://checkout.stripe.com/pay/cs_x' });
+      await handleCreateCheckoutSession({ method: 'POST', body: { items, ...extraBody } }, fakeRes(), {
+        db,
+        stripeClient: { checkout: { sessions: { create: sessionsCreate } } },
+        siteOrigin: SITE_ORIGIN,
+      });
+      return sessionsCreate.mock.calls[0][0].shipping_options.map((o) => [
+        o.shipping_rate_data.metadata.method,
+        o.shipping_rate_data.fixed_amount.amount,
+      ]);
+    }
+
+    const FERN = { title: 'Fern', price: 12, isActive: true, category: 'plant' };
+
+    it('offers $10 shipping and free pickup on an order under $50 for a Los Angeles ZIP', async () => {
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: '90065' })).toEqual([
+        ['shipping', 1000],
+        ['local_pickup', 0],
+      ]);
+    });
+
+    it('offers only shipping when no ZIP is sent', async () => {
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }])).toEqual([['shipping', 1000]]);
+    });
+
+    it('offers only shipping for a ZIP outside Los Angeles', async () => {
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: '10001' })).toEqual([
+        ['shipping', 1000],
+      ]);
+    });
+
+    it('ignores a malformed ZIP rather than rejecting the checkout', async () => {
+      expect(
+        await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: { zip: '90065' } })
+      ).toEqual([['shipping', 1000]]);
+    });
+
+    it('ships free once quantity brings the Firestore-priced subtotal to $50', async () => {
+      const methods = await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 5 }]);
+      expect(methods[0]).toEqual(['free_shipping', 0]);
+    });
+
+    it('ignores a client-supplied price when deciding on free shipping', async () => {
+      const methods = await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 1, price: 999 }]);
+      expect(methods[0]).toEqual(['shipping', 1000]);
+    });
+  });
+
   describe('holding one-of-a-kind pieces', () => {
     const NOW = 1_800_000_000_000;
     const EXPIRES_AT = Math.floor(NOW / 1000) + 31 * 60;

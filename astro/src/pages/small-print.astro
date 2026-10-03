@@ -3,6 +3,7 @@ export const prerender = true;
 
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
+import { FREE_SHIPPING_THRESHOLD, FLAT_SHIPPING } from '../lib/shipping-policy.js';
 
 const CLAIMS_EMAIL = 'myfriendroze@gmail.com';
 const SHIPPING_EMAIL = 'myfriendroze.store@gmail.com';
@@ -43,9 +44,17 @@ const SHIPPING_EMAIL = 'myfriendroze.store@gmail.com';
           spirals out of control.
         </li>
         <li>
-          <strong>Multiple Pieces:</strong> If purchasing multiple pieces, contact{' '}
-          <a href={`mailto:${SHIPPING_EMAIL}`}>{SHIPPING_EMAIL}</a> for a custom shipping estimate
-          prior to purchase — or else you're gonna pay double 😂
+          <strong>Shipping Cost:</strong> Free when your items total ${FREE_SHIPPING_THRESHOLD} or
+          more (before shipping). Otherwise a flat ${FLAT_SHIPPING}, however many pieces are in
+          your order.
+        </li>
+        <li>
+          <strong>Local Pickup:</strong> Free, for Los Angeles County addresses only. Enter your ZIP
+          code in the cart to choose pickup at checkout, and I'll email you to arrange a time.
+        </li>
+        <li>
+          <strong>Local Delivery:</strong> Contact{' '}
+          <a href={`mailto:${SHIPPING_EMAIL}`}>{SHIPPING_EMAIL}</a> for local delivery options.
         </li>
       </ul>
 

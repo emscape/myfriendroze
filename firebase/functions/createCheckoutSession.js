@@ -3,9 +3,8 @@
 // customer accounts, so it could never actually be called by a real
 // customer. This is a plain HTTPS function, proxied through Astro's
 // api/checkout.js -- no CORS handling needed since the browser never calls
-// this directly. Unlike api/checkout.js, api/shipping.js does NOT proxy to
-// a Cloud Function: it computes USPS Ground Advantage rates itself, in
-// Astro's own SSR runtime (see astro/src/lib/usps-rate-fetcher.js).
+// this directly. Shipping is a fixed set of options rather than a carrier
+// quote (see lib/shippingOptions.js).
 
 const { randomBytes } = require('node:crypto');
 const { onRequest } = require('firebase-functions/v2/https');
@@ -13,6 +12,8 @@ const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
 const { buildLineItemsFromCatalog, validateItemList, CatalogValidationError } = require('./lib/pricing');
+const { buildShippingOptions, subtotalCents } = require('./lib/shippingOptions');
+const { isLocalZip } = require('./lib/localArea');
 const {
   isOneOfAKind,
   readHolds,
@@ -95,7 +96,9 @@ async function handleCreateCheckoutSession(
   // Only the items are read. Stripe's hosted page collects the shopper's
   // email, name, phone and address (and optional special requests), so any
   // customer details an older client still sends are ignored.
-  const { items, replaceToken } = req.body || {};
+  // localZip is the optional ZIP the cart asks for; only a Los Angeles one
+  // unlocks local pickup, and anything else is ignored.
+  const { items, replaceToken, localZip } = req.body || {};
   // Only a hint: anything that isn't a token this function issued is ignored.
   const replaceTokenHash =
     typeof replaceToken === 'string' && REPLACE_TOKEN.test(replaceToken) ? hashToken(replaceToken) : null;
@@ -148,6 +151,9 @@ async function handleCreateCheckoutSession(
       expires_at: expiresAt,
       line_items: lineItems,
       shipping_address_collection: { allowed_countries: ['US'] },
+      // From the Firestore-priced line items, so a tampered request can't
+      // unlock free shipping.
+      shipping_options: buildShippingOptions(subtotalCents(lineItems), { local: isLocalZip(localZip) }),
       phone_number_collection: { enabled: true },
       custom_fields: [
         {

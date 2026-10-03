@@ -8,6 +8,8 @@
 // adds server timestamps at write time, keeping this function pure and
 // side-effect-free.
 
+const { isLocalZip } = require('./localArea');
+
 function centsToDollars(cents) {
   return cents / 100;
 }
@@ -15,6 +17,7 @@ function centsToDollars(cents) {
 /**
  * @param {object} session - Stripe Checkout Session (expanded or not)
  * @param {Array<{description: string, quantity: number, amount_total: number}>} lineItems
+ * @param {{display_name?: string, metadata?: {method?: string}}|null} [shippingRate]
  * @returns {object} Firestore order-doc shape
  */
 // The optional "Special requests" field createCheckoutSession adds.
@@ -23,8 +26,34 @@ function notesField(session) {
   return field?.text?.value || null;
 }
 
-function sessionToOrderData(session, lineItems) {
-  const address = session.shipping_details?.address;
+// Stripe API versions from 2025-03-31 put the collected address under
+// collected_information; older ones put it on the session itself.
+function shippingDetailsOf(session) {
+  return session.collected_information?.shipping_details ?? session.shipping_details ?? null;
+}
+
+// The shipping option the shopper chose (lib/shippingOptions.js). Stripe
+// gives only the rate's id on the session, so the caller looks the rate up
+// and passes it in; without it, the amount is still recorded.
+// outsideLocalArea marks a local pickup whose address isn't a Los Angeles
+// one (or is missing), for Roze to follow up: the cart only offers pickup
+// for an LA ZIP, but Stripe's page takes any address.
+function shippingField(session, shippingRate, shippingDetails) {
+  if (!session.shipping_cost) {
+    return null;
+  }
+  const method = shippingRate?.metadata?.method ?? null;
+  return {
+    method,
+    label: shippingRate?.display_name ?? null,
+    amount: centsToDollars(session.shipping_cost.amount_total),
+    outsideLocalArea: method === 'local_pickup' && !isLocalZip(shippingDetails?.address?.postal_code),
+  };
+}
+
+function sessionToOrderData(session, lineItems, shippingRate = null) {
+  const shippingDetails = shippingDetailsOf(session);
+  const address = shippingDetails?.address;
 
   return {
     status: 'paid',
@@ -37,7 +66,7 @@ function sessionToOrderData(session, lineItems) {
       name:
         session.metadata?.customerName ??
         session.customer_details?.name ??
-        session.shipping_details?.name ??
+        shippingDetails?.name ??
         null,
       phone: session.metadata?.customerPhone ?? session.customer_details?.phone ?? null,
     },
@@ -48,9 +77,9 @@ function sessionToOrderData(session, lineItems) {
     })),
     total: centsToDollars(session.amount_total),
     currency: session.currency,
-    shippingAddress: session.shipping_details
+    shippingAddress: shippingDetails
       ? {
-          name: session.shipping_details.name ?? null,
+          name: shippingDetails.name ?? null,
           line1: address?.line1 ?? null,
           line2: address?.line2 ?? null,
           city: address?.city ?? null,
@@ -60,6 +89,7 @@ function sessionToOrderData(session, lineItems) {
         }
       : null,
     notes: session.metadata?.notes ?? notesField(session),
+    shipping: shippingField(session, shippingRate, shippingDetails),
   };
 }
 

@@ -105,6 +105,107 @@ describe('handleStripeWebhook', () => {
     expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 
+  it('looks up the chosen shipping option and records it on the order', async () => {
+    const event = checkoutCompletedEvent({
+      shipping_cost: { amount_total: 0, shipping_rate: 'shr_pickup' },
+      collected_information: {
+        shipping_details: { name: 'Buyer Name', address: { line1: '1 St', postal_code: '90065', country: 'US' } },
+      },
+    });
+    const db = fakeDb();
+    const stripeClient = fakeStripeClient();
+    stripeClient.shippingRates = {
+      retrieve: vi.fn().mockResolvedValue({
+        id: 'shr_pickup',
+        display_name: 'Local pickup — Los Angeles',
+        metadata: { method: 'local_pickup' },
+      }),
+    };
+
+    await handleStripeWebhook(signedRequest(event), fakeRes(), {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(stripeClient.shippingRates.retrieve).toHaveBeenCalledWith('shr_pickup');
+    expect(db.state.written.shipping).toEqual({
+      method: 'local_pickup',
+      label: 'Local pickup — Los Angeles',
+      amount: 0,
+      outsideLocalArea: false,
+    });
+    expect(db.state.written.shippingAddress.postalCode).toBe('90065');
+  });
+
+  it('still writes a local pickup order with an address outside Los Angeles, flagged for follow-up', async () => {
+    const event = checkoutCompletedEvent({
+      shipping_cost: { amount_total: 0, shipping_rate: 'shr_pickup' },
+      collected_information: {
+        shipping_details: { name: 'Buyer Name', address: { line1: '1 St', postal_code: '10001', country: 'US' } },
+      },
+    });
+    const db = fakeDb();
+    const stripeClient = fakeStripeClient();
+    stripeClient.shippingRates = {
+      retrieve: vi.fn().mockResolvedValue({ id: 'shr_pickup', display_name: 'Local pickup — Los Angeles', metadata: { method: 'local_pickup' } }),
+    };
+    const sendConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+    const res = fakeRes();
+
+    await handleStripeWebhook(signedRequest(event), res, {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail,
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.state.written.shipping.outsideLocalArea).toBe(true);
+    expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('still writes the order, with the shipping amount, when the shipping rate lookup fails', async () => {
+    const event = checkoutCompletedEvent({ shipping_cost: { amount_total: 1000, shipping_rate: 'shr_gone' } });
+    const db = fakeDb();
+    const stripeClient = fakeStripeClient();
+    stripeClient.shippingRates = { retrieve: vi.fn().mockRejectedValue(new Error('No such shipping rate')) };
+    const sendConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+    const res = fakeRes();
+
+    await handleStripeWebhook(signedRequest(event), res, {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail,
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.state.written.shipping).toEqual({ method: null, label: null, amount: 10, outsideLocalArea: false });
+    expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not look up a shipping option when the checkout had none', async () => {
+    const db = fakeDb();
+    const stripeClient = fakeStripeClient();
+    stripeClient.shippingRates = { retrieve: vi.fn() };
+
+    await handleStripeWebhook(signedRequest(checkoutCompletedEvent()), fakeRes(), {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(stripeClient.shippingRates.retrieve).not.toHaveBeenCalled();
+    expect(db.state.written.shipping).toBeNull();
+  });
+
   // Stripe's listLineItems returns 10 items per page unless asked for more,
   // so this fake mirrors that default rather than handing back everything.
   it('records every line item of an order with more than 10 items', async () => {

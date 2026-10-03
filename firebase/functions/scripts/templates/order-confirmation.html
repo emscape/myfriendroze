@@ -10,7 +10,10 @@
 
   Params (see firebase/functions/lib/emailPayload.js):
     CUSTOMER_NAME, ORDER_NUMBER, ORDER_TOTAL, ITEMS_TEXT (already <br>-joined),
-    SHIPPING_ADDRESS
+    SHIPPING_ADDRESS, SHIPPING_HEADING, SHIPPING_NOTE (pickup orders get
+    pickup wording and no address instead of "Shipping to:"). Push this to
+    Brevo only after the Functions that send SHIPPING_HEADING/SHIPPING_NOTE
+    are deployed, or the heading renders blank.
 
   Deliberately does NOT branch on whether CUSTOMER_NAME is empty — Brevo's
   conditional-tag syntax wasn't confirmed against current docs, so this
@@ -75,9 +78,9 @@
         <!-- Shipping -->
         <tr>
           <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
-            <p style="margin:0 0 4px 0; font-weight:700;">Shipping to:</p>
+            <p style="margin:0 0 4px 0; font-weight:700;">{{ params.SHIPPING_HEADING }}</p>
             <p style="margin:0 0 16px 0;">{{ params.SHIPPING_ADDRESS }}</p>
-            <p style="margin:0;">We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.</p>
+            <p style="margin:0;">{{ params.SHIPPING_NOTE }}</p>
           </td>
         </tr>
 
