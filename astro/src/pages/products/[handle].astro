@@ -5,7 +5,7 @@ import { shippingSummary } from '../../lib/shipping-policy.js';
 import { fetchLiveProductByHandle } from '../../lib/products-live.js';
 import { getFirestoreDb } from '../../lib/firestore-admin.js';
 import { shopCategoryForValue } from '../../lib/shop-categories.js';
-import { maxQtyForCategory } from '../../lib/cart.js';
+import { maxQtyForProduct } from '../../lib/cart.js';
 
 // Rendered on demand (not prerendered/getStaticPaths-enumerated) so a
 // price/availability edit in the admin app shows up immediately instead of
@@ -36,7 +36,7 @@ if (!product) {
 // category badge, and which "shops" dropdown entry is highlighted.
 const shop = shopCategoryForValue(product.category);
 // One-of-a-kind pieces (limit 1) get no quantity picker.
-const maxQty = maxQtyForCategory(product.category);
+const maxQty = maxQtyForProduct(product.category, product.stockQuantity);
 
 // Featured image is the first one
 const featuredImage = product.images[0];
@@ -153,7 +153,7 @@ const additionalImages = product.images.slice(1);
           </dl>
 
           <!-- Add to Cart Form -->
-          <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-category={product.category}>
+          <form class="product-detail__form" id="product-form" data-product-id={product.id} data-product-category={product.category} data-product-stock={product.stockQuantity ?? undefined}>
             {maxQty > 1 && (
             <div class="form-group">
               <label for="quantity" class="form-label">Quantity:</label>
@@ -741,10 +741,12 @@ const additionalImages = product.images.slice(1);
       if (!sku) return;
 
       const qty = quantityInput ? parseInt(quantityInput.value) || 1 : 1;
+      const stock = form.dataset.productStock;
       const { cart, status } = addToCart(loadCart(), {
         sku,
         category: form.dataset.productCategory,
         qty: Math.max(1, qty),
+        stockQuantity: stock === undefined ? null : Number(stock),
       });
 
       if (status === 'full') {
@@ -758,7 +760,8 @@ const additionalImages = product.images.slice(1);
       const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
       showCartStatus(
         status === 'limited'
-          ? inCart === 1
+          ? // A plant with one left also stops at 1, but isn't one of a kind.
+            inCart === 1 && form.dataset.productCategory !== 'plant'
             ? 'This one-of-a-kind piece is in your cart.'
             : `Your cart has the most you can order (${inCart}).`
           : inCart === 1

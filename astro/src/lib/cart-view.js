@@ -4,12 +4,13 @@
 // stored when a piece was added. Money is handled in cents to avoid
 // floating-point drift in totals.
 
-import { maxQtyForCategory } from './cart.js';
+import { maxQtyForProduct } from './cart.js';
 import { normalizeCategory } from './shop-categories.js';
 
 /**
  * @typedef {{ id: string, handle: string, title: string, price: number,
- *   image: string, inStock: boolean, category: string }} CartCatalogEntry
+ *   image: string, inStock: boolean, category: string,
+ *   stockQuantity: number | null }} CartCatalogEntry
  * @typedef {{ sku: string, title: string, href: string | null, image: string,
  *   qty: number, maxQty: number, priceCents: number, lineTotalCents: number,
  *   status: 'ok' | 'sold-out' | 'unavailable' }} CartLine
@@ -19,11 +20,12 @@ import { normalizeCategory } from './shop-categories.js';
  * The slice of each live product the cart page needs, small enough to embed
  * in the page.
  * @param {Array<{ id: string, handle: string, title: string, price: number,
- *   images: string[], inStock: boolean, category: string }>} products
+ *   images: string[], inStock: boolean, category: string,
+ *   stockQuantity?: number | null }>} products
  * @returns {CartCatalogEntry[]}
  */
 export function catalogForCart(products) {
-  return products.map(({ id, handle, title, price, images, inStock, category }) => ({
+  return products.map(({ id, handle, title, price, images, inStock, category, stockQuantity }) => ({
     id,
     handle,
     title,
@@ -31,6 +33,7 @@ export function catalogForCart(products) {
     image: images[0] ?? '',
     inStock,
     category,
+    stockQuantity: stockQuantity ?? null,
   }));
 }
 
@@ -64,7 +67,7 @@ export function buildCartView(cart, catalog) {
         status: 'unavailable',
       };
     }
-    const maxQty = maxQtyForCategory(product.category);
+    const maxQty = maxQtyForProduct(product.category, product.stockQuantity);
     const qty = Math.min(item.qty, maxQty);
     const priceCents = toCents(product.price);
     const status = product.inStock ? 'ok' : 'sold-out';
@@ -92,7 +95,7 @@ export function buildCartView(cart, catalog) {
 
 /**
  * Brings stored lines in line with the live catalog: each product's current
- * category, and its quantity capped at that category's limit. The cart
+ * category, and its quantity capped at that category's limit and its stock. The cart
  * page's controls and the post-payment cleanup read the stored cart, so it
  * must agree with what the page shows and checks out. Pieces missing from
  * the catalog are left as they are (the page flags them). Returns the same
@@ -108,7 +111,7 @@ export function reconcileCart(cart, catalog) {
     const product = bySku.get(item.sku);
     if (!product) return item;
     const category = normalizeCategory(product.category);
-    const qty = Math.min(item.qty, maxQtyForCategory(category));
+    const qty = Math.min(item.qty, maxQtyForProduct(category, product.stockQuantity));
     if (category === item.category && qty === item.qty) return item;
     changed = true;
     return { ...item, category, qty };

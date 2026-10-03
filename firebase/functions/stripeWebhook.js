@@ -23,6 +23,7 @@ const {
   writePiecesSold,
   PENDING_PAYMENT_HOLD_MS,
 } = require('./lib/checkoutHolds');
+const { purchasedQuantities, readStock, writeStockSold } = require('./lib/stockCounts');
 // sendOrderConfirmationEmail/orderDataToConfirmationEmailParams are only
 // used inside the v8-ignored wrapper below, never by the testable core
 // (which receives sendConfirmationEmail as an injected parameter) —
@@ -101,6 +102,9 @@ async function handleStripeWebhook(
     // Stripe returns 10 per page by default; a Checkout Session holds at
     // most 100 line items, so one page of 100 always covers the order.
     limit: 100,
+    // Each line item's product carries its sku (lib/pricing.js), which
+    // the stock count-down below needs.
+    expand: ['data.price.product'],
   });
   // The session carries only the chosen shipping rate's id; its metadata
   // says which option it was (free shipping and pickup both cost $0).
@@ -144,6 +148,8 @@ async function handleStripeWebhook(
     // Same transaction as the order, so a paid checkout's one-of-a-kind
     // pieces are sold exactly when its order exists.
     const held = await readSessionHolds(tx, db, session.id);
+    // Likewise, stock is counted down exactly when the order exists.
+    const stock = await readStock(tx, db, purchasedQuantities(lineItemsResponse.data));
     // Short, customer-facing order number, taken in the same transaction
     // so concurrent orders never share one and a duplicate delivery
     // (returned above) never uses one up. Read before any write, as
@@ -151,6 +157,7 @@ async function handleStripeWebhook(
     const counter = await tx.get(counterRef);
     const orderNumber = counter.exists ? counter.data().next : FIRST_ORDER_NUMBER;
     writePiecesSold(tx, held);
+    writeStockSold(tx, stock);
     tx.set(counterRef, { next: orderNumber + 1 });
     tx.set(orderRef, {
       ...orderData,

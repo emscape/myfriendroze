@@ -65,6 +65,10 @@ export function docToProduct(doc) {
   const widthIn = typeof data.widthIn === 'number' ? data.widthIn : 0;
   const depthIn = typeof data.depthIn === 'number' ? data.depthIn : 0;
 
+  const tracksStock = data.stockQuantity !== undefined && data.stockQuantity !== null;
+  const hasStockCount = tracksStock && Number.isInteger(data.stockQuantity) && data.stockQuantity >= 0;
+  const stockAllowsSale = !tracksStock || (hasStockCount && data.stockQuantity > 0);
+
   return {
     id: doc.id,
     handle: slugify(data.title),
@@ -87,7 +91,11 @@ export function docToProduct(doc) {
     // (Not derived from isActive at all, strict or otherwise — a doc that
     // reaches this point is already isActive by construction, since every
     // real caller queries where('isActive', '==', true) first.)
-    inStock: data.inStock === undefined ? true : data.inStock === true,
+    // A stock count of 0, or a malformed one, is also sold out, matching
+    // the checkout boundary (pricing.js).
+    inStock: (data.inStock === undefined ? true : data.inStock === true) && stockAllowsSale,
+    // Optional, for plants (set in the admin app); null means untracked.
+    stockQuantity: hasStockCount ? data.stockQuantity : null,
     category: normalizeCategory(data.category),
     dimensions: formatDimensions({ widthIn, heightIn, depthIn }),
     features: [],

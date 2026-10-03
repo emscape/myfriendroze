@@ -125,7 +125,15 @@ function buildLineItemsFromCatalog(items, catalog) {
     if (product.publishAt && product.publishAt.toMillis() > Date.now()) {
       throw new CatalogValidationError('NOT_YET_PUBLISHED', `Product is not yet published: ${sku}`);
     }
-    const maxQty = maxQtyFor(product);
+    // Optional stock count (plants; set in the admin app). Absent or null
+    // means untracked. A present value that isn't a whole number of 0 or
+    // more is malformed data and fails closed, like inStock above.
+    const { stockQuantity } = product;
+    const tracksStock = stockQuantity !== undefined && stockQuantity !== null;
+    if (tracksStock && !(Number.isInteger(stockQuantity) && stockQuantity > 0)) {
+      throw new CatalogValidationError('OUT_OF_STOCK', `Product is out of stock: ${sku}`);
+    }
+    const maxQty = tracksStock ? Math.min(maxQtyFor(product), stockQuantity) : maxQtyFor(product);
     if (!Number.isInteger(qty) || qty < MIN_QTY || qty > maxQty) {
       throw new CatalogValidationError(
         'INVALID_QTY',
@@ -136,7 +144,9 @@ function buildLineItemsFromCatalog(items, catalog) {
     return {
       price_data: {
         currency: 'usd',
-        product_data: { name: product.title, tax_code: PRODUCT_TAX_CODE },
+        // The sku comes back on the paid session's line items, so the
+        // webhook can count stock down (lib/stockCounts.js).
+        product_data: { name: product.title, tax_code: PRODUCT_TAX_CODE, metadata: { sku } },
         unit_amount: dollarsToCents(product.price),
         tax_behavior: TAX_BEHAVIOR,
       },

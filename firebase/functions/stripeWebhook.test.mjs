@@ -404,6 +404,56 @@ describe('handleStripeWebhook', () => {
     });
   });
 
+  describe('stock counts', () => {
+    const FERN = { title: 'Fern', price: 12, isActive: true, inStock: true, category: 'plant' };
+    const fernLineItems = (quantity) => ({
+      data: [
+        { description: 'Fern', quantity, amount_total: 1200 * quantity, price: { product: { metadata: { sku: 'fern' } } } },
+      ],
+    });
+
+    async function deliverPaid(db, stripeClient) {
+      await handleStripeWebhook(signedRequest(checkoutCompletedEvent()), fakeRes(), {
+        stripeClient,
+        webhookSecret: WEBHOOK_SECRET,
+        db,
+        sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+        serverTimestamp: () => 'SERVER_TIMESTAMP',
+      });
+    }
+
+    it("asks Stripe for each line item's product, where the sku is kept", async () => {
+      const stripeClient = fakeStripeClient({ listLineItemsResult: fernLineItems(1) });
+
+      await deliverPaid(fakeDb({ docs: { 'products/fern': { ...FERN, stockQuantity: 5 } } }), stripeClient);
+
+      expect(stripeClient.checkout.sessions.listLineItems).toHaveBeenCalledWith('cs_test_abc123', {
+        limit: 100,
+        expand: ['data.price.product'],
+      });
+    });
+
+    it('counts stock down when the order is written', async () => {
+      const db = fakeDb({ docs: { 'products/fern': { ...FERN, stockQuantity: 5 } } });
+
+      await deliverPaid(db, fakeStripeClient({ listLineItemsResult: fernLineItems(2) }));
+
+      expect(db.state.written).not.toBeNull();
+      expect(db.dump('products/fern')).toEqual({ ...FERN, stockQuantity: 3 });
+    });
+
+    it('does not count stock down again on a duplicate delivery', async () => {
+      const db = fakeDb({
+        existingOrder: { status: 'paid', stripeSessionId: 'cs_test_abc123' },
+        docs: { 'products/fern': { ...FERN, stockQuantity: 5 } },
+      });
+
+      await deliverPaid(db, fakeStripeClient({ listLineItemsResult: fernLineItems(2) }));
+
+      expect(db.dump('products/fern')).toEqual({ ...FERN, stockQuantity: 5 });
+    });
+  });
+
   describe('checkout holds on one-of-a-kind pieces', () => {
     const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery' };
     const VASE = { title: 'Tall Vase', price: 90, isActive: true, category: 'other' };

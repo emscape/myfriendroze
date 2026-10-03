@@ -3,6 +3,7 @@ import {
   EMPTY_CART,
   MAX_CART_ITEMS,
   maxQtyForCategory,
+  maxQtyForProduct,
   parseCart,
   serializeCart,
   addToCart,
@@ -15,6 +16,24 @@ import {
 function cartOf(items) {
   return { items };
 }
+
+describe('maxQtyForProduct', () => {
+  it('caps the category limit at the stock count', () => {
+    expect(maxQtyForProduct('plant', 3)).toBe(3);
+    expect(maxQtyForProduct('plant', 50)).toBe(20);
+  });
+
+  it('uses the category limit when the product has no stock count', () => {
+    expect(maxQtyForProduct('plant', null)).toBe(20);
+    expect(maxQtyForProduct('plant', undefined)).toBe(20);
+  });
+
+  // A sold-out product is flagged as such; its limit still never drops a
+  // stored quantity below 1.
+  it('never goes below 1', () => {
+    expect(maxQtyForProduct('plant', 0)).toBe(1);
+  });
+});
 
 describe('maxQtyForCategory', () => {
   it('allows up to 20 plants and one of each pottery or "other" piece', () => {
@@ -34,6 +53,15 @@ describe('addToCart', () => {
 
     expect(status).toBe('added');
     expect(cart.items).toEqual([{ sku: 'p1', category: 'plant', qty: 3 }]);
+  });
+
+  it('caps the quantity at the stock count, counting what is already in the cart', () => {
+    const start = addToCart(EMPTY_CART, { sku: 'p1', category: 'plant', stockQuantity: 2, qty: 2 }).cart;
+
+    const { cart, status } = addToCart(start, { sku: 'p1', category: 'plant', stockQuantity: 2 });
+
+    expect(status).toBe('limited');
+    expect(cart.items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
   });
 
   it('defaults to a quantity of 1', () => {

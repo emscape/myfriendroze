@@ -45,7 +45,8 @@ describe('buildLineItemsFromCatalog', () => {
       {
         price_data: {
           currency: 'usd',
-          product_data: { name: 'Blue Branches', tax_code: PRODUCT_TAX_CODE },
+          // The sku rides along so the webhook can count stock down after payment.
+          product_data: { name: 'Blue Branches', tax_code: PRODUCT_TAX_CODE, metadata: { sku: 'sku-1' } },
           unit_amount: 7000,
           // Listed prices are before tax; Stripe Tax adds tax on top.
           tax_behavior: 'exclusive',
@@ -290,6 +291,45 @@ describe('buildLineItemsFromCatalog', () => {
     expect(errorCodeOf(() => buildLineItemsFromCatalog([{ sku: 'sku-1', qty: 21 }], catalog))).toBe(
       'INVALID_QTY'
     );
+  });
+
+  describe('stock counts', () => {
+    const plant = (stockQuantity) => ({
+      title: 'Echeveria',
+      price: 12,
+      isActive: true,
+      category: 'plant',
+      ...(stockQuantity === undefined ? {} : { stockQuantity }),
+    });
+    const order = (qty, product) => () =>
+      buildLineItemsFromCatalog([{ sku: 'sku-1', qty }], catalogWith({ 'sku-1': product }));
+
+    it('allows buying every one in stock', () => {
+      expect(order(3, plant(3))()[0].quantity).toBe(3);
+    });
+
+    it('rejects more than are in stock', () => {
+      expect(errorCodeOf(order(4, plant(3)))).toBe('INVALID_QTY');
+    });
+
+    it('treats a stock count of 0 as sold out', () => {
+      expect(errorCodeOf(order(1, plant(0)))).toBe('OUT_OF_STOCK');
+    });
+
+    it('keeps the category limit when more than that are in stock', () => {
+      expect(errorCodeOf(order(21, plant(50)))).toBe('INVALID_QTY');
+    });
+
+    it('uses only the category limit when the product has no stock count', () => {
+      expect(order(20, plant(undefined))()[0].quantity).toBe(20);
+      expect(order(20, plant(null))()[0].quantity).toBe(20);
+    });
+
+    it('fails closed on a stock count that is not a whole number of 0 or more', () => {
+      for (const bad of [-1, 2.5, '3', true]) {
+        expect(errorCodeOf(order(1, plant(bad)))).toBe('OUT_OF_STOCK');
+      }
+    });
   });
 
   it.each(['pottery', 'other'])('rejects more than 1 of a one-of-a-kind %s product', (category) => {
