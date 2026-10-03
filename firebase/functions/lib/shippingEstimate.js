@@ -16,8 +16,11 @@ const DESTINATIONS = [
 ];
 
 const PACKING_ALLOWANCE = 2;
-// USPS Ground Advantage limits.
-const MAX_WEIGHT_GRAMS = 31751; // 70 lb
+const GRAMS_PER_OUNCE = 28.349523125;
+
+// USPS Ground Advantage limits. 70 lb exactly as the admin app converts it
+// (lb × 16 × GRAMS_PER_OUNCE), so a piece entered as 70 lb passes.
+const MAX_WEIGHT_GRAMS = 70 * 16 * GRAMS_PER_OUNCE;
 const MAX_SIDE_IN = 108;
 const MAX_LENGTH_PLUS_GIRTH_IN = 130;
 
@@ -61,8 +64,6 @@ function validateParcel(data) {
   return parcel;
 }
 
-const GRAMS_PER_OUNCE = 28.349523125;
-
 // Shippo quotes from ZIPs alone; no street address is needed for a rate.
 // Weight goes in ounces rounded to hundredths: the admin app stores grams
 // converted from lb/oz with float noise, and USPS rounds any fraction of a
@@ -87,7 +88,10 @@ function shipmentRequest(parcel, destinationZip) {
 
 /** @returns {number|null} the Ground Advantage price in dollars, or null if missing or not a number */
 function groundAdvantageAmount(shipment) {
-  const rate = (shipment.rates || []).find((r) => r.servicelevel?.token === 'usps_ground_advantage');
+  // Any malformed shape (null body, non-array rates, null entries) counts
+  // as no Ground Advantage rate rather than throwing.
+  const rates = Array.isArray(shipment?.rates) ? shipment.rates : [];
+  const rate = rates.find((r) => r?.servicelevel?.token === 'usps_ground_advantage');
   // Shippo sends amounts as decimal strings; Number('') and Number(null)
   // are 0, so anything blank counts as missing rather than free.
   const raw = rate?.amount;

@@ -13,6 +13,7 @@ const {
 const shippoApiKey = defineSecret('SHIPPO_API_KEY');
 
 const SHIPPO_SHIPMENTS_URL = 'https://api.goshippo.com/shipments/';
+const SHIPPO_TIMEOUT_MS = 15000;
 
 // Same admin allowlist as orderShipped.js/eventNotification.js/
 // firestore.rules' isAdmin() -- kept in sync manually. Without it, anyone
@@ -28,6 +29,9 @@ async function quote(parcel, destination, { apiKey, fetchImpl, logger }) {
       method: 'POST',
       headers: { Authorization: `ShippoToken ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(shipmentRequest(parcel, destination.zip)),
+      // Fail fast instead of holding the admin app until the function's
+      // own 60-second timeout.
+      signal: AbortSignal.timeout(SHIPPO_TIMEOUT_MS),
     });
   } catch (error) {
     logger.error('Shippo request failed:', error.message);

@@ -93,6 +93,25 @@ describe('handleEstimateShipping', () => {
     await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
+  it('reports a success response with a null body as unavailable', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, null));
+    await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('gives each Shippo request a timeout, so a hung request fails fast', async () => {
+    const fetchImpl = shippoFake();
+    await call({ ...ADMIN, data: BOX }, { fetchImpl });
+
+    for (const [, init] of fetchImpl.mock.calls) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it('reports a timed-out Shippo request as unavailable', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+    await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
   it('reports a missing Ground Advantage rate as unavailable', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, { rates: [] }));
     await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });

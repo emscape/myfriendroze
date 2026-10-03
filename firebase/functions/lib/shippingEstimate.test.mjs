@@ -28,9 +28,10 @@ describe('validateParcel', () => {
     }
   });
 
-  it('rejects anything over the USPS 70 lb limit', () => {
-    expect(() => validateParcel({ ...BOX, weightGrams: 31752 })).toThrow(ParcelError);
-    expect(validateParcel({ ...BOX, weightGrams: 31751 }).weightGrams).toBe(31751);
+  it('accepts exactly 70 lb and rejects anything over the USPS limit', () => {
+    const seventyLb = 70 * 16 * 28.349523125; // 31751.4659 g, as the admin app converts it
+    expect(validateParcel({ ...BOX, weightGrams: seventyLb }).weightGrams).toBe(seventyLb);
+    expect(() => validateParcel({ ...BOX, weightGrams: seventyLb + 0.01 })).toThrow(ParcelError);
   });
 
   it('rejects a box side over 108 inches', () => {
@@ -91,6 +92,12 @@ describe('groundAdvantageAmount', () => {
     const rate = (amount) => ({ rates: [{ servicelevel: { token: 'usps_ground_advantage' }, amount }] });
     for (const amount of ['abc', '', null, undefined, 'Infinity']) {
       expect(groundAdvantageAmount(rate(amount)), String(amount)).toBeNull();
+    }
+  });
+
+  it('returns null for a malformed response instead of throwing', () => {
+    for (const shipment of [null, undefined, 'oops', { rates: null }, { rates: 'x' }, { rates: [null, 5] }]) {
+      expect(groundAdvantageAmount(shipment), JSON.stringify(shipment)).toBeNull();
     }
   });
 
