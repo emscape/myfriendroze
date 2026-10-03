@@ -60,12 +60,22 @@ function formatShippingLine(shipping) {
 const MAIL_NOTE =
   "We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.";
 const PICKUP_NOTE = "We'll email you to arrange a pickup time in Los Angeles.";
+const UNKNOWN_NOTE = "We'll email you about shipping or pickup.";
+
+// method is null when the webhook couldn't look up the chosen rate, so the
+// order could be pickup or mail: say neither.
+function shippingSection(shipping) {
+  if (shipping?.method === 'local_pickup') return { heading: 'Local pickup', note: PICKUP_NOTE };
+  if (shipping && !shipping.method) return { heading: 'Delivery', note: UNKNOWN_NOTE };
+  return { heading: 'Shipping to:', note: MAIL_NOTE };
+}
 
 /**
  * @param {ReturnType<typeof import('./orderFromSession.js').sessionToOrderData>} order
  */
 function orderDataToConfirmationEmailParams(order) {
   const pickup = order.shipping?.method === 'local_pickup';
+  const section = shippingSection(order.shipping);
   return {
     EMAIL: order.customer.email,
     ORDER_NUMBER: order.stripeSessionId,
@@ -75,8 +85,8 @@ function orderDataToConfirmationEmailParams(order) {
     ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping),
     SHIPPING_ADDRESS: pickup ? '' : formatAddress(order.shippingAddress),
     SHIPPING_METHOD: order.shipping ? shippingLabel(order.shipping) : '',
-    SHIPPING_HEADING: pickup ? 'Local pickup' : 'Shipping to:',
-    SHIPPING_NOTE: pickup ? PICKUP_NOTE : MAIL_NOTE,
+    SHIPPING_HEADING: section.heading,
+    SHIPPING_NOTE: section.note,
   };
 }
 

@@ -76,6 +76,18 @@ describe('orderDataToConfirmationEmailParams', () => {
     expect(params.SHIPPING_ADDRESS).toBe('');
   });
 
+  // The webhook saves method: null when the shipping-rate lookup fails, so
+  // a pickup order can't be told apart from a mailed one.
+  it('uses neutral wording, keeping the address, when the shipping method is unknown', () => {
+    const order = fullOrder({ shipping: { method: null, label: null, amount: 0, outsideLocalArea: false } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Delivery');
+    expect(params.SHIPPING_NOTE).toBe("We'll email you about shipping or pickup.");
+    expect(params.SHIPPING_ADDRESS).toBe('123 Main St, Springfield, CA 90210, US');
+  });
+
   it('keeps the shipping wording for mailed orders', () => {
     const order = fullOrder({ shipping: { method: 'free_shipping', label: 'Free shipping', amount: 0 } });
 
