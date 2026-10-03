@@ -52,7 +52,10 @@ describe('selling stock', () => {
     expect(db.dump('products/fern')).toEqual({ ...FERN, stockQuantity: 0, inStock: false });
   });
 
-  it('stops at 0 rather than going negative when two checkouts bought the last ones', async () => {
+  // How two checkouts paying for the last few at once end up: the second
+  // order's count-down finds fewer left than it bought. (The transaction
+  // retry itself is Firestore's job and isn't modelled here.)
+  it('stops at 0 rather than going negative when more were sold than were left', async () => {
     const db = await sell({ 'products/fern': { ...FERN, stockQuantity: 1 } }, [lineItem('fern', 3)]);
 
     expect(db.dump('products/fern')).toEqual({ ...FERN, stockQuantity: 0, inStock: false });
