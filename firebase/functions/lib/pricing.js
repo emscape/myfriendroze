@@ -9,6 +9,8 @@
 // Firestore-sourced catalog passed in by the caller — a client-supplied
 // price field, if present at all, is never read.
 
+const { PRODUCT_TAX_CODE, TAX_BEHAVIOR } = require('./taxCodes');
+
 const MIN_QTY = 1;
 // Most of any one product a single order can buy, by product category.
 // Pottery and "other" pieces are one of a kind; plants come in multiples.
@@ -82,7 +84,7 @@ function validateItemList(items) {
  *
  * @param {{sku: string, qty: number}[]} items
  * @param {Map<string, {title: string, price: number, isActive: boolean, inStock?: boolean}>} catalog
- * @returns {Array<{price_data: {currency: string, product_data: {name: string}, unit_amount: number}, quantity: number}>}
+ * @returns {Array<{price_data: {currency: string, product_data: {name: string, tax_code: string}, unit_amount: number, tax_behavior: string}, quantity: number}>}
  * @throws {CatalogValidationError}
  */
 function buildLineItemsFromCatalog(items, catalog) {
@@ -134,8 +136,9 @@ function buildLineItemsFromCatalog(items, catalog) {
     return {
       price_data: {
         currency: 'usd',
-        product_data: { name: product.title },
+        product_data: { name: product.title, tax_code: PRODUCT_TAX_CODE },
         unit_amount: dollarsToCents(product.price),
+        tax_behavior: TAX_BEHAVIOR,
       },
       quantity: qty,
     };

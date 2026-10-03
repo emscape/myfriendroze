@@ -47,6 +47,8 @@ describe('sessionToOrderData', () => {
       customer: { email: 'buyer@example.com', name: 'Buyer Name', phone: null },
       items: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
       total: 70,
+      // No total_details on this session, so the tax is unknown.
+      tax: null,
       currency: 'usd',
       shippingAddress: {
         name: 'Buyer Name',
@@ -60,6 +62,18 @@ describe('sessionToOrderData', () => {
       notes: null,
       shipping: null,
     });
+  });
+
+  it('records the sales tax Stripe charged, in dollars', () => {
+    const order = sessionToOrderData(baseSession({ total_details: { amount_tax: 667 } }), lineItems);
+
+    expect(order.tax).toBe(6.67);
+  });
+
+  it('records zero tax as 0, not null, for an order Stripe charged no tax on', () => {
+    const order = sessionToOrderData(baseSession({ total_details: { amount_tax: 0 } }), lineItems);
+
+    expect(order.tax).toBe(0);
   });
 
   it("records the chosen shipping option's method, name and amount", () => {

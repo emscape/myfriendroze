@@ -72,6 +72,13 @@ describe('buildShippingOptions', () => {
     expect(names.local_pickup).toBe('Local pickup — Los Angeles');
   });
 
+  it('marks every rate tax-exclusive with the shipping tax code, so Stripe Tax decides whether shipping is taxed', () => {
+    for (const option of buildShippingOptions(1000, LOCAL)) {
+      expect(option.shipping_rate_data.tax_behavior).toBe('exclusive');
+      expect(option.shipping_rate_data.tax_code).toBe('txcd_92010001');
+    }
+  });
+
   it('builds fixed-amount USD rates', () => {
     for (const option of buildShippingOptions(1000, LOCAL)) {
       expect(option.shipping_rate_data.type).toBe('fixed_amount');

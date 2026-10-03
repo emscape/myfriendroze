@@ -148,6 +148,8 @@ async function handleCreateCheckoutSession(
     const expiresAt = Math.floor(createdAt / 1000) + CHECKOUT_LIFETIME_SECONDS;
     const session = await stripeClient.checkout.sessions.create({
       mode: 'payment',
+      // California sales tax, from the shipping address (lib/taxCodes.js).
+      automatic_tax: { enabled: true },
       expires_at: expiresAt,
       line_items: lineItems,
       shipping_address_collection: { allowed_countries: ['US'] },

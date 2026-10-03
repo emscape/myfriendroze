@@ -44,6 +44,8 @@ describe('handleCreateCheckoutSession', () => {
     expect(sessionsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'payment',
+        // Stripe Tax works out California sales tax from the shipping address.
+        automatic_tax: { enabled: true },
         shipping_address_collection: { allowed_countries: ['US'] },
         phone_number_collection: { enabled: true },
         custom_fields: [
@@ -61,8 +63,9 @@ describe('handleCreateCheckoutSession', () => {
           {
             price_data: {
               currency: 'usd',
-              product_data: { name: 'Blue Branches' },
+              product_data: { name: 'Blue Branches', tax_code: 'txcd_99999999' },
               unit_amount: 7000,
+              tax_behavior: 'exclusive',
             },
             quantity: 1,
           },
