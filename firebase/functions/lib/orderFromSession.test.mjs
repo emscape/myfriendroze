@@ -45,7 +45,7 @@ describe('sessionToOrderData', () => {
       stripeSessionId: 'cs_test_abc123',
       stripePaymentIntentId: 'pi_test_xyz789',
       customer: { email: 'buyer@example.com', name: 'Buyer Name', phone: null },
-      items: [{ name: 'Blue Branches', qty: 1, amountTotal: 70 }],
+      items: [{ name: 'Blue Branches', qty: 1, amountSubtotal: null, amountTotal: 70 }],
       total: 70,
       // No total_details on this session, so the tax is unknown.
       tax: null,
@@ -62,6 +62,20 @@ describe('sessionToOrderData', () => {
       notes: null,
       shipping: null,
     });
+  });
+
+  it("records each item's amount before tax alongside its total after tax", () => {
+    const taxed = [{ description: 'Blue Branches', quantity: 1, amount_subtotal: 7000, amount_total: 7718 }];
+
+    const order = sessionToOrderData(baseSession(), taxed);
+
+    expect(order.items).toEqual([{ name: 'Blue Branches', qty: 1, amountSubtotal: 70, amountTotal: 77.18 }]);
+  });
+
+  it('leaves amountSubtotal null when Stripe gives no before-tax amount', () => {
+    const order = sessionToOrderData(baseSession(), lineItems);
+
+    expect(order.items[0].amountSubtotal).toBeNull();
   });
 
   it('records the sales tax Stripe charged, in dollars', () => {
@@ -83,6 +97,18 @@ describe('sessionToOrderData', () => {
     const order = sessionToOrderData(session, lineItems, shippingRate);
 
     expect(order.shipping).toEqual({ method: 'shipping', label: 'Shipping', amount: 10, outsideLocalArea: false });
+  });
+
+  it('records shipping before tax, since any tax on it is already in the sales tax total', () => {
+    const session = baseSession({
+      shipping_cost: { amount_subtotal: 1000, amount_tax: 73, amount_total: 1073, shipping_rate: 'shr_123' },
+      total_details: { amount_tax: 73 },
+    });
+
+    const order = sessionToOrderData(session, lineItems, { id: 'shr_123', metadata: { method: 'shipping' } });
+
+    expect(order.shipping.amount).toBe(10);
+    expect(order.tax).toBe(0.73);
   });
 
   it('tells a free local pickup apart from free shipping by the method, not the amount', () => {
@@ -186,15 +212,15 @@ describe('sessionToOrderData', () => {
 
   it('maps multiple line items independently', () => {
     const twoLineItems = [
-      { description: 'Blue Branches', quantity: 2, amount_total: 14000 },
-      { description: 'Pineapple Planter', quantity: 1, amount_total: 4550 },
+      { description: 'Blue Branches', quantity: 2, amount_subtotal: 14000, amount_total: 14000 },
+      { description: 'Pineapple Planter', quantity: 1, amount_subtotal: 4550, amount_total: 4550 },
     ];
 
     const order = sessionToOrderData(baseSession(), twoLineItems);
 
     expect(order.items).toEqual([
-      { name: 'Blue Branches', qty: 2, amountTotal: 140 },
-      { name: 'Pineapple Planter', qty: 1, amountTotal: 45.5 },
+      { name: 'Blue Branches', qty: 2, amountSubtotal: 140, amountTotal: 140 },
+      { name: 'Pineapple Planter', qty: 1, amountSubtotal: 45.5, amountTotal: 45.5 },
     ]);
   });
 

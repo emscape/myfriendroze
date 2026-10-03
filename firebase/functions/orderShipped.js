@@ -112,7 +112,7 @@ async function handleSendOrderShippedNotification(request, {
     let emailSent = false;
     if (apiKey && ordersSender) {
       const orderDetails = {
-        orderNumber: order.stripeSessionId,
+        orderNumber: order.orderNumber ?? order.stripeSessionId,
         customerName: order.customer?.name,
         // Raw (unescaped) -- orderShippedEmailParams applies the single
         // escaping pass. formatAddress here would double-escape (see

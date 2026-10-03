@@ -115,6 +115,36 @@ describe('orderDataToConfirmationEmailParams', () => {
     expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00<br>Shipping — $10.00<br>Sales tax — $6.67');
   });
 
+  it('shows each item at its price before tax, so the tax line does not count tax twice', () => {
+    const order = fullOrder({
+      items: [{ name: 'Blue Branches', qty: 1, amountSubtotal: 1, amountTotal: 1.1 }],
+      shipping: { method: 'shipping', label: 'Shipping', amount: 10 },
+      tax: 0.1,
+    });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $1.00<br>Shipping — $10.00<br>Sales tax — $0.10');
+  });
+
+  it('falls back to the item total for orders saved before amountSubtotal existed', () => {
+    const params = orderDataToConfirmationEmailParams(fullOrder());
+
+    expect(params.ITEMS_TEXT).toBe('Blue Branches (x1) — $70.00');
+  });
+
+  it('uses the short order number when the order has one', () => {
+    const params = orderDataToConfirmationEmailParams(fullOrder({ orderNumber: 1001 }));
+
+    expect(params.ORDER_NUMBER).toBe('1001');
+  });
+
+  it('falls back to the Stripe session id for orders saved before order numbers existed', () => {
+    const params = orderDataToConfirmationEmailParams(fullOrder());
+
+    expect(params.ORDER_NUMBER).toBe('cs_test_abc123');
+  });
+
   it('leaves out the sales tax line when no tax was charged or it is unknown', () => {
     for (const tax of [0, null, undefined]) {
       const params = orderDataToConfirmationEmailParams(fullOrder({ tax }));

@@ -58,7 +58,7 @@
               </tr>
               <tr>
                 <td style="padding:12px 20px; color:#3d081b; font-size:15px; line-height:1.7;">
-                  {{ params.ITEMS_TEXT }}
+                  {{ params.ITEMS_TEXT|safe }}
                 </td>
               </tr>
               <tr>
@@ -79,7 +79,7 @@
         <tr>
           <td style="padding:0 24px 24px 24px; color:#3d081b; font-size:15px; line-height:1.6;">
             <p style="margin:0 0 4px 0; font-weight:700;">{{ params.SHIPPING_HEADING }}</p>
-            <p style="margin:0 0 16px 0;">{{ params.SHIPPING_ADDRESS }}</p>
+            <p style="margin:0 0 16px 0;">{{ params.SHIPPING_ADDRESS|safe }}</p>
             <p style="margin:0;">{{ params.SHIPPING_NOTE }}</p>
           </td>
         </tr>
