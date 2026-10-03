@@ -24,7 +24,7 @@ describe('shipping policy', () => {
 
   it('summarizes the options in one line', () => {
     expect(shippingSummary()).toBe(
-      'Free shipping when your items total $50 or more. Otherwise $10 for the first item, plus $2 for each additional plant and $5 for each additional ceramic piece. Free local pickup in Los Angeles; contact us for local delivery options.'
+      'Free ground shipping when your items total $50 or more. Otherwise ground shipping is $10 for the first item, plus $2 for each additional plant and $5 for each additional ceramic piece. Free local pickup in Los Angeles; contact us for local delivery options.'
     );
   });
 });
