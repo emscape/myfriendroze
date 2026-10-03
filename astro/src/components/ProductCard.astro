@@ -88,6 +88,7 @@ const { product, showQuickOrder = true } = Astro.props;
             class="product-card__cart-add"
             data-cart-sku={product.id}
             data-cart-category={product.category}
+            data-cart-stock={product.stockQuantity ?? undefined}
           >
             add to cart
           </button>
@@ -297,7 +298,12 @@ const { product, showQuickOrder = true } = Astro.props;
     const sku = button?.dataset.cartSku;
     if (!button || !sku) return;
 
-    const { cart, status } = addToCart(loadCart(), { sku, category: button.dataset.cartCategory });
+    const stock = button.dataset.cartStock;
+    const { cart, status } = addToCart(loadCart(), {
+      sku,
+      category: button.dataset.cartCategory,
+      stockQuantity: stock === undefined ? null : Number(stock),
+    });
     if (status === 'full') {
       flash(button, 'cart full', `Your cart can hold up to ${MAX_CART_ITEMS} different pieces.`);
       return;
@@ -307,7 +313,8 @@ const { product, showQuickOrder = true } = Astro.props;
       return;
     }
     const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
-    if (status === 'limited' && inCart === 1) {
+    // A plant with one left also stops at 1, but isn't one of a kind.
+    if (status === 'limited' && inCart === 1 && button.dataset.cartCategory !== 'plant') {
       flash(button, 'in your cart', 'This one-of-a-kind piece is already in your cart.');
     } else if (status === 'limited') {
       flash(button, `${inCart} in cart (max)`, `Your cart has the most you can order (${inCart}).`);

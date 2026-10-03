@@ -51,14 +51,17 @@ function clampQty(qty, category) {
 
 /**
  * Adds a product, merging with any existing entry for the same sku.
- * Status is 'added', 'limited' (the quantity hit the category limit, which
- * includes a one-of-a-kind piece already in the cart), or 'full' (the cart
+ * Status is 'added', 'limited' (the quantity hit the category limit or the
+ * stock count, which includes a one-of-a-kind piece already in the cart),
+ * or 'full' (the cart
  * already holds MAX_CART_ITEMS other products; nothing changed).
  * @param {Cart} cart
- * @param {{ sku: string, category: unknown, qty?: number }} product
+ * @param {{ sku: string, category: unknown, qty?: number,
+ *   stockQuantity?: number | null }} product - stockQuantity is the live
+ *   count, when the product has one
  * @returns {{ cart: Cart, status: 'added' | 'limited' | 'full' }}
  */
-export function addToCart(cart, { sku, category, qty = 1 }) {
+export function addToCart(cart, { sku, category, qty = 1, stockQuantity = null }) {
   const existing = cart.items.find((item) => item.sku === sku);
   if (!existing && cart.items.length >= MAX_CART_ITEMS) {
     return { cart, status: 'full' };
@@ -68,7 +71,7 @@ export function addToCart(cart, { sku, category, qty = 1 }) {
   // The caller's category is the product's current one; the stored one is
   // only a fallback, since the product may have been recategorised.
   const itemCategory = normalizeCategory(category ?? existing?.category);
-  const newQty = clampQty(wanted, itemCategory);
+  const newQty = Math.min(wanted, maxQtyForProduct(itemCategory, stockQuantity));
   const status = newQty < wanted ? 'limited' : 'added';
 
   const items = existing

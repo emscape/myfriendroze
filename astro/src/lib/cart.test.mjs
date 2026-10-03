@@ -55,6 +55,15 @@ describe('addToCart', () => {
     expect(cart.items).toEqual([{ sku: 'p1', category: 'plant', qty: 3 }]);
   });
 
+  it('caps the quantity at the stock count, counting what is already in the cart', () => {
+    const start = addToCart(EMPTY_CART, { sku: 'p1', category: 'plant', stockQuantity: 2, qty: 2 }).cart;
+
+    const { cart, status } = addToCart(start, { sku: 'p1', category: 'plant', stockQuantity: 2 });
+
+    expect(status).toBe('limited');
+    expect(cart.items).toEqual([{ sku: 'p1', category: 'plant', qty: 2 }]);
+  });
+
   it('defaults to a quantity of 1', () => {
     const { cart } = addToCart(EMPTY_CART, { sku: 'p1', category: 'plant' });
 
