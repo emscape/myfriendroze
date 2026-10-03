@@ -5,7 +5,7 @@ import { shippingSummary } from '../../lib/shipping-policy.js';
 import { fetchLiveProductByHandle } from '../../lib/products-live.js';
 import { getFirestoreDb } from '../../lib/firestore-admin.js';
 import { shopCategoryForValue } from '../../lib/shop-categories.js';
-import { maxQtyForCategory } from '../../lib/cart.js';
+import { maxQtyForProduct } from '../../lib/cart.js';
 
 // Rendered on demand (not prerendered/getStaticPaths-enumerated) so a
 // price/availability edit in the admin app shows up immediately instead of
@@ -36,7 +36,7 @@ if (!product) {
 // category badge, and which "shops" dropdown entry is highlighted.
 const shop = shopCategoryForValue(product.category);
 // One-of-a-kind pieces (limit 1) get no quantity picker.
-const maxQty = maxQtyForCategory(product.category);
+const maxQty = maxQtyForProduct(product.category, product.stockQuantity);
 
 // Featured image is the first one
 const featuredImage = product.images[0];

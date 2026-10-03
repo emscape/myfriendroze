@@ -5,6 +5,7 @@ const PRODUCTS = [
   { id: 'bowl', handle: 'speckled-bowl', title: 'Speckled Bowl', price: 48, images: ['/bowl.png', '/bowl2.png'], inStock: true, category: 'pottery' },
   { id: 'eche', handle: 'echeveria', title: 'Echeveria', price: 12.5, images: [], inStock: true, category: 'plant' },
   { id: 'vase', handle: 'sold-vase', title: 'Sold Vase', price: 90, images: ['/vase.png'], inStock: false, category: 'pottery' },
+  { id: 'aloe', handle: 'aloe', title: 'Aloe', price: 8, images: [], inStock: true, category: 'plant', stockQuantity: 3 },
 ];
 
 function cartOf(items) {
@@ -14,9 +15,10 @@ function cartOf(items) {
 describe('catalogForCart', () => {
   it('keeps only the fields the cart page needs, with the first image', () => {
     expect(catalogForCart(PRODUCTS)).toEqual([
-      { id: 'bowl', handle: 'speckled-bowl', title: 'Speckled Bowl', price: 48, image: '/bowl.png', inStock: true, category: 'pottery' },
-      { id: 'eche', handle: 'echeveria', title: 'Echeveria', price: 12.5, image: '', inStock: true, category: 'plant' },
-      { id: 'vase', handle: 'sold-vase', title: 'Sold Vase', price: 90, image: '/vase.png', inStock: false, category: 'pottery' },
+      { id: 'bowl', handle: 'speckled-bowl', title: 'Speckled Bowl', price: 48, image: '/bowl.png', inStock: true, category: 'pottery', stockQuantity: null },
+      { id: 'eche', handle: 'echeveria', title: 'Echeveria', price: 12.5, image: '', inStock: true, category: 'plant', stockQuantity: null },
+      { id: 'vase', handle: 'sold-vase', title: 'Sold Vase', price: 90, image: '/vase.png', inStock: false, category: 'pottery', stockQuantity: null },
+      { id: 'aloe', handle: 'aloe', title: 'Aloe', price: 8, image: '', inStock: true, category: 'plant', stockQuantity: 3 },
     ]);
   });
 });
@@ -65,6 +67,13 @@ describe('buildCartView', () => {
 
     expect(view.lines[0].qty).toBe(1);
     expect(view.checkoutItems).toEqual([{ sku: 'bowl', qty: 1 }]);
+  });
+
+  it('caps a plant at its stock count', () => {
+    const view = buildCartView(cartOf([{ sku: 'aloe', category: 'plant', qty: 5 }]), catalog);
+
+    expect([view.lines[0].qty, view.lines[0].maxQty]).toEqual([3, 3]);
+    expect(view.checkoutItems).toEqual([{ sku: 'aloe', qty: 3 }]);
   });
 
   it('flags a sold-out piece and leaves it out of the checkout and subtotal', () => {
@@ -122,6 +131,13 @@ describe('reconcileCart', () => {
 
     expect(changed).toBe(true);
     expect(cart.items).toEqual([{ sku: 'bowl', category: 'pottery', qty: 1 }]);
+  });
+
+  it('caps a stored plant quantity at its stock count', () => {
+    const { cart, changed } = reconcileCart(cartOf([{ sku: 'aloe', category: 'plant', qty: 5 }]), catalog);
+
+    expect(changed).toBe(true);
+    expect(cart.items).toEqual([{ sku: 'aloe', category: 'plant', qty: 3 }]);
   });
 
   it('lets a piece recategorised as a plant keep its quantity under the plant limit', () => {

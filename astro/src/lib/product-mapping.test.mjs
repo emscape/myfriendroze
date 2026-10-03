@@ -164,6 +164,26 @@ describe('docToProduct', () => {
   // products-live.js filters on it); inStock controls whether a *visible*
   // product can be purchased (shows a "Sold Out" badge/disabled button
   // instead of disappearing entirely).
+  describe('stock counts', () => {
+    const plant = (extra) => fakeDoc('abc', { title: 'Aloe', price: 8, isActive: true, category: 'plant', ...extra });
+
+    it('reads the stock count', () => {
+      expect(docToProduct(plant({ stockQuantity: 4 }))).toMatchObject({ stockQuantity: 4, inStock: true });
+    });
+
+    it('has no stock count when the field is absent or null', () => {
+      expect(docToProduct(plant({})).stockQuantity).toBeNull();
+      expect(docToProduct(plant({ stockQuantity: null })).stockQuantity).toBeNull();
+    });
+
+    // Matches firebase/functions/lib/pricing.js, which refuses these at checkout.
+    it('shows a stock count of 0, or a malformed one, as sold out', () => {
+      for (const bad of [0, -1, 2.5, '3']) {
+        expect(docToProduct(plant({ stockQuantity: bad, inStock: true })).inStock).toBe(false);
+      }
+    });
+  });
+
   it('defaults inStock to true when the field is absent', () => {
     const doc = fakeDoc('abc', { title: 'No Stock Field Product', price: 10, isActive: true });
 

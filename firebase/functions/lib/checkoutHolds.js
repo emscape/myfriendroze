@@ -12,8 +12,9 @@
 // (firestore.rules); no rule matches this one, so only the Admin SDK can
 // read or write it.
 //
-// Plants come in multiples with no stock count, so only pieces whose
-// quantity limit is 1 are held.
+// Only pieces whose quantity limit is 1 are held. Plants come in
+// multiples; their optional stock count is counted down after payment
+// instead (lib/stockCounts.js).
 
 const { createHash } = require('node:crypto');
 const { CatalogValidationError, maxQtyFor } = require('./pricing');

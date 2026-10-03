@@ -63,7 +63,7 @@ describe('handleCreateCheckoutSession', () => {
           {
             price_data: {
               currency: 'usd',
-              product_data: { name: 'Blue Branches', tax_code: 'txcd_99999999' },
+              product_data: { name: 'Blue Branches', tax_code: 'txcd_99999999', metadata: { sku: 'sku-1' } },
               unit_amount: 7000,
               tax_behavior: 'exclusive',
             },

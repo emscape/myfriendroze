@@ -30,6 +30,21 @@ export function maxQtyForCategory(category) {
   return MAX_QTY_BY_CATEGORY[normalizeCategory(category)];
 }
 
+/**
+ * Most of one product a cart can hold, given its live stock count (plants
+ * may have one; null means untracked). Never below 1: a product with none
+ * left is shown as sold out, and its stored quantity is left as it is.
+ * firebase/functions/lib/pricing.js enforces the same cap at checkout.
+ * @param {unknown} category
+ * @param {number | null | undefined} stockQuantity
+ * @returns {number}
+ */
+export function maxQtyForProduct(category, stockQuantity) {
+  const categoryMax = maxQtyForCategory(category);
+  if (stockQuantity === null || stockQuantity === undefined) return categoryMax;
+  return Math.max(1, Math.min(categoryMax, stockQuantity));
+}
+
 function clampQty(qty, category) {
   return Math.min(qty, maxQtyForCategory(category));
 }
