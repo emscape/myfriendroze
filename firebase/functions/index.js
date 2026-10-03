@@ -22,4 +22,7 @@ exports.resendOrderConfirmation = require('./orderConfirmation').resendOrderConf
 
 // Admin-only: mark an order shipped and send the shipping notification email
 exports.sendOrderShippedNotification = require('./orderShipped').sendOrderShippedNotification;
+
+// Admin-only: USPS shipping estimates for a product's box (Shippo, quotes only)
+exports.estimateShipping = require('./estimateShipping').estimateShipping;
 exports.ssrAstro = require('./ssrAstro').ssrAstro;

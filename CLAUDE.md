@@ -101,6 +101,7 @@ myfriendroze/
 - Navigation menu items live in `astro/src/components/Header.astro` `navigation` array — the single source of truth
 - Events with a past `endDate` are automatically hidden; `endDate: null` = recurring/always shown
 - Products come from Firestore via the Flutter admin app; the site reads them live on every request (`astro/src/lib/products-live.js`) — no build-time snapshot or sync API
+- `estimateShipping` (admin-only callable, `firebase/functions/estimateShipping.js`) gives the admin app's product page USPS Ground Advantage quotes from origin 90065 via Shippo (`SHIPPO_API_KEY` secret). Quotes only — never buy labels through Shippo; postage is bought in Pirate Ship. A new secret must grant `roles/secretmanager.secretAccessor` to `60785050821-compute@developer.gserviceaccount.com` before deploy, since the CI service account can't set secret IAM.
 
 ---
 
