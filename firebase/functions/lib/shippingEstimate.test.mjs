@@ -37,6 +37,17 @@ describe('validateParcel', () => {
     expect(() => validateParcel({ ...BOX, lengthIn: 109 })).toThrow(ParcelError);
   });
 
+  // USPS: longest side + 2 × (the other two sides) at most 130 in.
+  it('accepts a box at exactly the 130-inch length-plus-girth limit, whichever side is longest', () => {
+    expect(() => validateParcel({ ...BOX, lengthIn: 30, widthIn: 25, heightIn: 25 })).not.toThrow();
+    expect(() => validateParcel({ ...BOX, lengthIn: 25, widthIn: 25, heightIn: 30 })).not.toThrow();
+  });
+
+  it('rejects a box over the 130-inch length-plus-girth limit', () => {
+    expect(() => validateParcel({ ...BOX, lengthIn: 30, widthIn: 25, heightIn: 25.5 })).toThrow(/130/);
+    expect(() => validateParcel({ ...BOX, lengthIn: 108, widthIn: 108, heightIn: 108 })).toThrow(ParcelError);
+  });
+
   it('rejects a missing request body', () => {
     expect(() => validateParcel(undefined)).toThrow(ParcelError);
   });
@@ -74,6 +85,13 @@ describe('groundAdvantageAmount', () => {
       ],
     };
     expect(groundAdvantageAmount(response)).toBe(11.3);
+  });
+
+  it('returns null when the Ground Advantage amount is not a number', () => {
+    const rate = (amount) => ({ rates: [{ servicelevel: { token: 'usps_ground_advantage' }, amount }] });
+    for (const amount of ['abc', '', null, undefined, 'Infinity']) {
+      expect(groundAdvantageAmount(rate(amount)), String(amount)).toBeNull();
+    }
   });
 
   it('returns null when there is no Ground Advantage rate', () => {

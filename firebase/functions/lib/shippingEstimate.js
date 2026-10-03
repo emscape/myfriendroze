@@ -19,6 +19,7 @@ const PACKING_ALLOWANCE = 2;
 // USPS Ground Advantage limits.
 const MAX_WEIGHT_GRAMS = 31751; // 70 lb
 const MAX_SIDE_IN = 108;
+const MAX_LENGTH_PLUS_GIRTH_IN = 130;
 
 class ParcelError extends Error {
   constructor(message) {
@@ -46,12 +47,18 @@ function validateParcel(data) {
   if (!data || typeof data !== 'object') {
     throw new ParcelError('A weight and box size are required');
   }
-  return {
+  const parcel = {
     weightGrams: positive(data.weightGrams, 'weightGrams', MAX_WEIGHT_GRAMS),
     lengthIn: positive(data.lengthIn, 'lengthIn', MAX_SIDE_IN),
     widthIn: positive(data.widthIn, 'widthIn', MAX_SIDE_IN),
     heightIn: positive(data.heightIn, 'heightIn', MAX_SIDE_IN),
   };
+  // USPS measures length as the longest side; girth is twice the other two.
+  const [longest, ...others] = [parcel.lengthIn, parcel.widthIn, parcel.heightIn].sort((a, b) => b - a);
+  if (longest + 2 * (others[0] + others[1]) > MAX_LENGTH_PLUS_GIRTH_IN) {
+    throw new ParcelError(`Box is over the USPS ${MAX_LENGTH_PLUS_GIRTH_IN}-inch length-plus-girth limit`);
+  }
+  return parcel;
 }
 
 const GRAMS_PER_OUNCE = 28.349523125;
@@ -78,10 +85,14 @@ function shipmentRequest(parcel, destinationZip) {
   };
 }
 
-/** @returns {number|null} the Ground Advantage price in dollars */
+/** @returns {number|null} the Ground Advantage price in dollars, or null if missing or not a number */
 function groundAdvantageAmount(shipment) {
   const rate = (shipment.rates || []).find((r) => r.servicelevel?.token === 'usps_ground_advantage');
-  return rate ? Number(rate.amount) : null;
+  // Shippo sends amounts as decimal strings; Number('') and Number(null)
+  // are 0, so anything blank counts as missing rather than free.
+  const raw = rate?.amount;
+  const amount = (typeof raw === 'string' && raw.trim() !== '') || typeof raw === 'number' ? Number(raw) : NaN;
+  return Number.isFinite(amount) ? amount : null;
 }
 
 function suggestedShipping(farAmount) {

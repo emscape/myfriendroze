@@ -82,6 +82,17 @@ describe('handleEstimateShipping', () => {
     await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
   });
 
+  it('reports a success response with an unreadable body as unavailable', async () => {
+    const badJson = { ok: true, status: 201, json: async () => { throw new SyntaxError('Unexpected token'); } };
+    const fetchImpl = vi.fn().mockResolvedValue(badJson);
+    await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('reports a non-numeric Ground Advantage amount as unavailable, never a NaN suggestion', async () => {
+    const fetchImpl = shippoFake({ '90012': '5.98', '10001': 'n/a', '96813': '15.75' });
+    await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });
+  });
+
   it('reports a missing Ground Advantage rate as unavailable', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(201, { rates: [] }));
     await expect(call({ ...ADMIN, data: BOX }, { fetchImpl })).rejects.toMatchObject({ code: 'unavailable' });

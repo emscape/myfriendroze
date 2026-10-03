@@ -37,7 +37,14 @@ async function quote(parcel, destination, { apiKey, fetchImpl, logger }) {
     logger.error('Shippo returned HTTP', response.status);
     throw new HttpsError('unavailable', UNAVAILABLE);
   }
-  const amount = groundAdvantageAmount(await response.json());
+  let shipment;
+  try {
+    shipment = await response.json();
+  } catch (error) {
+    logger.error('Shippo returned an unreadable response:', error.message);
+    throw new HttpsError('unavailable', UNAVAILABLE);
+  }
+  const amount = groundAdvantageAmount(shipment);
   if (amount === null) {
     logger.warn('Shippo returned no Ground Advantage rate for', destination.zip);
     throw new HttpsError('unavailable', UNAVAILABLE);
