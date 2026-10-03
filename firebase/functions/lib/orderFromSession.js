@@ -46,7 +46,13 @@ function shippingField(session, shippingRate, shippingDetails) {
   return {
     method,
     label: shippingRate?.display_name ?? null,
-    amount: centsToDollars(session.shipping_cost.amount_total),
+    // Before tax, like amountSubtotal on items: any tax on shipping is
+    // already in the order's tax total.
+    amount: centsToDollars(
+      Number.isInteger(session.shipping_cost.amount_subtotal)
+        ? session.shipping_cost.amount_subtotal
+        : session.shipping_cost.amount_total
+    ),
     outsideLocalArea: method === 'local_pickup' && !isLocalZip(shippingDetails?.address?.postal_code),
   };
 }

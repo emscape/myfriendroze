@@ -99,6 +99,18 @@ describe('sessionToOrderData', () => {
     expect(order.shipping).toEqual({ method: 'shipping', label: 'Shipping', amount: 10, outsideLocalArea: false });
   });
 
+  it('records shipping before tax, since any tax on it is already in the sales tax total', () => {
+    const session = baseSession({
+      shipping_cost: { amount_subtotal: 1000, amount_tax: 73, amount_total: 1073, shipping_rate: 'shr_123' },
+      total_details: { amount_tax: 73 },
+    });
+
+    const order = sessionToOrderData(session, lineItems, { id: 'shr_123', metadata: { method: 'shipping' } });
+
+    expect(order.shipping.amount).toBe(10);
+    expect(order.tax).toBe(0.73);
+  });
+
   it('tells a free local pickup apart from free shipping by the method, not the amount', () => {
     const session = baseSession({ shipping_cost: { amount_total: 0, shipping_rate: 'shr_456' } });
     const shippingRate = { id: 'shr_456', display_name: 'Local pickup — Los Angeles', metadata: { method: 'local_pickup' } };
