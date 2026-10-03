@@ -21,7 +21,7 @@ describe('shipping policy', () => {
 
   it('summarizes the options in one line', () => {
     expect(shippingSummary()).toBe(
-      'Free shipping on orders of $50 or more, $10 under $50. Free local pickup in Los Angeles; contact us for local delivery options.'
+      'Free shipping when your items total $50 or more; $10 shipping otherwise. Free local pickup in Los Angeles; contact us for local delivery options.'
     );
   });
 });

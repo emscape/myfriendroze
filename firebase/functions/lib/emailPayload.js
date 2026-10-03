@@ -54,10 +54,18 @@ function formatShippingLine(shipping) {
   return shipping ? `<br>${shippingLabel(shipping)} — $${shipping.amount.toFixed(2)}` : '';
 }
 
+// The order-confirmation template shows SHIPPING_HEADING and SHIPPING_NOTE
+// in its shipping section (it has no conditionals), so pickup orders don't
+// read as being shipped.
+const MAIL_NOTE =
+  "We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.";
+const PICKUP_NOTE = "We'll email you to arrange a pickup time in Los Angeles.";
+
 /**
  * @param {ReturnType<typeof import('./orderFromSession.js').sessionToOrderData>} order
  */
 function orderDataToConfirmationEmailParams(order) {
+  const pickup = order.shipping?.method === 'local_pickup';
   return {
     EMAIL: order.customer.email,
     ORDER_NUMBER: order.stripeSessionId,
@@ -65,8 +73,10 @@ function orderDataToConfirmationEmailParams(order) {
     CUSTOMER_NAME: order.customer.name ? escapeHtml(order.customer.name) : '',
     ITEMS: order.items,
     ITEMS_TEXT: formatItemsText(order.items) + formatShippingLine(order.shipping),
-    SHIPPING_ADDRESS: formatAddress(order.shippingAddress),
+    SHIPPING_ADDRESS: pickup ? '' : formatAddress(order.shippingAddress),
     SHIPPING_METHOD: order.shipping ? shippingLabel(order.shipping) : '',
+    SHIPPING_HEADING: pickup ? 'Local pickup' : 'Shipping to:',
+    SHIPPING_NOTE: pickup ? PICKUP_NOTE : MAIL_NOTE,
   };
 }
 

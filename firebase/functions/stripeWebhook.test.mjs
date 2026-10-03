@@ -168,6 +168,27 @@ describe('handleStripeWebhook', () => {
     expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
   });
 
+  it('still writes the order, with the shipping amount, when the shipping rate lookup fails', async () => {
+    const event = checkoutCompletedEvent({ shipping_cost: { amount_total: 1000, shipping_rate: 'shr_gone' } });
+    const db = fakeDb();
+    const stripeClient = fakeStripeClient();
+    stripeClient.shippingRates = { retrieve: vi.fn().mockRejectedValue(new Error('No such shipping rate')) };
+    const sendConfirmationEmail = vi.fn().mockResolvedValue(undefined);
+    const res = fakeRes();
+
+    await handleStripeWebhook(signedRequest(event), res, {
+      stripeClient,
+      webhookSecret: WEBHOOK_SECRET,
+      db,
+      sendConfirmationEmail,
+      serverTimestamp: () => 'SERVER_TIMESTAMP',
+    });
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(db.state.written.shipping).toEqual({ method: null, label: null, amount: 10, outsideLocalArea: false });
+    expect(sendConfirmationEmail).toHaveBeenCalledTimes(1);
+  });
+
   it('does not look up a shipping option when the checkout had none', async () => {
     const db = fakeDb();
     const stripeClient = fakeStripeClient();

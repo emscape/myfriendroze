@@ -101,8 +101,17 @@ async function handleStripeWebhook(
   });
   // The session carries only the chosen shipping rate's id; its metadata
   // says which option it was (free shipping and pickup both cost $0).
+  // A failed lookup must not block the order: it's saved with the shipping
+  // amount and no method rather than left for Stripe to retry.
   const shippingRateId = session.shipping_cost?.shipping_rate;
-  const shippingRate = shippingRateId ? await stripeClient.shippingRates.retrieve(shippingRateId) : null;
+  let shippingRate = null;
+  if (shippingRateId) {
+    try {
+      shippingRate = await stripeClient.shippingRates.retrieve(shippingRateId);
+    } catch (error) {
+      logger.warn('Could not look up the shipping rate for session', session.id, error.message);
+    }
+  }
   const orderData = sessionToOrderData(session, lineItemsResponse.data, shippingRate);
   if (orderData.shipping?.outsideLocalArea) {
     // Session id only: no customer details in logs.

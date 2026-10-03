@@ -19,6 +19,10 @@ const {
   formatAddressRaw,
 } = require('./emailPayload.js');
 
+// The order-confirmation template's existing copy for mailed orders.
+const MAIL_NOTE =
+  "We are currently summoning the energy to box it up. You'll get a tracking link once we achieve this miracle — don't worry, miracles occur with more rapidity than you might think.";
+
 function fullOrder(overrides = {}) {
   return {
     status: 'paid',
@@ -55,7 +59,31 @@ describe('orderDataToConfirmationEmailParams', () => {
       ITEMS_TEXT: 'Blue Branches (x1) — $70.00',
       SHIPPING_ADDRESS: '123 Main St, Springfield, CA 90210, US',
       SHIPPING_METHOD: '',
+      SHIPPING_HEADING: 'Shipping to:',
+      SHIPPING_NOTE: MAIL_NOTE,
     });
+  });
+
+  it('tells a pickup customer pickup will be arranged, without a "Shipping to" address', () => {
+    const order = fullOrder({
+      shipping: { method: 'local_pickup', label: 'Local pickup — Los Angeles', amount: 0, outsideLocalArea: false },
+    });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Local pickup');
+    expect(params.SHIPPING_NOTE).toBe("We'll email you to arrange a pickup time in Los Angeles.");
+    expect(params.SHIPPING_ADDRESS).toBe('');
+  });
+
+  it('keeps the shipping wording for mailed orders', () => {
+    const order = fullOrder({ shipping: { method: 'free_shipping', label: 'Free shipping', amount: 0 } });
+
+    const params = orderDataToConfirmationEmailParams(order);
+
+    expect(params.SHIPPING_HEADING).toBe('Shipping to:');
+    expect(params.SHIPPING_NOTE).toBe(MAIL_NOTE);
+    expect(params.SHIPPING_ADDRESS).toBe('123 Main St, Springfield, CA 90210, US');
   });
 
   it('adds the shipping option and its cost to ITEMS_TEXT and SHIPPING_METHOD', () => {
