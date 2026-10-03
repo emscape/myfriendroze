@@ -266,27 +266,43 @@ describe('handleCreateCheckoutSession', () => {
 
     const FERN = { title: 'Fern', price: 12, isActive: true, category: 'plant' };
 
-    it('offers $10 shipping and free pickup on an order under $50 for a Los Angeles ZIP', async () => {
-      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: '90065' })).toEqual([
+    const BOWL = { title: 'Blue Bowl', price: 20, isActive: true, category: 'pottery' };
+
+    it('offers $10 shipping and free pickup on a one-item order under $50 for a Los Angeles ZIP', async () => {
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 1 }], { localZip: '90065' })).toEqual([
         ['shipping', 1000],
         ['local_pickup', 0],
       ]);
     });
 
     it('offers only shipping when no ZIP is sent', async () => {
-      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }])).toEqual([['shipping', 1000]]);
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 1 }])).toEqual([['shipping', 1000]]);
     });
 
     it('offers only shipping for a ZIP outside Los Angeles', async () => {
-      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: '10001' })).toEqual([
+      expect(await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 1 }], { localZip: '10001' })).toEqual([
         ['shipping', 1000],
       ]);
     });
 
     it('ignores a malformed ZIP rather than rejecting the checkout', async () => {
       expect(
-        await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2 }], { localZip: { zip: '90065' } })
+        await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 1 }], { localZip: { zip: '90065' } })
       ).toEqual([['shipping', 1000]]);
+    });
+
+    it("adds the bundle surcharge from each product's Firestore category", async () => {
+      // $10 base covers the bowl; two ferns add $2 each.
+      const methods = await shippingMethodsFor({ bowl: BOWL, fern: FERN }, [
+        { sku: 'fern', qty: 2 },
+        { sku: 'bowl', qty: 1 },
+      ]);
+      expect(methods).toEqual([['shipping', 1400]]);
+    });
+
+    it('ignores a client-supplied category when pricing the bundle', async () => {
+      const methods = await shippingMethodsFor({ fern: FERN }, [{ sku: 'fern', qty: 2, category: 'pottery' }]);
+      expect(methods).toEqual([['shipping', 1200]]);
     });
 
     it('ships free once quantity brings the Firestore-priced subtotal to $50', async () => {

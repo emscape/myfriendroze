@@ -153,9 +153,13 @@ async function handleCreateCheckoutSession(
       expires_at: expiresAt,
       line_items: lineItems,
       shipping_address_collection: { allowed_countries: ['US'] },
-      // From the Firestore-priced line items, so a tampered request can't
-      // unlock free shipping.
-      shipping_options: buildShippingOptions(subtotalCents(lineItems), { local: isLocalZip(localZip) }),
+      // From the Firestore-priced line items and Firestore categories, so a
+      // tampered request can't unlock free or cheaper shipping.
+      shipping_options: buildShippingOptions(
+        subtotalCents(lineItems),
+        items.map(({ sku, qty }) => ({ category: catalog.get(sku).category, quantity: qty })),
+        { local: isLocalZip(localZip) }
+      ),
       phone_number_collection: { enabled: true },
       custom_fields: [
         {

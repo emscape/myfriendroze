@@ -3,7 +3,7 @@ export const prerender = true;
 
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
-import { FREE_SHIPPING_THRESHOLD, FLAT_SHIPPING } from '../lib/shipping-policy.js';
+import { FREE_SHIPPING_THRESHOLD, FLAT_SHIPPING, BUNDLE_SURCHARGE } from '../lib/shipping-policy.js';
 
 const CLAIMS_EMAIL = 'myfriendroze@gmail.com';
 const SHIPPING_EMAIL = 'myfriendroze.store@gmail.com';
@@ -45,8 +45,9 @@ const SHIPPING_EMAIL = 'myfriendroze.store@gmail.com';
         </li>
         <li>
           <strong>Shipping Cost:</strong> Free when your items total ${FREE_SHIPPING_THRESHOLD} or
-          more (before shipping). Otherwise a flat ${FLAT_SHIPPING}, however many pieces are in
-          your order.
+          more (before shipping). Otherwise ${FLAT_SHIPPING} for your first item, plus
+          ${BUNDLE_SURCHARGE.plant} for each additional plant and ${BUNDLE_SURCHARGE.pottery} for
+          each additional ceramic piece.
         </li>
         <li>
           <strong>Local Pickup:</strong> Free, for Los Angeles County addresses only. Enter your ZIP

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import {
   FREE_SHIPPING_THRESHOLD,
   FLAT_SHIPPING,
+  BUNDLE_SURCHARGE,
   shippingSummary,
 } from './shipping-policy.js';
 
@@ -15,13 +16,15 @@ describe('shipping policy', () => {
   it('matches the amounts checkout charges', () => {
     expect(FREE_SHIPPING_THRESHOLD * 100).toBe(server.FREE_SHIPPING_THRESHOLD_CENTS);
     expect(FLAT_SHIPPING * 100).toBe(server.FLAT_SHIPPING_CENTS);
+    expect(BUNDLE_SURCHARGE.plant * 100).toBe(server.BUNDLE_SURCHARGE_CENTS.plant);
+    expect(BUNDLE_SURCHARGE.pottery * 100).toBe(server.BUNDLE_SURCHARGE_CENTS.pottery);
     // Local delivery is arranged by email, not sold at checkout.
     expect(server).not.toHaveProperty('LOCAL_DELIVERY_CENTS');
   });
 
   it('summarizes the options in one line', () => {
     expect(shippingSummary()).toBe(
-      'Free shipping when your items total $50 or more; $10 shipping otherwise. Free local pickup in Los Angeles; contact us for local delivery options.'
+      'Free shipping when your items total $50 or more. Otherwise $10 for the first item, plus $2 for each additional plant and $5 for each additional ceramic piece. Free local pickup in Los Angeles; contact us for local delivery options.'
     );
   });
 });
