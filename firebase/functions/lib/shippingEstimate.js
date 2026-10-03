@@ -41,6 +41,10 @@ function positive(value, field, max) {
   return value;
 }
 
+function sidesLongestFirst(parcel) {
+  return [parcel.lengthIn, parcel.widthIn, parcel.heightIn].sort((a, b) => b - a);
+}
+
 /**
  * @param {unknown} data - the callable's request data
  * @returns {{weightGrams: number, lengthIn: number, widthIn: number, heightIn: number}}
@@ -57,8 +61,8 @@ function validateParcel(data) {
     heightIn: positive(data.heightIn, 'heightIn', MAX_SIDE_IN),
   };
   // USPS measures length as the longest side; girth is twice the other two.
-  const [longest, ...others] = [parcel.lengthIn, parcel.widthIn, parcel.heightIn].sort((a, b) => b - a);
-  if (longest + 2 * (others[0] + others[1]) > MAX_LENGTH_PLUS_GIRTH_IN) {
+  const [longest, middle, shortest] = sidesLongestFirst(parcel);
+  if (longest + 2 * (middle + shortest) > MAX_LENGTH_PLUS_GIRTH_IN) {
     throw new ParcelError(`Box is over the USPS ${MAX_LENGTH_PLUS_GIRTH_IN}-inch length-plus-girth limit`);
   }
   return parcel;
@@ -68,15 +72,18 @@ function validateParcel(data) {
 // Weight goes in ounces rounded to hundredths: the admin app stores grams
 // converted from lb/oz with float noise, and USPS rounds any fraction of a
 // pound up, so 3 lb stored as 1360.78 g would otherwise be priced as 4 lb.
+// Sides go longest first: USPS treats the longest side as the length, and
+// the admin app's fields are height/width/depth in no particular order.
 function shipmentRequest(parcel, destinationZip) {
+  const [length, width, height] = sidesLongestFirst(parcel);
   return {
     address_from: { zip: ORIGIN_ZIP, country: 'US' },
     address_to: { zip: destinationZip, country: 'US' },
     parcels: [
       {
-        length: String(parcel.lengthIn),
-        width: String(parcel.widthIn),
-        height: String(parcel.heightIn),
+        length: String(length),
+        width: String(width),
+        height: String(height),
         distance_unit: 'in',
         weight: (parcel.weightGrams / GRAMS_PER_OUNCE).toFixed(2),
         mass_unit: 'oz',

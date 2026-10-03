@@ -70,6 +70,11 @@ describe('shipmentRequest', () => {
   // The admin app stores weights converted from lb/oz with float noise;
   // USPS rounds any fraction of a pound up, so 3 lb stored as 1360.78 g
   // must not be quoted as 4 lb.
+  it('sends the sides longest first, whichever field each was entered in', () => {
+    const request = shipmentRequest({ ...BOX, lengthIn: 8, widthIn: 12, heightIn: 10 }, '10001');
+    expect(request.parcels[0]).toMatchObject({ length: '12', width: '10', height: '8' });
+  });
+
   it('sends the weight in ounces rounded to hundredths', () => {
     const request = shipmentRequest({ ...BOX, weightGrams: 1360.7777 }, '10001');
     expect(request.parcels[0].weight).toBe('48.00');
