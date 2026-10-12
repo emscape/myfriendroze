@@ -5,8 +5,8 @@ This repository contains two kinds of material under different terms.
 The source code in this repository (including everything under astro/src,
 firebase/functions, and the build, deploy and configuration files) is
 licensed under the PolyForm Noncommercial License 1.0.0 below, except for
-the brand assets and content described in section 2. Commercial use of the
-code requires prior written permission.
+the brand assets and content described in section 2, wherever they appear.
+Commercial use of the code requires prior written permission.
 
 Required Notice: Copyright (c) 2025-2026 emscape
 
@@ -96,5 +96,11 @@ used, copied, modified or distributed without prior written permission:
   astro/public and any product photos served by the site)
 - Product names, descriptions, prices and data (including
   products_export.csv), event listings, and the site's written copy
+
+These exclusions apply wherever the material appears in the repository,
+including text, data and markup embedded in source files. For example, the
+event entries in astro/src/data/events.js and the prose in the pages under
+astro/src/pages are content, not code: the surrounding code is covered by
+section 1, the content is not.
 
 If you reuse the code, replace these with your own branding and content.
