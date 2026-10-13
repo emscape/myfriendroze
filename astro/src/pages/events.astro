@@ -81,21 +81,6 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
 </Layout>
 
 <style>
-  .page-hero {
-    background-color: var(--color-background);
-    text-align: center;
-    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
-  }
-
-  .page-hero__title {
-    font-family: var(--font-heading-family);
-    font-size: clamp(2rem, 4vw, 3.6rem);
-    font-weight: 600;
-    line-height: 1.2;
-    margin: 0;
-    color: var(--color-foreground);
-  }
-
   .events-list {
     background-color: var(--color-background);
   }
@@ -161,10 +146,6 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
     font-size: calc(1.6rem * var(--font-body-scale));
     color: var(--color-foreground);
     opacity: 0.7;
-  }
-
-  .section-padding {
-    padding: var(--spacing-sections) 0;
   }
 
   .page-width {
