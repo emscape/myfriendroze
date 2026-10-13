@@ -223,3 +223,4 @@ The following Serena think tools now include mock verification checks:
 | Error Simulation | Does mock raise contract-defined errors? | Ignores errors |
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->

@@ -420,3 +420,4 @@ When designing a prompt:
 9. **Test and iterate**: Measure actual compliance and reliability, not assumed effectiveness
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->

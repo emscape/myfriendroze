@@ -148,3 +148,4 @@ If ANY integration point lacks a SEQ clause → BLOCK → return to /design-by-c
 - **Sequential Thinking**: For complex reasoning
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->

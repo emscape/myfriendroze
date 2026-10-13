@@ -325,3 +325,4 @@ Accuracy > adversarial tone. Your job is truth, not criticism.
 - `~/.claude/skills/design-by-contract/SKILL.md` - Contract Granularity Framework (Tier 1/1.5/2/3)
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->
