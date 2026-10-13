@@ -105,7 +105,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
         --color-background-2: #faf9e1;
         --color-foreground: #3d081b;
         --color-button: #acdc9e;
-        --color-button-text: #f2efdd;
+        --color-button-text: #3d081b;
         --color-secondary-button-text: #3d081b;
         --color-shadow: #3d081b;
         --color-accent: #acdc9e;
@@ -161,9 +161,12 @@ const canonical = canonicalUrl(Astro.url.pathname);
         display: none !important;
       }
 
+      /* Rows: header, main, footer. The skip link is absolutely positioned,
+         so it takes no row. Main gets the slack, keeping the footer at the
+         bottom of the window on short pages. */
       body {
         display: grid;
-        grid-template-rows: auto auto 1fr auto;
+        grid-template-rows: auto 1fr auto;
         grid-template-columns: 100%;
         min-height: 100%;
         margin: 0;
@@ -351,36 +354,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
         top: 0.8rem;
       }
 
-      /* Button styles */
-      .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 1rem 2rem;
-        background-color: var(--color-button);
-        color: var(--color-button-text);
-        text-decoration: none;
-        border: 0.2rem solid transparent;
-        border-radius: var(--buttons-radius);
-        font-family: var(--font-body-family);
-        font-size: 1.4rem;
-        font-weight: 500;
-        line-height: calc(1 + 0.2 / var(--font-body-scale));
-        cursor: pointer;
-        transition: all 0.2s ease;
-        box-shadow: 0 var(--buttons-shadow-vertical-offset) var(--buttons-shadow-blur) rgba(var(--color-shadow), var(--buttons-shadow-opacity));
-      }
-
-      .button:hover {
-        opacity: 0.85;
-        transform: translateY(-0.1rem);
-      }
-
-      .button--secondary {
-        background-color: transparent;
-        color: var(--color-secondary-button-text);
-        border-color: currentColor;
-      }
+      /* Button styles live in styles/global.css so pages can use them. */
 
       /* Form styles */
       .field__input {
@@ -487,7 +461,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
             <div class="footer__payment">
               <span class="visually-hidden">Payment methods</span>
               <div class="footer__payment-list">
-                American Express • Apple Pay • Diners Club • Discover • Google Pay • Mastercard • PayPal • Shop Pay • Venmo • Visa
+                American Express • Apple Pay • Diners Club • Discover • Google Pay • Mastercard • Visa
               </div>
             </div>
             <p class="footer__copyright">

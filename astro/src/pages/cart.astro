@@ -7,6 +7,7 @@ import { fetchLiveProducts } from '../lib/products-live.js';
 import { getFirestoreDb } from '../lib/firestore-admin.js';
 import { catalogForCart } from '../lib/cart-view.js';
 import { shippingSummary } from '../lib/shipping-policy.js';
+import { SHOP_CATEGORIES } from '../lib/shop-categories.js';
 
 // The cart itself lives in the visitor's browser, so this page ships the
 // live catalog (prices, stock, categories) and the script joins the two.
@@ -41,9 +42,15 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
         </p>
       )}
 
-      <p class="cart__empty" data-cart-empty hidden>
-        Your cart is empty. <a href="/shop">Browse the shop</a>
-      </p>
+      <div class="cart__empty" data-cart-empty hidden>
+        <p class="cart__empty-text">Your cart is empty.</p>
+        <p class="cart__empty-text">Take a look around:</p>
+        <ul class="cart__empty-shops" role="list">
+          {SHOP_CATEGORIES.map(({ path, label }) => (
+            <li><a href={path} class="button">{label}</a></li>
+          ))}
+        </ul>
+      </div>
 
       <ul class="cart__lines" data-cart-lines></ul>
 
@@ -72,7 +79,7 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
           />
           <p id="cart-local-hint" class="cart__note" data-cart-local-hint aria-live="polite"></p>
         </div>
-        <button type="button" class="cart__checkout" data-cart-checkout disabled={loadFailed}>
+        <button type="button" class="button cart__checkout" data-cart-checkout disabled={loadFailed}>
           check out
         </button>
         <p class="cart__note">{shippingSummary()}</p>
@@ -93,36 +100,33 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
 </Layout>
 
 <style>
-  /* Same title treatment as the small print, events and gallery pages. */
-  .page-hero {
-    background-color: var(--color-background);
-    text-align: center;
-    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
-  }
-
-  .page-hero__title {
-    font-family: var(--font-heading-family);
-    font-size: clamp(2rem, 4vw, 3.6rem);
-    font-weight: 600;
-    line-height: 1.2;
-    margin: 0;
-    color: var(--color-foreground);
-  }
-
   .cart__wrapper {
     max-width: 760px;
     margin: 0 auto;
   }
 
-  .cart__empty,
   .cart__notice {
     font-size: 1.6rem;
     margin: 0 0 2rem;
   }
 
-  .cart__empty a {
-    color: var(--color-foreground);
-    font-weight: 600;
+  .cart__empty {
+    text-align: center;
+  }
+
+  .cart__empty-text {
+    font-size: 1.8rem;
+    margin: 0 0 1.2rem;
+  }
+
+  .cart__empty-shops {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1.6rem;
+    list-style: none;
+    margin: 2.4rem 0 0;
+    padding: 0;
   }
 
   .cart__notice {
@@ -185,36 +189,12 @@ const catalogJson = JSON.stringify(catalog).replace(/</g, '\\u003c');
     display: none;
   }
 
+  /* Base look comes from the global .button. */
   .cart__checkout {
     width: 100%;
     padding: 1.4rem 2rem;
-    background-color: var(--color-button);
-    color: var(--color-foreground);
-    border: 0.2rem solid var(--color-foreground);
-    border-radius: var(--buttons-radius);
-    font: inherit;
     font-size: 1.7rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    box-shadow: 0 0.3rem 0 var(--color-foreground);
-    transition: background-color 0.2s ease, color 0.2s ease;
-  }
-
-  .cart__checkout:hover:not(:disabled),
-  .cart__checkout:focus-visible {
-    background-color: var(--color-foreground);
-    color: var(--color-background);
-  }
-
-  .cart__checkout:focus-visible {
-    outline: 0.2rem solid var(--color-foreground);
-    outline-offset: 0.4rem;
-  }
-
-  .cart__checkout:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .cart__message {

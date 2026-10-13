@@ -34,6 +34,72 @@
   }
 }
 
+/* Vertical rhythm between page sections */
+.section-padding {
+  padding: var(--spacing-sections) 0;
+}
+
+/* Page titles (cart, events, gallery, small print, order pages) */
+.page-hero {
+  background-color: var(--color-background);
+  text-align: center;
+  border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+}
+
+.page-hero__title {
+  font-family: var(--font-heading-family);
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--color-foreground);
+}
+
+/* Buttons. Global so pages can use class="button" without their own copy;
+   matches the product page's add-to-cart button. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem 2.4rem;
+  background-color: var(--color-button);
+  color: var(--color-button-text);
+  border: 0.2rem solid var(--color-foreground);
+  border-radius: var(--buttons-radius);
+  font: inherit;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 0.3rem 0 var(--color-foreground);
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.button:hover:not(:disabled),
+.button:focus-visible {
+  background-color: var(--color-foreground);
+  color: var(--color-background);
+  transform: translateY(-0.2rem);
+  box-shadow: 0 0.5rem 0 var(--color-button);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0.1rem);
+  box-shadow: 0 0.1rem 0 var(--color-button);
+}
+
+.button:focus-visible {
+  outline: 0.2rem solid var(--color-foreground);
+  outline-offset: 0.4rem;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Visually hidden but accessible to screen readers */
 .visually-hidden {
   position: absolute !important;
