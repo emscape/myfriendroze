@@ -123,7 +123,7 @@ The newsletter signup uses ConvertKit for professional email management:
 
 ## 📄 License
 
-The source code is available under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0): you may read, run and adapt it for noncommercial purposes, but commercial use requires prior written permission. The myfriendroze name, logos, images, product content and site copy are not covered by that license, and all rights to them are reserved. See [LICENSE](LICENSE) for details.
+The source code is available under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0): you may read, run and adapt it for noncommercial purposes, but commercial use requires prior written permission. The myfriendroze name, logos, images, product content and site copy are not covered by that license, and all rights to them are reserved. The AI development tooling (`.claude/`, `AGENTS.md`, `CLAUDE.md`) is third-party material used with permission and is not licensed by this repository. See [LICENSE](LICENSE) for details.
 
 ## 📞 Contact
 

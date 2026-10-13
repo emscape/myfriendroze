@@ -1,11 +1,12 @@
-This repository contains two kinds of material under different terms.
+This repository contains three kinds of material under different terms.
 
 1. SOURCE CODE
 
 The source code in this repository (including everything under astro/src,
 firebase/functions, and the build, deploy and configuration files) is
 licensed under the PolyForm Noncommercial License 1.0.0 below, except for
-the brand assets and content described in section 2, wherever they appear.
+the brand assets and content described in section 2, wherever they appear,
+and the third-party material described in section 3.
 Commercial use of the code requires prior written permission.
 
 Required Notice: Copyright (c) 2025-2026 emscape
@@ -104,3 +105,17 @@ astro/src/pages are content, not code: the surrounding code is covered by
 section 1, the content is not.
 
 If you reuse the code, replace these with your own branding and content.
+
+3. THIRD-PARTY MATERIAL
+
+Sections 1 and 2 cover only material owned by their licensors. The
+following belong to their respective owners, are used with permission or
+under their own licenses, and are NOT licensed to you by this file:
+
+- The AI development tooling: everything under .claude/, plus AGENTS.md
+  and CLAUDE.md. These are derived from a third-party framework whose
+  owner reserves all rights, and are included in this repository with
+  that owner's permission.
+- Any other file that carries its own copyright or license notice.
+- Third-party dependencies installed by npm, which remain under their own
+  licenses.
