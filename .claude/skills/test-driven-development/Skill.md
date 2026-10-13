@@ -255,3 +255,4 @@ After GREEN + COMMIT + REFACTOR phases, MANDATORY AI Panel review per CL5:
 *This skill executes constitutional principles CL6 (TDD Enforcement), CL2 (Completion Gates), CL5 (Human Approval), QS1 (TDD/BDD Standards), and workflow macros M4-M5.*
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->

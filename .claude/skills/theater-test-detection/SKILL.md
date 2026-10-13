@@ -265,3 +265,4 @@ Before submitting tests, self-audit:
 **Cross-Reference**: For comprehensive theater detection (spec-level, mock, contract, integration), see unified `~/.claude/skills/theater-detection/SKILL.md`.
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->
+<!-- Adapted with permission by Emily Anderson, 2026. -->
