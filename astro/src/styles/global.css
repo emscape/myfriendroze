@@ -43,7 +43,7 @@
 .page-hero {
   background-color: var(--color-background);
   text-align: center;
-  border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+  border-bottom: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
 }
 
 .page-hero__title {
@@ -100,6 +100,24 @@
   cursor: not-allowed;
 }
 
+/* Text inputs. Global for the same reason as .button: a scoped rule in
+   Layout.astro never reaches inputs rendered by pages. */
+.field__input {
+  padding: 1rem 1.5rem;
+  border: 0.2rem solid color-mix(in srgb, var(--color-foreground) 20%, transparent);
+  border-radius: var(--inputs-radius);
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body-family) !important;
+  font-size: 1.4rem;
+  width: 100%;
+}
+
+.field__input:focus {
+  border-color: var(--color-button);
+  outline: none;
+}
+
 /* Visually hidden but accessible to screen readers */
 .visually-hidden {
   position: absolute !important;
@@ -141,5 +159,5 @@ body.user-is-tabbing *:focus {
 
 /* Announcement bar */
 .utility-bar {
-  border-bottom: 1px solid rgba(var(--color-foreground), 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
 }
