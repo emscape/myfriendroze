@@ -110,9 +110,9 @@ const { product, showQuickOrder = true } = Astro.props;
     height: 100%;
     background: var(--color-background);
     border-radius: var(--card-corner-radius);
-    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border: 0.1rem solid color-mix(in srgb, var(--color-foreground) 20%, transparent);
     overflow: hidden;
-    box-shadow: var(--card-shadow-horizontal-offset) var(--card-shadow-vertical-offset) var(--card-shadow-blur) rgba(var(--color-shadow), var(--card-shadow-opacity));
+    box-shadow: var(--card-shadow-horizontal-offset) var(--card-shadow-vertical-offset) var(--card-shadow-blur) color-mix(in srgb, var(--color-shadow) calc(var(--card-shadow-opacity) * 100%), transparent);
     transition: transform 0.3s ease, box-shadow 0.3s ease;
   }
 

@@ -48,7 +48,7 @@
   /* Footer styles */
   .site-footer {
     background-color: var(--color-background);
-    border-top: 0.1rem solid rgba(var(--color-foreground), 0.08);
+    border-top: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
     margin-top: var(--spacing-sections);
   }
   
@@ -72,7 +72,7 @@
     text-align: center;
     gap: 1.5rem;
     padding-top: 2rem;
-    border-top: 0.1rem solid rgba(var(--color-foreground), 0.08);
+    border-top: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
   }
   
   .footer__list-social {
@@ -114,7 +114,7 @@
     justify-content: center;
     gap: 0.5rem 1rem;
     font-size: 1.2rem;
-    color: rgba(var(--color-foreground), 0.7);
+    color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
   }
   
   .footer__payment-item::after {
@@ -130,7 +130,7 @@
   .footer__copyright {
     margin: 0;
     font-size: 1.2rem;
-    color: rgba(var(--color-foreground), 0.7);
+    color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
   }
   
   .footer__copyright a {

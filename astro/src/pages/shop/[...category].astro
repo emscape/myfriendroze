@@ -483,7 +483,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
        margin-bottom already controls. Bottom padding is unrelated
        (space before the border/product grid below), left as-is. */
     padding: 0 0 2rem;
-    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.1);
+    border-bottom: 0.1rem solid color-mix(in srgb, var(--color-foreground) 10%, transparent);
     max-width: var(--page-width);
     margin: 0 auto;
   }
@@ -529,7 +529,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     align-items: center;
     gap: 0.5rem;
     padding: 0.8rem 1.2rem;
-    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border: 0.1rem solid color-mix(in srgb, var(--color-foreground) 20%, transparent);
     border-radius: var(--inputs-radius);
     background: var(--color-background);
     cursor: pointer;
@@ -544,7 +544,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   }
 
   .facets-summary:hover {
-    border-color: rgba(var(--color-foreground), 0.4);
+    border-color: color-mix(in srgb, var(--color-foreground) 40%, transparent);
   }
 
   .icon-caret {
@@ -564,7 +564,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
     right: 0;
     z-index: 10;
     background: var(--color-background);
-    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border: 0.1rem solid color-mix(in srgb, var(--color-foreground) 20%, transparent);
     border-radius: var(--inputs-radius);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     margin-top: 0.5rem;
@@ -590,7 +590,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   .facets-checkbox {
     width: 1.6rem;
     height: 1.6rem;
-    border: 0.1rem solid rgba(var(--color-foreground), 0.3);
+    border: 0.1rem solid color-mix(in srgb, var(--color-foreground) 30%, transparent);
     border-radius: 0.2rem;
     background: var(--color-background);
   }
@@ -626,7 +626,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   .facets-sort-select {
     appearance: none;
     padding: 0.8rem 3rem 0.8rem 1.2rem;
-    border: 0.1rem solid rgba(var(--color-foreground), 0.2);
+    border: 0.1rem solid color-mix(in srgb, var(--color-foreground) 20%, transparent);
     border-radius: var(--inputs-radius);
     background: var(--color-background);
     font-size: 1.4rem;
@@ -637,7 +637,7 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
   }
 
   .facets-sort-select:hover {
-    border-color: rgba(var(--color-foreground), 0.4);
+    border-color: color-mix(in srgb, var(--color-foreground) 40%, transparent);
   }
 
   .facets-sort-select:focus {

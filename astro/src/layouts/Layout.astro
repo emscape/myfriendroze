@@ -200,7 +200,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
       .site-header {
         position: relative;
         background-color: var(--color-background);
-        border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.08);
+        border-bottom: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
       }
 
       .header {
@@ -262,7 +262,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
       /* Footer styles */
       .site-footer {
         background-color: var(--color-background);
-        border-top: 0.1rem solid rgba(var(--color-foreground), 0.08);
+        border-top: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
         margin-top: var(--spacing-sections);
       }
 
@@ -286,7 +286,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
         gap: 1rem;
         margin-top: 2rem;
         padding-top: 2rem;
-        border-top: 0.1rem solid rgba(var(--color-foreground), 0.08);
+        border-top: 0.1rem solid color-mix(in srgb, var(--color-foreground) 8%, transparent);
       }
 
       .footer__list-social {
@@ -354,24 +354,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
         top: 0.8rem;
       }
 
-      /* Button styles live in styles/global.css so pages can use them. */
-
-      /* Form styles */
-      .field__input {
-        padding: 1rem 1.5rem;
-        border: 0.2rem solid rgba(var(--color-foreground), 0.2);
-        border-radius: var(--inputs-radius);
-        background-color: var(--color-background);
-        color: var(--color-foreground);
-        font-family: var(--font-body-family) !important;
-        font-size: 1.4rem;
-        width: 100%;
-      }
-
-      .field__input:focus {
-        border-color: var(--color-button);
-        outline: none;
-      }
+      /* Button and input styles live in styles/global.css so pages can use them. */
 
       /* Font loading states and iOS-specific fixes */
       .fonts-loaded body,

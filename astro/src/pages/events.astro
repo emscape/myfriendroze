@@ -101,7 +101,7 @@ const upcomingEvents = getUpcomingEvents([...recurringEvents, ...sortedLiveEvent
     flex-direction: column;
     gap: 0.4rem;
     padding-bottom: 3rem;
-    border-bottom: 0.1rem solid rgba(var(--color-foreground), 0.1);
+    border-bottom: 0.1rem solid color-mix(in srgb, var(--color-foreground) 10%, transparent);
   }
 
   .event-item:last-child {
