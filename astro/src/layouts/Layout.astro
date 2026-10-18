@@ -109,6 +109,8 @@ const canonical = canonicalUrl(Astro.url.pathname);
         --color-secondary-button-text: #3d081b;
         --color-shadow: #3d081b;
         --color-accent: #acdc9e;
+        /* Accent for text on the cream backgrounds; #acdc9e is too light to read (1.35:1). */
+        --color-accent-text: #3c762b;
 
         /* Layout */
         --page-width: 120rem;
@@ -376,11 +378,11 @@ const canonical = canonicalUrl(Astro.url.pathname);
       Skip to content
     </a>
 
-    <!-- Header -->
-    <header class="site-header">
+    <!-- Header (a div: the slotted Header.astro, or the fallback below, supplies the single <header> landmark) -->
+    <div class="site-header">
       <slot name="header">
         <!-- Default header content -->
-        <div class="header page-width">
+        <header class="header page-width">
           <div class="header__wrapper">
             <div class="header__heading">
               <a href="/" class="header__heading-logo">
@@ -411,9 +413,9 @@ const canonical = canonicalUrl(Astro.url.pathname);
               </a>
             </div>
           </div>
-        </div>
+        </header>
       </slot>
-    </header>
+    </div>
     
     <!-- Main Content -->
     <main id="MainContent" class="content-for-layout focus-none" role="main" tabindex="-1">
