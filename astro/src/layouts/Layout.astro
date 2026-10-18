@@ -378,11 +378,11 @@ const canonical = canonicalUrl(Astro.url.pathname);
       Skip to content
     </a>
 
-    <!-- Header (a div: Header.astro supplies the page's single <header> landmark) -->
+    <!-- Header (a div: the slotted Header.astro, or the fallback below, supplies the single <header> landmark) -->
     <div class="site-header">
       <slot name="header">
         <!-- Default header content -->
-        <div class="header page-width">
+        <header class="header page-width">
           <div class="header__wrapper">
             <div class="header__heading">
               <a href="/" class="header__heading-logo">
@@ -413,7 +413,7 @@ const canonical = canonicalUrl(Astro.url.pathname);
               </a>
             </div>
           </div>
-        </div>
+        </header>
       </slot>
     </div>
     
