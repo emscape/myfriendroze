@@ -85,7 +85,7 @@ myfriendroze/
 ├── astro/                  ← Astro static site
 │   ├── src/
 │   │   ├── pages/          ← Routes (index, shop, events, products/[handle])
-│   │   ├── components/     ← Header, ProductCard, Footer
+│   │   ├── components/     ← Header, NavDropdown, ProductCard (the footer lives in layouts/Layout.astro)
 │   │   ├── data/           ← events.js (recurring/hardcoded event entries)
 │   │   ├── layouts/        ← Layout.astro (wraps all pages)
 │   │   └── styles/         ← Global CSS variables and base styles
