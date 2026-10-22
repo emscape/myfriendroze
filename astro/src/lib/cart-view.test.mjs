@@ -76,6 +76,28 @@ describe('buildCartView', () => {
     expect(view.checkoutItems).toEqual([{ sku: 'aloe', qty: 3 }]);
   });
 
+  // The live category decides it, so a plant down to its last one isn't
+  // labelled one of a kind just because its limit is 1.
+  it('marks pottery lines one of a kind, but not a plant with one left', () => {
+    const lastAloeCatalog = catalogForCart([PRODUCTS[0], { ...PRODUCTS[3], stockQuantity: 1 }]);
+    const [bowl, aloe] = buildCartView(
+      cartOf([
+        { sku: 'bowl', category: 'plant', qty: 1 },
+        { sku: 'aloe', category: 'plant', qty: 1 },
+      ]),
+      lastAloeCatalog
+    ).lines;
+
+    expect([bowl.oneOfAKind, bowl.maxQty]).toEqual([true, 1]);
+    expect([aloe.oneOfAKind, aloe.maxQty]).toEqual([false, 1]);
+  });
+
+  it('marks a piece missing from the live catalog as not one of a kind', () => {
+    const view = buildCartView(cartOf([{ sku: 'gone', category: 'pottery', qty: 1 }]), catalog);
+
+    expect(view.lines[0].oneOfAKind).toBe(false);
+  });
+
   it('flags a sold-out piece and leaves it out of the checkout and subtotal', () => {
     const view = buildCartView(
       cartOf([

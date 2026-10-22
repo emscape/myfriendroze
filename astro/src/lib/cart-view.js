@@ -4,7 +4,7 @@
 // stored when a piece was added. Money is handled in cents to avoid
 // floating-point drift in totals.
 
-import { maxQtyForProduct } from './cart.js';
+import { isOneOfAKind, maxQtyForProduct } from './cart.js';
 import { normalizeCategory } from './shop-categories.js';
 
 /**
@@ -12,8 +12,8 @@ import { normalizeCategory } from './shop-categories.js';
  *   image: string, inStock: boolean, category: string,
  *   stockQuantity: number | null }} CartCatalogEntry
  * @typedef {{ sku: string, title: string, href: string | null, image: string,
- *   qty: number, maxQty: number, priceCents: number, lineTotalCents: number,
- *   status: 'ok' | 'sold-out' | 'unavailable' }} CartLine
+ *   qty: number, maxQty: number, oneOfAKind: boolean, priceCents: number,
+ *   lineTotalCents: number, status: 'ok' | 'sold-out' | 'unavailable' }} CartLine
  */
 
 /**
@@ -62,6 +62,7 @@ export function buildCartView(cart, catalog) {
         image: '',
         qty: item.qty,
         maxQty: item.qty,
+        oneOfAKind: false,
         priceCents: 0,
         lineTotalCents: 0,
         status: 'unavailable',
@@ -78,6 +79,7 @@ export function buildCartView(cart, catalog) {
       image: product.image,
       qty,
       maxQty,
+      oneOfAKind: isOneOfAKind(product.category),
       priceCents,
       lineTotalCents: status === 'ok' ? priceCents * qty : 0,
       status,
