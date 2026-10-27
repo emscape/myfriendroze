@@ -4,7 +4,7 @@
 // built with textContent/attributes, never innerHTML, so product data can't
 // inject markup.
 
-import { setQuantity, removeFromCart } from './cart.js';
+import { setQuantity, removeFromCart, ONE_OF_A_KIND_NOTE } from './cart.js';
 import { buildCartView, formatPrice, reconcileCart } from './cart-view.js';
 import { loadCart, saveCart, onCartChange, markCartCheckoutStarted } from './cart-store.js';
 import { requestCheckout } from './checkout-client.js';
@@ -51,6 +51,7 @@ function renderLine(line) {
 
   if (line.status === 'ok') {
     info.append(el('p', 'cart-line__detail', `${formatPrice(line.priceCents)} each`));
+    if (line.oneOfAKind) info.append(el('p', 'cart-line__detail', ONE_OF_A_KIND_NOTE));
   } else if (line.status === 'sold-out') {
     info.append(el('p', 'cart-line__detail', 'Sold out'));
   }
@@ -68,8 +69,9 @@ function renderLine(line) {
     }
     label.append(select);
     controls.append(label);
-  } else if (line.status === 'ok') {
-    controls.append(el('span', null, 'one of a kind'));
+  } else if (line.status === 'ok' && !line.oneOfAKind) {
+    // A plant down to its last one; a one-of-a-kind piece's note says so.
+    controls.append(el('span', null, 'last one'));
   }
   const remove = el('button', 'cart-line__remove', 'remove');
   remove.type = 'button';

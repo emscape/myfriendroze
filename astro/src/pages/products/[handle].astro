@@ -681,7 +681,7 @@ const additionalImages = product.images.slice(1);
 </style>
 
 <script>
-  import { addToCart, MAX_CART_ITEMS } from '../../lib/cart.js';
+  import { addToCart, isOneOfAKind, MAX_CART_ITEMS, ONE_OF_A_KIND_NOTE } from '../../lib/cart.js';
   import { loadCart, saveCart } from '../../lib/cart-store.js';
 
   // Image gallery thumbnail switching
@@ -758,12 +758,15 @@ const additionalImages = product.images.slice(1);
         return;
       }
       const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
+      if (isOneOfAKind(form.dataset.productCategory)) {
+        showCartStatus(
+          `${status === 'limited' ? 'This piece is already in your cart.' : 'Added to your cart.'} ${ONE_OF_A_KIND_NOTE}`
+        );
+        return;
+      }
       showCartStatus(
         status === 'limited'
-          ? // A plant with one left also stops at 1, but isn't one of a kind.
-            inCart === 1 && form.dataset.productCategory !== 'plant'
-            ? 'This one-of-a-kind piece is in your cart.'
-            : `Your cart has the most you can order (${inCart}).`
+          ? `Your cart has the most you can order (${inCart}).`
           : inCart === 1
             ? 'Added to your cart.'
             : `Added. Your cart has ${inCart}.`

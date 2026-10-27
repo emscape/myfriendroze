@@ -31,6 +31,21 @@ export function maxQtyForCategory(category) {
 }
 
 /**
+ * Whether a category's pieces are one of a kind. Only pottery and "other"
+ * are; a plant with one left is still a plant.
+ * @param {unknown} category
+ * @returns {boolean}
+ */
+export function isOneOfAKind(category) {
+  return maxQtyForCategory(category) === 1;
+}
+
+// Shown wherever a one-of-a-kind piece goes into or sits in the cart. A
+// piece is held only while its checkout is open
+// (firebase/functions/lib/checkoutHolds.js), never just for being in a cart.
+export const ONE_OF_A_KIND_NOTE = "One of a kind: adding it to your cart doesn't hold it. It's yours once you check out.";
+
+/**
  * Most of one product a cart can hold, given its live stock count (plants
  * may have one; null means untracked). Never below 1: a product with none
  * left is shown as sold out, and its stored quantity is left as it is.

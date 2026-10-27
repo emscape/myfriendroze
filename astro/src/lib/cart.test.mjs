@@ -4,6 +4,7 @@ import {
   MAX_CART_ITEMS,
   maxQtyForCategory,
   maxQtyForProduct,
+  isOneOfAKind,
   parseCart,
   serializeCart,
   addToCart,
@@ -32,6 +33,22 @@ describe('maxQtyForProduct', () => {
   // stored quantity below 1.
   it('never goes below 1', () => {
     expect(maxQtyForProduct('plant', 0)).toBe(1);
+  });
+});
+
+describe('isOneOfAKind', () => {
+  it('is true for pottery and other pieces', () => {
+    expect(isOneOfAKind('pottery')).toBe(true);
+    expect(isOneOfAKind('other')).toBe(true);
+  });
+
+  it('is false for plants, even when only one is left', () => {
+    expect(isOneOfAKind('plant')).toBe(false);
+  });
+
+  it('treats a missing or unknown category as pottery', () => {
+    expect(isOneOfAKind(undefined)).toBe(true);
+    expect(isOneOfAKind('mystery')).toBe(true);
   });
 });
 

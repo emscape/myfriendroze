@@ -96,6 +96,7 @@ const { product, showQuickOrder = true } = Astro.props;
           </button>
         )}
         <span class="visually-hidden" role="status" data-cart-announce></span>
+        <p class="product-card__cart-note" data-cart-note hidden></p>
         <p class="product-card__error" role="alert" data-quick-order-error hidden></p>
       </div>
     )}
@@ -247,6 +248,16 @@ const { product, showQuickOrder = true } = Astro.props;
     display: none;
   }
 
+  .product-card__cart-note {
+    margin: 0;
+    font-size: 1.3rem;
+    line-height: 1.4;
+  }
+
+  .product-card__cart-note[hidden] {
+    display: none;
+  }
+
   .product-card__cart-add {
     width: 100%;
     padding: 1rem 1.6rem;
@@ -279,7 +290,7 @@ const { product, showQuickOrder = true } = Astro.props;
 </style>
 
 <script>
-  import { addToCart, MAX_CART_ITEMS } from '../lib/cart.js';
+  import { addToCart, isOneOfAKind, MAX_CART_ITEMS, ONE_OF_A_KIND_NOTE } from '../lib/cart.js';
   import { loadCart, saveCart } from '../lib/cart-store.js';
 
   // Astro bundles this once per page however many cards render, so one
@@ -315,9 +326,15 @@ const { product, showQuickOrder = true } = Astro.props;
       return;
     }
     const inCart = cart.items.find((item) => item.sku === sku)?.qty ?? 0;
-    // A plant with one left also stops at 1, but isn't one of a kind.
-    if (status === 'limited' && inCart === 1 && button.dataset.cartCategory !== 'plant') {
-      flash(button, 'in your cart', 'This one-of-a-kind piece is already in your cart.');
+    if (isOneOfAKind(button.dataset.cartCategory)) {
+      // The button label only flashes, so the note stays visible below it.
+      const note = button.closest('.product-card__actions')?.querySelector<HTMLElement>('[data-cart-note]');
+      if (note) {
+        note.textContent = ONE_OF_A_KIND_NOTE;
+        note.hidden = false;
+      }
+      const added = status === 'limited' ? 'This piece is already in your cart.' : 'Added to your cart.';
+      flash(button, status === 'limited' ? 'in your cart' : 'added ✓', `${added} ${ONE_OF_A_KIND_NOTE}`);
     } else if (status === 'limited') {
       flash(button, `${inCart} in cart (max)`, `Your cart has the most you can order (${inCart}).`);
     } else {
