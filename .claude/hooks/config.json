@@ -1,101 +1,146 @@
 {
-  "_readme": "Hook configuration for myfriendroze (Astro web app). See .claude/hooks/README.md for full documentation.",
-
-  "project_name": "myfriendroze",
+  "_readme": "Shared defaults. Per-project overrides go in <project>/.claude/hooks.config.json (see README.md, Project-local overrides).",
 
   "session_start": {
-    "custom_notes": [
-      "Astro project root is astro/ — run build/dev commands from there",
-      "Firebase functions live in firebase/functions/ — Node 18 ESM",
-      "Deploy: cd astro && npm run build, then firebase deploy --only hosting",
-      "Products/events data: astro/src/data/ (edit here, not in Firebase directly during dev)",
-      "No SSR — this is a static site. API routes go in astro/src/pages/api/"
-    ]
+    "custom_notes": []
   },
 
   "arch_rules": {
     "enabled": false,
+    "_comment": "Block file writes that violate package boundary rules. Set enabled=true and define rules.",
     "rules": []
   },
 
   "content_watch": {
     "enabled": false,
-    "path_pattern": "astro/src",
-    "file_extensions": [".astro", ".ts", ".js"],
-    "validate_command": ""
+    "_comment": "Run a validation command whenever a matching file is written. Leave validate_command empty to disable.",
+    "path_pattern": "packages/content",
+    "file_extensions": [".json", ".yaml", ".yml"],
+    "validate_command": "",
+    "_validate_command_examples": [
+      "pnpm --filter content run validate",
+      "npm run validate --workspace=packages/content",
+      "python scripts/validate_content.py"
+    ]
   },
 
   "bash_description_guard": {
-    "enabled": true
+    "enabled": true,
+    "_comment": "Block (exit 2) any Bash call that lacks a non-empty `description` field. Enforces terminal command discipline: explain WHY and WHAT before running."
   },
 
   "env_guard": {
-    "enabled": true
+    "enabled": true,
+    "_comment": "Block (exit 2) Read calls targeting .env or .env.* files. Environment files contain secrets and must not be read by the assistant. NOTE: check-env-guard.js does not read this config; the block is unconditional and `enabled` currently has no effect."
   },
 
   "push_audit": {
-    "enabled": true
+    "enabled": true,
+    "_comment": "Before any git push, audits staged (or HEAD~1, or the empty tree for a root commit) diff for: hardcoded secrets (BLOCK), debug statements, commented-out code, missing tests, lockfile drift. Reports PASS/BLOCK with per-finding severity.",
+    "_checks": {
+      "secrets": "HIGH — blocks push. Detects API keys, passwords, tokens, private keys in added lines.",
+      "debug_statements": "MEDIUM — console.log, debugger, pprint in non-test files.",
+      "commented_code": "LOW — 3+ commented-out code lines added in a single file.",
+      "lockfile_drift": "MEDIUM — package.json changed without a lockfile update.",
+      "missing_tests": "MEDIUM — source files changed with zero test file changes."
+    }
   },
 
   "branch_delete_guard": {
     "enabled": true,
-    "_note": "Blocks `git push <remote> --delete <branch>` when an open PR still bases off that branch (deleting a stacked PR's base auto-closes it instead of merging it, and a closed PR's base can't be retargeted — see myfriendroze#22/#23 incident, 2026-09-02). Fails open if gh CLI is unavailable/unauthenticated."
-  },
-
-  "merge_guard": {
-    "enabled": true,
-    "_note": "Unconditionally blocks `gh pr merge`, a PUT to the `gh api .../pulls/{n}/merge` REST equivalent, a local `git merge` on master/main, and any push (refspec or plain branch name) that lands commits directly on master/main. Merging must happen on the GitHub PR page after explicit go-ahead is given in the conversation — this hook can't verify that from inside a Bash call, so it always blocks rather than trying. See myfriendroze#25 incident, 2026-09-02 (two PRs got merged from a session after a fresh Copilot review pass had explicitly been requested for both first)."
+    "_comment": "Blocks `git push <remote> --delete <branch>` (and the `:branch` shorthand) when an open GitHub PR still has that branch as its base. Deleting a stacked PR's base branch does not merge it — GitHub auto-closes it instead (its commits usually aren't in the new target yet), and a closed PR's base can't be retargeted; the only recovery is opening a brand-new PR from the same branch/commits. Requires the gh CLI, authenticated — fails open (allows, with a warning) if gh is unavailable, so a stale check never blocks otherwise-normal work. Local `git branch -D` is intentionally out of scope, since that alone can't break a GitHub PR's base."
   },
 
   "ci_status_check": {
     "enabled": true,
+    "_comment": "After any git push, blocks (synchronously) until the matching GitHub Actions run for that exact commit completes, and reports the real pass/fail result. Requires the gh CLI, authenticated. Adds real wall-clock wait time to every push — roughly however long your CI takes to run. If your repo has no GitHub Actions workflow, this harmlessly reports 'no run found' once per push (new_run_timeout_seconds) and exits 1 informationally.",
     "poll_interval_seconds": 5,
     "new_run_timeout_seconds": 60,
-    "completion_timeout_seconds": 180
+    "_new_run_timeout_note": "How long to wait for a run matching the just-pushed commit SHA to even appear in `gh run list`.",
+    "completion_timeout_seconds": 180,
+    "_completion_timeout_note": "Currently unenforced — check-ci-status-after-push.js uses `gh run watch` for this phase, which blocks until the run finishes with no timeout flag of its own. Left here as a documented intent for a future implementer, not a working setting."
+  },
+
+  "merge_guard": {
+    "enabled": true,
+    "_comment": "Unconditionally blocks `gh pr merge`, a PUT to the `gh api .../pulls/{n}/merge` REST equivalent, a local `git merge` on master/main, and any push (refspec or plain branch name) that lands commits directly on master/main. A hook can't verify from inside a Bash call whether a human already gave permission in conversation, so instead of trying it blocks every matching command, every time — the merge has to happen on the actual GitHub PR page after a human explicitly says go-ahead."
+  },
+
+  "search_guard": {
+    "enabled": true,
+    "_comment": "Nudge (or block) raw shell search/read commands (grep, find, cat, head, tail, ...) in favor of the assistant's own dedicated search/read tools, which return structured, token-bounded results instead of raw stdout dumps.",
+    "commands": ["grep", "egrep", "fgrep", "rg", "find", "cat", "head", "tail"],
+    "on_violation": "warn",
+    "_on_violation_note": "'warn' prints to stderr (exit 0) | 'block' exits 2 and rejects the tool call",
+    "allow_patterns": [],
+    "_allow_patterns_note": "Substrings that, if present anywhere in the command, skip the check entirely — e.g. a known-legitimate build/CI command that happens to invoke grep/cat internally."
   },
 
   "dep_guard": {
     "enabled": true,
+    "_comment": "Warn (non-blocking) when Claude runs a command that adds a dependency. Extend warn_patterns for your ecosystem.",
     "warn_patterns": [
       "npm install",
       "npm i ",
       "yarn add",
-      "pnpm add"
+      "pnpm add",
+      "pip install",
+      "pip3 install",
+      "cargo add",
+      "go get",
+      "gem install",
+      "composer require",
+      "dotnet add package"
     ],
-    "custom_message": "Remember to commit package-lock.json changes alongside any dependency additions."
+    "custom_message": ""
   },
 
   "empty_test_guard": {
     "enabled": true,
-    "test_file_patterns": ["*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"],
+    "_comment": "Fail (exit 1) when a test file is written with empty test suites or empty test bodies. Prevents theater testing.",
+    "test_file_patterns": ["*.test.*", "*.spec.*", "*_test.*", "*_spec.*"],
+    "_test_file_patterns_note": "Glob-style patterns. Files matching any of these are inspected.",
     "block_empty_describe": true,
     "block_empty_it": true,
-    "block_todo_tests": false
+    "block_todo_tests": false,
+    "_block_todo_tests_note": "If true, fail on it.todo() / test.todo() blocks (useful in strict mode)"
   },
 
   "todo_format": {
     "enabled": false,
+    "_comment": "Warn when TODO comments do not follow the required format. Set enabled=true to activate.",
     "required_pattern": "TODO\\([^)]+\\):",
-    "on_violation": "warn"
+    "_required_pattern_note": "Regex. Default enforces 'TODO(owner): description'. Set to null to only warn on bare TODO without any format.",
+    "on_violation": "warn",
+    "_on_violation_note": "'warn' prints to stderr (exit 0) | 'block' exits 1"
   },
 
   "script_guard": {
-    "enabled": true,
-    "package_json_paths": ["astro/package.json", "package.json"],
-    "on_missing": "warn"
+    "enabled": false,
+    "_comment": "Warn before running 'npm run X' / 'pnpm run X' etc. when the script does not exist in package.json. Prevents silent no-ops.",
+    "package_json_paths": ["package.json"],
+    "_package_json_paths_note": "List of package.json files to check for script existence. Extend for monorepos.",
+    "on_missing": "warn",
+    "_on_missing_note": "'warn' prints to stderr (exit 0) | 'block' exits 1 and prevents the command"
   },
 
   "commit_guard": {
-    "enabled": true,
+    "enabled": false,
+    "_comment": "Warn or block git commit commands that do not include WHY and EXPECTED sections in the message.",
     "required_markers": ["WHY:", "EXPECTED:"],
-    "on_violation": "warn"
+    "on_violation": "warn",
+    "_on_violation_note": "warn prints to stderr (exit 0) | block exits 2 and rejects the tool call"
   },
 
   "commands": {
-    "lint": "cd astro && npm run lint",
-    "test": "cd astro && npm test",
-    "typecheck": "cd astro && npx tsc --noEmit",
-    "build": "cd astro && npm run build",
-    "dev": "cd astro && npm run dev"
+    "_comment": "Reference commands for documentation and session-start banner. These are NOT auto-run — use content_watch.validate_command for automated execution.",
+    "lint": "",
+    "test": "",
+    "typecheck": "",
+    "_examples": {
+      "lint": "npm run lint",
+      "test": "npm test",
+      "typecheck": "npx tsc --noEmit"
+    }
   }
 }

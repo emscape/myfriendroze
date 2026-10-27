@@ -1,12 +1,12 @@
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/session-start.sh"
+            "command": "node .claude/hooks/session-start.cjs"
           }
         ]
       }
@@ -42,6 +42,10 @@
           },
           {
             "type": "command",
+            "command": "node .claude/hooks/check-merge-guard.js"
+          },
+          {
+            "type": "command",
             "command": "node .claude/hooks/check-git-push-audit.js"
           },
           {
@@ -50,7 +54,7 @@
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/check-merge-guard.js"
+            "command": "node .claude/hooks/check-search-command.js"
           }
         ]
       },

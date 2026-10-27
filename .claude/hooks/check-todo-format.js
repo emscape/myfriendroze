@@ -19,11 +19,12 @@
  * Example violation:  // TODO fix this later
  */
 
-import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const { loadHookConfig } = createRequire(import.meta.url)('./lib/hook-config.cjs');
 const CONFIG_PATH = resolve(SCRIPT_DIR, 'config.json');
 
 function log(msg) {
@@ -33,7 +34,7 @@ function log(msg) {
 // ── Load config ───────────────────────────────────────────────────────────
 let config;
 try {
-  config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  config = loadHookConfig({ hooksDir: SCRIPT_DIR });
 } catch {
   log(`WARN: config.json not found at ${CONFIG_PATH} — skipping TODO format check`);
   process.exit(0);
