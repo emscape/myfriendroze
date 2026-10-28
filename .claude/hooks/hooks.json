@@ -1,0 +1,88 @@
+{
+  "_purpose": "Reference copy of the hooks registered in .claude/settings.json. Claude Code reads settings.json — this file is for documentation only.",
+
+  "_how_to_install": [
+    "1. Copy the entire .claude/hooks/ directory into your project's .claude/hooks/",
+    "2. Put project-specific settings in <project>/.claude/hooks.config.json (leave the shared .claude/hooks/config.json unchanged)",
+    "3. Merge the 'hooks' block below into your project's .claude/settings.json",
+    "4. Run: node .claude/hooks/session-start.cjs  to verify orientation output"
+  ],
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "_purpose": "Block file writes that violate architecture rules defined in config.json (arch_rules)",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/check-arch-boundary.js" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "_purpose": "Require description (bash_description_guard) + warn on dependency installs (dep_guard) + validate npm run scripts exist (script_guard) + enforce commit message structure (commit_guard) + pre-push diff audit (push_audit) + block deleting a branch an open PR still bases off (branch_delete_guard) + unconditionally block PR/protected-branch merges (merge_guard) + nudge away from raw grep/find/cat/head/tail (search_guard)",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/check-bash-description.js" },
+          { "type": "command", "command": "node .claude/hooks/check-dep-guard.js" },
+          { "type": "command", "command": "node .claude/hooks/check-script-exists.js" },
+          { "type": "command", "command": "node .claude/hooks/check-commit-message.js" },
+          { "type": "command", "command": "node .claude/hooks/check-merge-guard.js" },
+          { "type": "command", "command": "node .claude/hooks/check-git-push-audit.js" },
+          { "type": "command", "command": "node .claude/hooks/check-branch-delete-guard.js" },
+          { "type": "command", "command": "node .claude/hooks/check-search-command.js" }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "_purpose": "Block reads of .env files (env_guard)",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/check-env-guard.js" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "_purpose": "Content validation (content_watch) + theater test detection (empty_test_guard) + TODO format (todo_format)",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/validate-content.js" },
+          { "type": "command", "command": "node .claude/hooks/check-empty-tests.js" },
+          { "type": "command", "command": "node .claude/hooks/check-todo-format.js" }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "_purpose": "After a real git push, block until the matching GitHub Actions run completes and report the real result (ci_status_check) — a local test pass is not proof of a green remote run",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/check-ci-status-after-push.js" }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "_purpose": "Print project orientation banner once when a session starts",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/session-start.cjs" }
+        ]
+      }
+    ]
+  },
+
+  "_exit_codes": {
+    "0": "Allow / pass",
+    "1": "Validation failed (PostToolUse hooks — informs Claude of failure)",
+    "2": "Block action (PreToolUse hooks — Claude Code rejects the tool call and shows stderr)"
+  },
+
+  "_stdin_payload": {
+    "_note": "All hook commands receive the tool call as JSON on stdin",
+    "shape": {
+      "tool_name": "string",
+      "tool_input": {
+        "file_path": "string (Write/Edit/MultiEdit)",
+        "content": "string (Write/Edit)",
+        "command": "string (Bash)"
+      }
+    }
+  }
+}

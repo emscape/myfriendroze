@@ -24,12 +24,13 @@
 // the command itself: anything checkable from inside a Bash tool call is
 // something this session could set on its own, which would make the check
 // meaningless against the exact failure mode it exists to prevent. The
-// only real bypass is `merge_guard.enabled: false` in config.json — a
-// separate, deliberate file edit, not something a merge command's own
+// only real bypass is a human setting `merge_guard.enabled: false` in the SHARED config.json — a
+// separate, deliberate file edit (a project-local hooks.config.json cannot
+// disable this guard), not something a merge command's own
 // invocation can satisfy inline.
 //
 // Config used:
-//   .claude/hooks/config.json → merge_guard.enabled
+//   .claude/hooks/config.json (+ project override, enabled:true only) → merge_guard.enabled
 //
 // Exit codes:
 //   0  — PASS: not a merge-shaped command, or guard disabled
@@ -37,16 +38,15 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const { execSync } = require('child_process');
+const { loadHookConfig } = require('./lib/hook-config.cjs');
+const { commandSegments, stripSurroundingQuotes } = require('./lib/git-command.cjs');
 
-const CONFIG_PATH = path.resolve(__dirname, 'config.json');
 const PROTECTED_BRANCHES = ['master', 'main'];
 
 function isEnabled() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const config = loadHookConfig({ hooksDir: __dirname });
     // Same fail-toward-safety default as the other guards in this file set:
     // only an explicit `false` opts out, missing/invalid config.json means
     // the check still runs.
@@ -56,330 +56,16 @@ function isEnabled() {
   }
 }
 
-function currentBranch() {
+// The branch checked out in `cwd` — the repo the command actually targets
+// (after any `cd`/`git -C`), not this hook's own working directory.
+// findMergeReason() never asks about an unknown (null) target: it blocks
+// instead, since the hook's own branch says nothing about the target's.
+function currentBranch(cwd) {
   try {
-    return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+    return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], cwd: cwd || undefined }).trim();
   } catch {
     return null; // not a git repo / no commits yet — nothing to protect
   }
-}
-
-// Splits on shell chain operators so each command in a chain is checked on
-// its own terms — but only operators actually outside any quoted string.
-// A naive split found in practice, not just in theory: a `git commit -m
-// "... e.g. git switch main && git push origin ..."` message that merely
-// *discusses* a push pattern in prose got split on the `&&` inside its own
-// quoted -m argument, and the fragment starting with "git push origin"
-// (which also happened to contain the bare word "main" later in the same
-// sentence) was flagged as a real push — blocking an ordinary commit
-// because its message talked about push commands. Tracking quote state
-// while scanning avoids splitting inside a quoted argument at all, so
-// this only ever splits on operators a shell would actually treat as
-// chaining, not ones sitting inertly inside a string literal.
-function segmentsOf(fullCmd) {
-  const segments = [];
-  let current = '';
-  let quote = null; // null | '"' | "'"
-
-  for (let i = 0; i < fullCmd.length; i++) {
-    const ch = fullCmd[i];
-
-    if (quote === '"') {
-      // Double-quote escaping: a backslash immediately before another
-      // character is consumed as one literal unit, so an escaped quote
-      // (`\"`, e.g. inside a commit message like `-m "He said \"hi\" &&
-      // ..."`) doesn't end the quoted region early — reproduced in
-      // review: without this, the `&&` after an escaped `\"` was treated
-      // as a real chain operator again, the exact false-positive class
-      // this function exists to prevent. Bash only treats \", \\, \$,
-      // and \` as escapes inside double quotes (any other backslash is
-      // literal), but consuming any \X pair here errs toward keeping
-      // more of the string un-split, which is the safe direction — it
-      // can never cause an operator that should be treated as literal to
-      // be missed, only the reverse.
-      if (ch === '\\' && i + 1 < fullCmd.length) {
-        current += ch + fullCmd[i + 1];
-        i++;
-        continue;
-      }
-      current += ch;
-      if (ch === '"') quote = null;
-      continue;
-    }
-    if (quote === "'") {
-      // Single quotes are fully literal in POSIX/bash — no escaping at
-      // all, not even for a backslash. Only a real closing quote ends it.
-      current += ch;
-      if (ch === "'") quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-      continue;
-    }
-    if ((ch === '&' && fullCmd[i + 1] === '&') || (ch === '|' && fullCmd[i + 1] === '|')) {
-      segments.push(current);
-      current = '';
-      i++; // consume the second character of the two-char operator too
-      continue;
-    }
-    // A newline is an ordinary command separator too — a Bash tool call
-    // can legitimately be a multi-line command string, and the shell runs
-    // each line as its own statement exactly like `;` would. Without
-    // this, `echo hi\ngh pr merge 27` was one un-split segment starting
-    // with "echo", never "gh", so the merge on the second line was
-    // invisible to every anchored check.
-    if (ch === ';' || ch === '&' || ch === '|' || ch === '\n') {
-      segments.push(current);
-      current = '';
-      continue;
-    }
-    current += ch;
-  }
-  segments.push(current);
-
-  return segments.map((s) => s.trim()).filter(Boolean);
-}
-
-// `bash -c "..."` / `sh -c "..."` (and combined-flag forms like `-lc`,
-// `-ic`, `-lic`) run their quoted argument as a nested command string —
-// not a different, unwatched command, just the same gh/git invocation one
-// layer further in. Because segmentsOf() deliberately never splits inside
-// a quoted region (that's what fixed the earlier commit-message
-// false-positive), a wrapped segment like `bash -c "gh pr merge 27"`
-// never starts with "gh"/"git" at all — it starts with "bash" — so
-// without unwrapping it, the entire inner command was invisible to every
-// check in this file. Only the common `-c`/`-lc`/`-ic`/`-lic`/`--command`
-// forms are recognized, not a full shell-flag grammar; greedy matching to
-// the *last* occurrence of the opening quote character handles an inner
-// command that itself contains a different quote style, though not a
-// literal escaped instance of the same quote character (a narrower case
-// than segmentsOf() itself handles, and one this hook can't fully resolve
-// without a real shell parser).
-// Finds the index of the true closing quote for a quoted argument that
-// starts at `startIdx` in `str` (the character right after the opening
-// quote), honoring double-quote backslash-escaping the same way
-// segmentsOf() does — an escaped `\"` doesn't count as the close. Returns
-// -1 if the quote is never closed.
-function findClosingQuote(str, startIdx, quoteChar) {
-  for (let i = startIdx; i < str.length; i++) {
-    const ch = str[i];
-    if (quoteChar === '"' && ch === '\\' && i + 1 < str.length) {
-      i++; // the escaped character doesn't end the quote — skip it too
-      continue;
-    }
-    if (ch === quoteChar) return i;
-  }
-  return -1;
-}
-
-function unwrapShellDashC(segment) {
-  const opener = segment.match(/^(?:\S*[\\/])?(?:bash|sh|zsh|dash|ksh)(?:\.exe)?\s+(?:-[a-zA-Z]*c[a-zA-Z]*|--command)\s+(["'])/);
-  if (!opener) return null;
-
-  const quoteChar = opener[1];
-  const contentStart = opener[0].length;
-  const closeIdx = findClosingQuote(segment, contentStart, quoteChar);
-  if (closeIdx === -1) return null; // unterminated quote — malformed, nothing safe to unwrap
-
-  // Anything after the closing quote — `bash -c "cmd" arg0 arg1` is valid
-  // syntax, where trailing words become $0/$1/... for the executed
-  // string — is deliberately ignored rather than required to be absent.
-  // They can't change what's inside the quotes, and requiring them to be
-  // absent (an earlier version anchored the match to end-of-string) meant
-  // this whole form went unrecognized, hiding the real command entirely.
-  const content = segment.slice(contentStart, closeIdx);
-
-  // A double-quoted outer wrapper allows bash's own limited escaping
-  // (\", \\, \$, \`) — undo exactly that before treating the content as a
-  // fresh command string, so a nested wrapper (e.g. `bash -c "sh -c
-  // \"gh pr merge 27\""`) is captured with real, bare quote characters
-  // rather than the literal backslash-quote pairs the outer shell would
-  // already have resolved before the inner shell ever saw them. A
-  // single-quoted outer wrapper is always fully literal in bash — no
-  // un-escaping applies there.
-  return quoteChar === '"' ? content.replace(/\\(["\\$`])/g, '$1') : content;
-}
-
-// Replaces any segment that's a shell -c wrapper with the segments of its
-// unwrapped inner command (re-run through segmentsOf(), since the inner
-// command can have its own chaining/quoting), recursively — so nested
-// wrapping (`bash -c "sh -c \"gh pr merge 27\""`) is fully flattened
-// before any anchored check runs.
-function expandShellWrappers(segments) {
-  const expanded = [];
-  for (const segment of segments) {
-    const inner = unwrapShellDashC(segment);
-    if (inner !== null) {
-      expanded.push(...expandShellWrappers(segmentsOf(inner)));
-    } else {
-      expanded.push(segment);
-    }
-  }
-  return expanded;
-}
-
-// Env-var-prefix stripping, duplicated from check-branch-delete-guard.js
-// rather than shared — each hook is a standalone script Claude Code
-// invokes independently, and the two files are small enough that a shared
-// module would add more indirection than it saves. Kept in sync by hand;
-// see that file's more heavily-commented version for the full rationale
-// per pattern.
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s*/;
-const ENV_NO_ARG_FLAG = /^(?:-i|--ignore-environment|-0|--null|-v|--debug)\s*/;
-const ENV_ARG_FLAG_SEPARATE = /^(?:-u|--unset|-C|--chdir|-S|--split-string)\s+(?:"[^"]*"|'[^']*'|\S*)\s*/;
-const ENV_ARG_FLAG_COMBINED = /^(?:--unset|--chdir|--split-string)=(?:"[^"]*"|'[^']*'|\S*)\s*/;
-const ENV_END_OPTIONS = /^--\s+/;
-
-function stripLeadingEnvPrefix(segment) {
-  let s = segment.replace(/^env(?=\s|$)\s*/, '');
-  let prev;
-  do {
-    prev = s;
-    s = s
-      .replace(ENV_END_OPTIONS, '')
-      .replace(ENV_ARG_FLAG_COMBINED, '')
-      .replace(ENV_ARG_FLAG_SEPARATE, '')
-      .replace(ENV_NO_ARG_FLAG, '')
-      .replace(ENV_ASSIGNMENT, '');
-  } while (s !== prev);
-  return s;
-}
-
-// Strips a leading path component off the command name itself, so
-// `/usr/bin/gh pr merge 27` or `./bin/git push ...` are recognized the
-// same as a bare `gh`/`git` invocation — invoking the same binary by an
-// explicit path instead of relying on $PATH isn't a different, unwatched
-// command, and every check below is anchored on the bare command name.
-// Also handles a Windows-style absolute path containing spaces (which
-// must be quoted as a single shell token to be one argument at all, e.g.
-// `"C:\Program Files\Git\bin\git.exe" push origin master` — this project
-// targets Windows 11) and an optional `.exe` suffix on the binary name,
-// quoted or not.
-function stripCommandPathPrefix(segment) {
-  const quoted = segment.match(/^(["'])([^"']*[\\/](gh|git)(?:\.exe)?)\1(\s.*)?$/);
-  if (quoted) {
-    return `${quoted[3]}${quoted[4] || ''}`;
-  }
-  return segment.replace(/^(\S*[\\/])(gh|git)(?:\.exe)?\b/, '$2');
-}
-
-// Whitespace-splitting a raw command string doesn't understand quoting, so
-// a quoted argument like `"main"` keeps its literal quote characters as
-// part of the token. Strips one matching pair of surrounding quotes, if
-// present — duplicated from check-branch-delete-guard.js's identical
-// helper rather than shared, matching the pattern already used for
-// env-prefix stripping in this file.
-function stripSurroundingQuotes(token) {
-  if (token.length >= 2) {
-    const first = token[0];
-    const last = token[token.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-      return token.slice(1, -1);
-    }
-  }
-  return token;
-}
-
-// git's own global options can sit between `git` and the actual
-// subcommand — e.g. `git -C /some/dir push origin master` runs in a
-// different directory but is still exactly the push this hook cares
-// about. Only the value-taking forms are handled explicitly (the risk is
-// a bare `-C`/`-c`/etc. swallowing the *next* token as its own argument
-// rather than as part of the subcommand); a few common no-argument global
-// flags are stripped too for the same reason env's own flags were.
-const GIT_GLOBAL_ARG_FLAG_SEPARATE = /^(?:-C|-c|--git-dir|--work-tree|--namespace|--exec-path)\s+\S+\s*/;
-const GIT_GLOBAL_ARG_FLAG_COMBINED = /^(?:--git-dir|--work-tree|--namespace|--exec-path)=\S*\s*/;
-const GIT_GLOBAL_NO_ARG_FLAG = /^(?:-p|--paginate|--no-pager|--bare|--no-replace-objects|--literal-pathspecs)\s*/;
-
-function stripGitGlobalOptions(afterGit) {
-  let s = afterGit;
-  let prev;
-  do {
-    prev = s;
-    s = s
-      .replace(GIT_GLOBAL_ARG_FLAG_COMBINED, '')
-      .replace(GIT_GLOBAL_ARG_FLAG_SEPARATE, '')
-      .replace(GIT_GLOBAL_NO_ARG_FLAG, '');
-  } while (s !== prev);
-  return s;
-}
-
-// gh's global options relevant here: -R/--repo (an explicit repo selector
-// between `gh` and the subcommand) and --hostname — the specific forms
-// found in review (`gh -R owner/repo pr merge 27`).
-const GH_GLOBAL_ARG_FLAG_SEPARATE = /^(?:-R|--repo|--hostname)\s+\S+\s*/;
-const GH_GLOBAL_ARG_FLAG_COMBINED = /^--(?:repo|hostname)=\S*\s*/;
-
-function stripGhGlobalOptions(afterGh) {
-  let s = afterGh;
-  let prev;
-  do {
-    prev = s;
-    s = s
-      .replace(GH_GLOBAL_ARG_FLAG_COMBINED, '')
-      .replace(GH_GLOBAL_ARG_FLAG_SEPARATE, '');
-  } while (s !== prev);
-  return s;
-}
-
-// `sudo`, `command`, and `exec` invoke the real command as a subprocess
-// without being a different, unwatched command themselves — `sudo gh pr
-// merge 27` or `command git push origin main` both still run exactly the
-// gh/git invocation this hook cares about. Only each wrapper's most
-// common flags are handled explicitly here, not their full option
-// surface: this project targets Windows 11, where none of these are the
-// primary shell anyway, so the goal is closing the realistic gap found in
-// review, not replicating every real CLI's complete grammar.
-const SUDO_ARG_FLAG = /^(?:-u|--user)\s+\S+\s*/;
-const SUDO_NO_ARG_FLAG = /^(?:-n|--non-interactive|-i|--login|-E|--preserve-env|-H|--set-home)\s*/;
-const COMMAND_NO_ARG_FLAG = /^-[pvV]\s*/;
-
-function stripLeadingWrapperPrefix(segment) {
-  const m = segment.match(/^(sudo|command|exec)\b\s*/);
-  if (!m) return segment;
-
-  let s = segment.slice(m[0].length);
-  let prev;
-  do {
-    prev = s;
-    if (m[1] === 'sudo') {
-      s = s.replace(SUDO_ARG_FLAG, '').replace(SUDO_NO_ARG_FLAG, '');
-    } else if (m[1] === 'command') {
-      s = s.replace(COMMAND_NO_ARG_FLAG, '');
-    }
-  } while (s !== prev);
-  return s;
-}
-
-// Normalizes a segment before any anchored gh/git pattern is tested
-// against it — strips a leading env-var prefix (plus env's own flags), a
-// leading `sudo`/`command`/`exec` wrapper (in any mix/order with the env
-// prefix — e.g. both `sudo GIT_TRACE=1 git push ...` and `GIT_TRACE=1
-// sudo git push ...` are ordinary ways to write the same thing), a
-// leading path prefix on the command name, and any of the command's own
-// global options that can appear before its subcommand. Every pattern in
-// this file is anchored on a bare `gh pr`/`gh api`/`git push`/`git
-// merge`/`git checkout`/`git switch` start, so without this, `GH_
-// TOKEN=... gh pr merge 27`, `/usr/bin/git merge ...`, `gh -R owner/repo
-// pr merge 27`, `git -C /some/dir push origin master`, or `sudo gh pr
-// merge 27` would all silently bypass every check here.
-function normalizeSegment(segment) {
-  let s = segment;
-  let prev;
-  do {
-    prev = s;
-    s = stripLeadingWrapperPrefix(stripLeadingEnvPrefix(s));
-  } while (s !== prev);
-
-  s = stripCommandPathPrefix(s);
-  if (/^git\s+/.test(s)) {
-    s = `git ${stripGitGlobalOptions(s.slice('git '.length))}`;
-  } else if (/^gh\s+/.test(s)) {
-    s = `gh ${stripGhGlobalOptions(s.slice('gh '.length))}`;
-  }
-  return s;
 }
 
 // Extracts the branch a `git checkout`/`git switch` invocation moves HEAD
@@ -470,26 +156,29 @@ function protectedRefspecPush(segment) {
     // remote/repository has also been given (`git push origin master`) —
     // a single lone token (`git push master`) is what git itself treats
     // as the repository argument, not a branch, so there's no push of
-    // anything named master/main to react to yet.
-    if (nonFlags.length >= 2 && PROTECTED_BRANCHES.includes(token)) {
-      return { src: token, dest: token };
+    // anything named master/main to react to yet. A fully-qualified
+    // `refs/heads/main` is the same branch.
+    const branch = token.replace(/^refs\/heads\//, '');
+    if (nonFlags.length >= 2 && PROTECTED_BRANCHES.includes(branch)) {
+      return { src: branch, dest: branch };
     }
   }
   return null;
 }
 
-// `getCurrentBranch` defaults to the real `currentBranch()` (a live `git
-// rev-parse` call) but is overridable — tests inject a fixed value instead
+// `getCurrentBranch(dir)` defaults to the real `currentBranch()` (a live `git
+// rev-parse` call in `dir`) but is overridable — tests inject a fixed value instead
 // of depending on whatever branch happens to be checked out in the real
 // repo when they run, which would otherwise make any test exercising the
 // "no explicit branch/refspec given" fallback path non-deterministic.
 function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
-  const segments = expandShellWrappers(segmentsOf(fullCmd));
-  // Every anchored check below runs against the normalized form (env
-  // prefix and command-path prefix stripped) — the original, raw segment
-  // is kept only for the human-readable "matched:" text in a block
-  // report, so the reason shown still looks like what was actually typed.
-  const normalized = segments.map(normalizeSegment);
+  // Every anchored check below runs against the normalized form (see
+  // lib/git-command.cjs) — the original, raw segment is kept only for the
+  // human-readable "matched:" text in a block report, so the reason shown
+  // still looks like what was actually typed.
+  const parsed = commandSegments(fullCmd);
+  const segments = parsed.map((s) => s.raw);
+  const normalized = parsed.map((s) => s.normalized);
 
   // Resolved once per command and reused by both the push and merge
   // checks below: a branch this command chain explicitly checks out to
@@ -500,12 +189,12 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
   const checkedOutTo = normalized
     .map(checkoutTarget)
     .find((target) => target && PROTECTED_BRANCHES.includes(target));
-  let effectiveBranchCache;
-  function effectiveBranch() {
-    if (effectiveBranchCache === undefined) {
-      effectiveBranchCache = checkedOutTo || getCurrentBranch();
-    }
-    return effectiveBranchCache;
+  // Cached per directory: `git -C a push && git -C b merge x` asks two repos.
+  const branchByDir = new Map();
+  function effectiveBranch(dir) {
+    if (checkedOutTo) return checkedOutTo;
+    if (!branchByDir.has(dir)) branchByDir.set(dir, getCurrentBranch(dir));
+    return branchByDir.get(dir);
   }
 
   for (let i = 0; i < segments.length; i++) {
@@ -563,7 +252,10 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
       }
       const nonFlags = rest.filter((t) => !t.startsWith('-'));
       if (nonFlags.length <= 1) {
-        const branch = effectiveBranch();
+        if (parsed[i].cwd === null && !checkedOutTo) {
+          return `implicit push (no explicit branch/refspec given) in a repository this guard can't determine (e.g. \`cd "$VAR"\`), so its current branch can't be checked — name the branch or use a literal path — matched: ${segments[i]}`;
+        }
+        const branch = effectiveBranch(parsed[i].cwd);
         if (branch && PROTECTED_BRANCHES.includes(branch)) {
           return `implicit push (no explicit branch/refspec given) while on protected branch "${branch}" — matched: ${segments[i]}`;
         }
@@ -573,9 +265,12 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
 
   // Local `git merge` while sitting on (or about to check out to) a
   // protected branch.
-  const hasMerge = normalized.some((s) => /^git\s+merge\b/.test(s));
-  if (hasMerge) {
-    const branch = effectiveBranch();
+  for (let i = 0; i < normalized.length; i++) {
+    if (!/^git\s+merge\b/.test(normalized[i])) continue;
+    if (parsed[i].cwd === null && !checkedOutTo) {
+      return `local \`git merge\` in a repository this guard can't determine (e.g. \`cd "$VAR"\`), so its current branch can't be checked — use a literal path`;
+    }
+    const branch = effectiveBranch(parsed[i].cwd);
     if (branch && PROTECTED_BRANCHES.includes(branch)) {
       return `local \`git merge\` on protected branch "${branch}"`;
     }

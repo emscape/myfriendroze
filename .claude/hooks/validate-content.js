@@ -9,19 +9,20 @@
  *   { tool_name, tool_input: { file_path } }
  *
  * Config used:
- *   .claude/hooks/config.json → content_watch.enabled,
+ *   .claude/hooks/config.json (+ project override) → content_watch.enabled,
  *                               content_watch.path_pattern,
  *                               content_watch.file_extensions[],
  *                               content_watch.validate_command
  */
 
-import { readFileSync } from 'fs';
 import { resolve, dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import { createRequire } from 'module';
 
 // ── Locate config ─────────────────────────────────────────────────────────
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const { loadHookConfig } = createRequire(import.meta.url)('./lib/hook-config.cjs');
 const CONFIG_PATH = resolve(SCRIPT_DIR, 'config.json');
 
 function log(msg) {
@@ -31,7 +32,7 @@ function log(msg) {
 // ── Load config ───────────────────────────────────────────────────────────
 let config;
 try {
-  config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  config = loadHookConfig({ hooksDir: SCRIPT_DIR });
 } catch {
   log(`WARN: config.json not found or invalid at ${CONFIG_PATH} — skipping content validation`);
   process.exit(0);

@@ -16,8 +16,8 @@
 //   .claude/hooks/config.json → branch_delete_guard.enabled
 //
 // Algorithm:
-//   1. Skip entirely if branch_delete_guard.enabled is false in config.json
-//      (config.json missing/invalid → treated as enabled, same fail-open
+//   1. Skip entirely if branch_delete_guard.enabled is false in the SHARED config.json
+//      (a project-local hooks.config.json cannot disable it; config.json missing/invalid → treated as enabled, same fail-open
 //      spirit as the gh-unavailable case below — a missing config must
 //      never silently disable a safety check).
 //   2. Only fires on an actual `git push ... --delete <branch>...` (any
@@ -37,15 +37,13 @@
 
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-
-const CONFIG_PATH = path.resolve(__dirname, 'config.json');
+const { execSync, execFileSync } = require('child_process');
+const { loadHookConfig } = require('./lib/hook-config.cjs');
+const { commandSegments, pushTargetDir, stripLeadingEnvPrefix, stripSurroundingQuotes } = require('./lib/git-command.cjs');
 
 function isEnabled() {
   try {
-    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const config = loadHookConfig({ hooksDir: __dirname });
     // Absent key defaults to enabled — only an explicit `false` opts out,
     // matching the "fail open on missing config, not on missing setting"
     // distinction: a config file that exists but never mentions this guard
@@ -58,9 +56,12 @@ function isEnabled() {
   }
 }
 
-function tryRun(cmd) {
+// `cmd` is a shell string, or a [file, ...args] array run without a shell —
+// for arguments such as branch names, which git lets contain `$`, `;`, `&`.
+function tryRun(cmd, cwd) {
+  const opts = { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], cwd };
   try {
-    return { ok: true, out: execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }) };
+    return { ok: true, out: Array.isArray(cmd) ? execFileSync(cmd[0], cmd.slice(1), opts) : execSync(cmd, opts) };
   } catch (e) {
     return { ok: false, out: e.stdout || '', err: e.stderr || String(e) };
   }
@@ -89,83 +90,18 @@ function tryRun(cmd) {
 // Also handles the older `:branch` refspec shorthand independently, since
 // that doesn't need a --delete/-d flag at all.
 //
-// Known limitations:
-//   - Segment splitting is not quote-aware, so a chain operator sitting
-//     inside a quoted string (rare, and not the scenario above — that one
-//     only involved "git push" itself inside quotes) can still split
-//     mid-string. Any resulting false-positive segment errs toward
-//     blocking, not toward silently allowing a real delete, which is the
-//     safe direction for a security check.
+// Segment splitting and normalization (env/sudo prefixes, `bash -c`
+// wrappers, a path-qualified git binary, `git -C <dir>` and other global
+// options) come from lib/git-command.cjs, shared with check-merge-guard.js
+// so the two guards recognize the same set of push forms.
+//
+// Known limitation:
 //   - If a remote is omitted entirely (relying on push.default / an
 //     upstream tracking branch), the first branch name would be mistaken
 //     for the remote and skipped. Rare enough in practice (this
 //     codebase's own workflow always names the remote explicitly) not to
 //     be worth the added complexity of distinguishing a remote name from
 //     a branch name with no ground truth to check against.
-
-// Matches one leading `VAR=value` assignment, where value is a double- or
-// single-quoted string (which may contain spaces, e.g. `GIT_SSH_COMMAND="ssh
-// -vv"`) or an unquoted run of non-whitespace. Quoted values must be
-// recognized as a single token — a plain `\S*` value pattern stops at the
-// first space *inside* the quotes, leaving a dangling `-vv"` that can't
-// match anything else, which silently broke stripping for exactly this
-// (common — GIT_SSH_COMMAND, GIT_TRACE, GIT_CURL_VERBOSE all take
-// space-containing values in practice) case.
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s*/;
-
-// `env`'s own option surface, beyond the bare command it's stripping down
-// to. GNU env accepts several flags before the VAR=value assignments and
-// the real command — a delete push prefixed with any of these (most
-// plausibly `-u`/`--unset`, e.g. `env -u GIT_SSH_COMMAND git push ...`)
-// would otherwise leave a segment that doesn't start with "git" and never
-// gets recognized as a push at all.
-const ENV_NO_ARG_FLAG = /^(?:-i|--ignore-environment|-0|--null|-v|--debug)\s*/;
-const ENV_ARG_FLAG_SEPARATE = /^(?:-u|--unset|-C|--chdir|-S|--split-string)\s+(?:"[^"]*"|'[^']*'|\S*)\s*/;
-const ENV_ARG_FLAG_COMBINED = /^(?:--unset|--chdir|--split-string)=(?:"[^"]*"|'[^']*'|\S*)\s*/;
-const ENV_END_OPTIONS = /^--\s+/;
-
-// Strips a leading `env` invocation (including its own flags, with or
-// without a value) and/or any number of leading `VAR=value` assignments so
-// `GIT_TRACE=1 git push origin --delete branch` and
-// `env -u GIT_SSH_COMMAND git push origin --delete branch` are both
-// recognized as the git push invocations they are, instead of being
-// skipped because the segment doesn't start with the literal string
-// "git". Both forms are ordinary ways to adjust the environment for one
-// command and are common enough (debugging a push, CI scripts) that
-// skipping them would be a real, easy-to-hit bypass of the guard rather
-// than a theoretical one.
-function stripLeadingEnvPrefix(segment) {
-  let s = segment.replace(/^env(?=\s|$)\s*/, '');
-  // Loop (rather than a single repeated group) so any mix, order, and
-  // count of env flags and VAR=value assignments preceding the real
-  // command are all consumed, not just the first one.
-  let prev;
-  do {
-    prev = s;
-    s = s
-      .replace(ENV_END_OPTIONS, '')
-      .replace(ENV_ARG_FLAG_COMBINED, '')
-      .replace(ENV_ARG_FLAG_SEPARATE, '')
-      .replace(ENV_NO_ARG_FLAG, '')
-      .replace(ENV_ASSIGNMENT, '');
-  } while (s !== prev);
-  return s;
-}
-
-// Whitespace-splitting a shell command doesn't understand quoting, so a
-// quoted argument like `"branch"` or `':branch'` keeps its literal quote
-// characters as part of the token. Strips one matching pair of surrounding
-// quotes, if present, before a captured name is compared against anything.
-function stripSurroundingQuotes(token) {
-  if (token.length >= 2) {
-    const first = token[0];
-    const last = token[token.length - 1];
-    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
-      return token.slice(1, -1);
-    }
-  }
-  return token;
-}
 
 // `git push origin :refs/heads/some-branch` is equivalent to
 // `git push origin :some-branch` — git accepts the fully-qualified ref on
@@ -180,16 +116,16 @@ function normalizeBranchName(name) {
 function extractDeletedBranches(fullCmd) {
   const branches = new Set();
 
-  const segments = fullCmd.split(/&&|\|\||[;&|]/);
-  for (const rawSegment of segments) {
-    const segment = stripLeadingEnvPrefix(rawSegment.trim());
+  for (const { normalized: segment } of commandSegments(fullCmd)) {
     // Anchored at the start of the segment — "contains git push" isn't
     // enough, since that also matches inside an unrelated quoted string
     // that merely mentions it.
     if (!/^git\s+push\b/.test(segment)) continue;
 
     const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
-    const rest = tokens.slice(2);
+    // Unquoted first: the shell strips the quotes from `"--delete"` before
+    // git sees it, so it's the same flag.
+    const rest = tokens.slice(2).map(stripSurroundingQuotes);
     const hasDeleteFlag = rest.some((t) => t === '--delete' || t === '-d');
     if (hasDeleteFlag) {
       const nonFlags = rest.filter((t) => !t.startsWith('-'));
@@ -215,7 +151,42 @@ function extractDeletedBranches(fullCmd) {
   return [...branches];
 }
 
-module.exports = { extractDeletedBranches, stripLeadingEnvPrefix, normalizeBranchName, isEnabled, tryRun };
+// The open PRs basing off each branch: `{ affected, warnings }`, where
+// `affected` lists only branches with dependents (`{ branch, dependents }`)
+// and `warnings` names each branch whose lookup can't be trusted. Every
+// branch is looked up, so one failed query can't hide a dependent found
+// for another: the caller blocks on any `affected` entry and allows (with
+// the warnings) only when there are none. One query per branch, filtered by base on GitHub's side, so a dependent PR can't
+// fall past the first page of every open PR in a busy repo. Any result
+// blocks, so the limit only caps the report. `run` defaults to tryRun;
+// tests inject a fake, since a stub `gh.cmd` on PATH isn't found by a
+// shell-less spawn on Windows.
+function findDependents(branches, repoDir, run = tryRun) {
+  const affected = [];
+  const warnings = [];
+  for (const branch of branches) {
+    const prList = run(['gh', 'pr', 'list', '--state', 'open', '--base', branch, '--json', 'number,headRefName,title', '--limit', '100'], repoDir);
+    if (!prList.ok || !prList.out.trim()) {
+      warnings.push(`[branch-delete-guard] \`gh pr list\` ${prList.ok ? 'returned no output' : 'failed'} — cannot check for stacked PRs depending on "${branch}". Verify manually with \`gh pr list --state open --base ${branch}\` before deleting it.${prList.err ? `\n${prList.err}` : ''}`);
+      continue;
+    }
+
+    let dependents;
+    try {
+      dependents = JSON.parse(prList.out);
+    } catch {
+      dependents = null;
+    }
+    if (!Array.isArray(dependents)) {
+      warnings.push(`[branch-delete-guard] Could not parse \`gh pr list\` output for "${branch}" — verify manually before deleting it.`);
+      continue;
+    }
+    if (dependents.length > 0) affected.push({ branch, dependents });
+  }
+  return { affected, warnings };
+}
+
+module.exports = { extractDeletedBranches, stripLeadingEnvPrefix, normalizeBranchName, isEnabled, tryRun, findDependents };
 
 // Only run the stdin-driven hook lifecycle when this file is executed
 // directly (`node check-branch-delete-guard.js`, which is how Claude Code
@@ -241,39 +212,28 @@ function runHook() {
     }
 
     const cmd = (input?.tool_input?.command || '').trim();
-    if (!/\bgit\s+push\b/.test(cmd)) process.exit(0); // not a push — allow
-
     const branches = extractDeletedBranches(cmd);
-    if (branches.length === 0) process.exit(0); // push, but not a delete — allow
+    if (branches.length === 0) process.exit(0); // not a delete push — allow
 
-    const ghAuth = tryRun('gh auth status');
+    // Open PRs of the repo being pushed to (after any `cd`/`git -C`), not
+    // this hook's own working directory, whose PRs say nothing about it.
+    const repoDir = pushTargetDir(cmd);
+    if (!repoDir) {
+      console.error('[branch-delete-guard] Could not determine which repository this delete targets (e.g. `cd "$VAR"`) — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` in that repo first.');
+      process.exit(0);
+    }
+
+    const ghAuth = tryRun('gh auth status', repoDir);
     if (!ghAuth.ok) {
       console.error('[branch-delete-guard] gh CLI not available/authenticated — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` first.');
       process.exit(0);
     }
 
-    const prList = tryRun('gh pr list --state open --json number,baseRefName,headRefName,title --limit 200');
-    if (!prList.ok || !prList.out.trim()) {
-      console.error(`[branch-delete-guard] \`gh pr list\` ${prList.ok ? 'returned no output' : 'failed'} — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with \`gh pr list --state open\` before deleting.${prList.err ? `\n${prList.err}` : ''}`);
+    const { affected, warnings } = findDependents(branches, repoDir);
+    if (affected.length === 0) {
+      for (const warning of warnings) console.error(warning);
       process.exit(0);
     }
-
-    let openPrs;
-    try {
-      openPrs = JSON.parse(prList.out);
-    } catch {
-      console.error('[branch-delete-guard] Could not parse `gh pr list` output — allowing, but verify manually before deleting.');
-      process.exit(0);
-    }
-
-    const affected = branches
-      .map((branch) => ({
-        branch,
-        dependents: openPrs.filter((pr) => pr.baseRefName === branch),
-      }))
-      .filter((entry) => entry.dependents.length > 0);
-
-    if (affected.length === 0) process.exit(0);
 
     const rows = affected
       .flatMap(({ branch, dependents }) =>
@@ -295,6 +255,7 @@ function runHook() {
       'Fix: retarget the dependent PR(s) above to their real final base first',
       '(`gh pr edit <number> --base <new-base>`), confirm it shows a clean/correct',
       'diff, then delete this branch.',
+      ...(warnings.length > 0 ? ['', 'Also unchecked:', ...warnings] : []),
     ].join('\n');
 
     console.error(report);
