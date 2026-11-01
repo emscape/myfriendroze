@@ -339,8 +339,6 @@ AI MAY NOT infer success from metrics.
 **INV-3**: No discretion. No judgment. Only state.
 CONTRACT SHALL NOT execute unless ALL predicates evaluate to TRUE.
 
-Full Actor Responsibility Model: →serena:ccabdd-manifesto
-
 ---
 
 ## 1. Intent Traceability

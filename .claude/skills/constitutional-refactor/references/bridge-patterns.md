@@ -233,7 +233,7 @@ Before proceeding to Phase 3 (Contracts):
 - [ ] Existing tests still pass (old behavior preserved)
 - [ ] New behavior can be toggled on for testing
 - [ ] You understand the transformation deeply
-- [ ] AI Panel `critique_code` reviewed the bridges
+- [ ] Independent review (fresh-context reviewer sub-agent) examined the bridge diff
 
 ---
 

@@ -1,4 +1,4 @@
-pyth---
+---
 name: adversarial-test-writer
 description: |
   Adversarial TDD RED phase - writes tests BLIND to implementation.
@@ -28,15 +28,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - mcp__serena__read_memory
-  - mcp__serena__write_memory
-  - mcp__serena__list_memories
-  - mcp__serena__search_for_pattern
-  - mcp__serena__get_symbols_overview
-  - mcp__serena__find_symbol
-  - mcp__serena__execute_shell_command
-  - mcp__ai-panel__critique_code
-  - mcp__ai-panel__enhance_response
 hooks:
   PreToolUse:
     - matcher: "Read"

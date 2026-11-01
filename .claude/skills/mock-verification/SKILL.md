@@ -51,11 +51,11 @@ Prevention: Contract verification test would have failed because real database l
 ```python
 # contracts/database.contract.py
 """
-Database Contract: semantic_search.memory_events table
+Database Contract: app.memory_events table
 
 Preconditions:
 - Connection established to PostgreSQL
-- semantic_search schema exists
+- app schema exists
 
 Postconditions:
 - INSERT returns row with all columns (including orphaned_at)
@@ -70,7 +70,7 @@ Invariants:
 
 # Schema definition (source of truth for mocks)
 MEMORY_EVENTS_SCHEMA = {
-    "table": "semantic_search.memory_events",
+    "table": "app.memory_events",
     "columns": {
         "id": "SERIAL PRIMARY KEY",
         "commit_hash": "VARCHAR(40) NOT NULL",
@@ -85,7 +85,7 @@ MEMORY_EVENTS_SCHEMA = {
 
 # Error conditions (mock must simulate these)
 EXPECTED_ERRORS = {
-    "missing_schema": "relation \"semantic_search.memory_events\" does not exist",
+    "missing_schema": "relation \"app.memory_events\" does not exist",
     "invalid_commit_hash": "value too long for type character varying(40)",
     "fk_violation": "violates foreign key constraint",
 }
@@ -111,7 +111,7 @@ def test_memory_events_schema_matches_contract(real_db_connection):
     cursor.execute("""
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
-        WHERE table_schema = 'semantic_search'
+        WHERE table_schema = 'app'
         AND table_name = 'memory_events'
     """)
     actual_columns = {row[0]: row[1] for row in cursor.fetchall()}
@@ -133,7 +133,7 @@ def test_error_conditions_match_contract(real_db_connection):
     # Test FK violation produces expected error
     with pytest.raises(Exception) as exc_info:
         cursor.execute("""
-            INSERT INTO semantic_search.memory_events (commit_hash, parent_hash)
+            INSERT INTO app.memory_events (commit_hash, parent_hash)
             VALUES ('invalid', 'nonexistent_parent')
         """)
 
@@ -199,14 +199,14 @@ Action: Write contract before proceeding
 
 ---
 
-## Integration with Think Tools
+## Integration with Written Checkpoints
 
-The following Serena think tools now include mock verification checks:
+The written checkpoints (answered explicitly in the response, citing evidence) include mock verification checks:
 
-1. **think_about_collected_information**: "Do contracts exist for planned mocks?"
-2. **think_about_task_adherence**: "Can mock behave differently from real provider?"
-3. **think_about_whether_you_are_done**: "All mocks have verified contracts?"
-4. **summarize_changes**: "Mock contract status for each mock used"
+1. **Collected-information checkpoint**: "Do contracts exist for planned mocks?"
+2. **Task-adherence checkpoint**: "Can mock behave differently from real provider?"
+3. **Completion checkpoint**: "All mocks have verified contracts?"
+4. **Change summary**: "Mock contract status for each mock used"
 
 ---
 

@@ -32,12 +32,6 @@ allowed-tools:
   - Glob
   - Grep
   - Bash
-  - mcp__serena__read_memory
-  - mcp__serena__write_memory
-  - mcp__serena__search_for_pattern
-  - mcp__serena__get_symbols_overview
-  - mcp__serena__find_symbol
-  - mcp__serena__execute_shell_command
 ---
 
 # External Constitutional Auditor

@@ -317,7 +317,7 @@ Identify where the agent is most likely to fail and provide safeguards:
 
 Agent capabilities improve through structured skill files, not ad-hoc correction:
 - Codify learned behaviors into reusable skills
-- Build institutional memory (Serena) for cross-session learning
+- Build institutional memory (Claude Code project memory and repo docs) for cross-session learning
 - Progressive refinement through documented iterations
 
 ### Principle 5 — Accountability: Transparent Verification
@@ -400,8 +400,6 @@ The agent progressively reinterprets instructions to match what it wants to do r
 | **Prevents** | Compliance theater | Coercion-induced fabrication | Semantic drift | Ethical delegation |
 
 **Combined application**: Meincke structures the environment for compliance. Méndez ensures output is reliable, not just obedient. Hermeneutics prevents interpretation drift. Van de Poel ensures compliance mechanisms are structural, not advisory.
-
-**Full reference**: →serena:ccabdd-manifesto
 
 ---
 

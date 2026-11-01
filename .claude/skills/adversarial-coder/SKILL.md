@@ -19,7 +19,7 @@ description: |
 
   **Expected output:**
   - Implementation that makes tests pass
-  - AI Panel validation (debug_assistance or critique_code)
+  - Independent review (fresh-context reviewer sub-agent given the actual diff; second-opinion sub-agent if stuck)
   - WHY/EXPECTED commit format
 context: fork
 agent: coder
@@ -30,19 +30,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - mcp__serena__read_memory
-  - mcp__serena__write_memory
-  - mcp__serena__list_memories
-  - mcp__serena__search_for_pattern
-  - mcp__serena__get_symbols_overview
-  - mcp__serena__find_symbol
-  - mcp__serena__replace_content
-  - mcp__serena__replace_symbol_body
-  - mcp__serena__insert_after_symbol
-  - mcp__serena__execute_shell_command
-  - mcp__ai-panel__debug_assistance
-  - mcp__ai-panel__critique_code
-  - mcp__ai-panel__enhance_response
 hooks:
   PreToolUse:
     - matcher: "Read"

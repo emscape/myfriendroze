@@ -13,7 +13,7 @@ This skill enforces constitutional TDD principles foundational to all developmen
 
 - **CL2 (Completion Gates)**: Tasks not complete until ALL protocol + quality requirements are met.
 
-- **CL5 (Human Approval)**: Planning phase, AI Panel feedback, and explicit user approval are required before coding.
+- **CL5 (Human Approval)**: Planning phase, independent review feedback, and explicit user approval are required before coding.
 
 Skills provide **operational procedures** that execute these constitutional principles. The principles themselves are defined in the constitutional framework loaded at session start.
 
@@ -89,9 +89,9 @@ Use **sub-agents** for test writing and implementation (not direct writes):
 ## Workflow Integration
 
 ### M4 START TDD CYCLE
-1. **MANDATORY CHECKPOINT**: Call `think_about_task_adherence`
+1. **MANDATORY CHECKPOINT**: Written checkpoint (task adherence)
    - Validates: Task alignment before implementation
-   - Criteria: Can answer "Am I implementing what was approved?" with evidence-based "Yes"
+   - Criteria: Answer "Am I implementing what was approved?" explicitly in the response, citing evidence (file:line, test output, commit)
    - Failure Handling:
      - Misaligned → Stop, refocus, or ask user
      - Aligned → Proceed to step 2 (write tests)
@@ -118,29 +118,29 @@ Use **sub-agents** for test writing and implementation (not direct writes):
 4. **Iteration cycle** (if tests fail)
 
 4.5. **CONSTITUTIONAL AUDIT** (MANDATORY - AFTER GREEN, BEFORE COMMIT)
-   - **AI Panel Critique** (MANDATORY - do NOT skip):
-     - Tool: `critique_code` with `enable_conversation=true`
+   - **Independent Review** (MANDATORY - do NOT skip):
+     - Spawn a fresh-context reviewer sub-agent (e.g. qa-reviewer) or use the built-in /code-review skill
      - Submit: ACTUAL code (`git diff --staged`), not summaries
-     - review_focus: "Test quality, theater test detection, measurable assertions"
+     - Review focus: "Test quality, theater test detection, measurable assertions"
    - **Theater Test Re-Check**: Apply step 2.5 criteria to ALL tests
      - If ANY theater test → REJECT → Return to step 2.5
    - **Quality Gates**:
      - [ ] All tests assert measurable effects
      - [ ] No mocks without verified interactions
      - [ ] Deterministic values are exact
-     - [ ] AI Panel critique addressed
-   - **Evidence Required**: AI Panel conversation_id, critique summary
+     - [ ] Independent review findings addressed
+   - **Evidence Required**: Reviewer findings and how each was resolved
 
 5. **Commit with verbose message** (WHY and EXPECTED format per commit standards)
 6. **Refactor while green** (REFACTOR)
-7. **AI PANEL review** (MANDATORY per CL5); apply all suggestions
+7. **Independent review** (MANDATORY per CL5); apply all suggestions
 
 ### M5 FINAL VALIDATION
 1. Run full suite + linters + DRY/SoC/FP gates
 2. Record evidence (coverage %, passing tests, git hash)
-3. **MANDATORY CHECKPOINT**: Call `think_about_whether_you_are_done`
+3. **MANDATORY CHECKPOINT**: Written checkpoint (completion)
    - Validates: Completion gates before claiming done per CL2
-   - Criteria: Tests pass, AI Panel reviewed, evidence recorded, memory updated, user approval
+   - Criteria: Tests pass, independent review done, evidence recorded, memory updated, user approval (answered explicitly with cited evidence)
    - Failure Handling:
      - Incomplete → Address gaps
      - Complete → Proceed to evidence recording
@@ -172,7 +172,7 @@ F:tests/test_auth.py:15-42 T:auth::test_jwt_validation=PASS C:a3f2c1b COV:92% O:
 ❌ **Committing after refactoring** → Violates CL6, commit GREEN state first
 ❌ **Changing behavior without new tests** → Violates CL6, write tests for new behavior
 ❌ **Claiming complete without evidence** → Violates CL2, provide evidence
-❌ **Skipping AI Panel review** → Violates CL5, submit for review
+❌ **Skipping independent review** → Violates CL5, submit for review
 
 ## Violation Recovery
 
@@ -181,7 +181,7 @@ When TDD violation detected:
 2. **Identify law/gate broken** → "I violated CL6 by writing implementation before tests"
 3. **Ask**: "Restart with proper constitutional adherence?"
 4. **Wait for confirmation** → Resume from last valid checkpoint (M4 or earlier)
-5. **Document lesson** → Update Serena memory with what went wrong
+5. **Document lesson** → Update Claude Code project memory (or repo docs) with what went wrong
 
 ## Language-Specific Commands
 
@@ -205,21 +205,19 @@ When TDD violation detected:
 - Coverage: `jest --coverage`
 - Watch mode: `jest --watch`
 
-## Integration with AI Panel
+## Integration with Independent Review
 
-After GREEN + COMMIT + REFACTOR phases, MANDATORY AI Panel review per CL5:
+After GREEN + COMMIT + REFACTOR phases, MANDATORY independent review per CL5:
 
-**Tool**: `critique_code`
-**Model**: 'default'
-**Enable Conversation**: true
-**Processing Mode**: oneshot (routine) or parallel (critical)
+**Reviewer**: fresh-context sub-agent (e.g. qa-reviewer) or the built-in /code-review skill
+**Input**: the ACTUAL diff (git diff / git show <commit>), never a summary
 
-**Sections**:
-- code_context: "TDD cycle implementation for [feature]"
-- code_implementation: <paste code>
-- review_focus: "Test coverage adequacy, edge cases, adherence to DRY/SoC/FP, refactoring opportunities"
-- quality_standards: ">85% coverage per QS1, all edge cases tested, functional style per QS2, no premature optimization"
-- architectural_context: <brief system context>
+**Provide**:
+- Context: "TDD cycle implementation for [feature]"
+- Code: the diff
+- Review focus: "Test coverage adequacy, edge cases, adherence to DRY/SoC/FP, refactoring opportunities"
+- Quality standards: ">85% coverage per QS1, all edge cases tested, functional style per QS2, no premature optimization"
+- Architectural context: <brief system context>
 
 **Post-Review**: Apply ALL suggestions before claiming completion per CL2
 
@@ -231,13 +229,13 @@ After GREEN + COMMIT + REFACTOR phases, MANDATORY AI Panel review per CL5:
 - [ ] Deterministic problems use EXACT values (not ranges)
 - [ ] Tests assert MEASURABLE EFFECTS (not just mock verification)
 - [ ] Minimal implementation makes test pass (GREEN)
-- [ ] **CONSTITUTIONAL AUDIT passed (M4.4.5)** - AI Panel critique completed
-- [ ] AI Panel conversation_id recorded
+- [ ] **CONSTITUTIONAL AUDIT passed (M4.4.5)** - independent review completed
+- [ ] Reviewer findings recorded
 - [ ] Commit created with WHY/EXPECTED format (COMMIT)
 - [ ] Refactoring improves structure while tests stay green (REFACTOR)
 - [ ] Coverage >85% achieved (QS1)
 - [ ] Edge cases covered (QS1)
-- [ ] AI Panel review completed (CL5)
+- [ ] Independent review completed (CL5)
 - [ ] All suggestions implemented (CL2)
 - [ ] Evidence documented (canonical format)
 - [ ] Human approval obtained if required (CL5)
