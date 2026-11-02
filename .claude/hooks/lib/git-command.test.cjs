@@ -8,7 +8,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('node:os');
 const path = require('node:path');
-const { commandSegments, isGitPush, pushArgs, pushTargetDir, splitRefspec } = require('./git-command.cjs');
+const { commandSegments, isGitPush, pushArgs, pushSegments, splitRefspec } = require('./git-command.cjs');
 
 const BASE = path.resolve(os.tmpdir(), 'base');
 
@@ -171,16 +171,28 @@ test('commandSegments cwd', async (t) => {
   }
 });
 
-test('pushTargetDir', async (t) => {
+test('pushSegments', async (t) => {
+  const pushDirs = (cmd) => pushSegments(cmd, BASE).map((s) => s.dir);
+
   await t.test('the directory of the push segment when it exists', () => {
-    assert.equal(pushTargetDir(`cd "${__dirname}" && git push`, BASE), __dirname);
-    assert.equal(pushTargetDir(`git -C "${__dirname}" push`, BASE), __dirname);
+    assert.deepEqual(pushDirs(`cd "${__dirname}" && git push`), [__dirname]);
+    assert.deepEqual(pushDirs(`git -C "${__dirname}" push`), [__dirname]);
   });
 
-  await t.test('null for a missing directory, an unknown one, or no push', () => {
-    assert.equal(pushTargetDir('cd does-not-exist && git push', BASE), null);
-    assert.equal(pushTargetDir('cd "$REPO" && git push', BASE), null);
-    assert.equal(pushTargetDir(`cd "${__dirname}" && git status`, BASE), null);
+  await t.test('null for a missing directory or an unknown one', () => {
+    assert.deepEqual(pushDirs('cd does-not-exist && git push'), [null]);
+    assert.deepEqual(pushDirs('cd "$REPO" && git push'), [null]);
+  });
+
+  await t.test('no entries when nothing is pushed', () => {
+    assert.deepEqual(pushSegments(`cd "${__dirname}" && git status`, BASE), []);
+  });
+
+  await t.test('every push in a chain, each with its own directory', () => {
+    const parent = path.dirname(__dirname);
+    const pushes = pushSegments(`git -C "${__dirname}" push origin a && git status && git -C "${parent}" push origin b`, BASE);
+    assert.deepEqual(pushes.map((s) => s.dir), [__dirname, parent]);
+    assert.deepEqual(pushes.map((s) => s.normalized), ['git push origin a', 'git push origin b']);
   });
 });
 

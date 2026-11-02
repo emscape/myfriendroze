@@ -44,6 +44,12 @@ test('rawSearchCommands', async (t) => {
     assert.deepEqual(rawSearchCommands("echo '$(tail -1 f)'"), []);
   });
 
+  await t.test('a quoted executable path containing spaces is detected', () => {
+    assert.deepEqual(rawSearchCommands('"C:\\Program Files\\Git\\usr\\bin\\grep.exe" -rn foo src'), ['grep']);
+    assert.deepEqual(rawSearchCommands("'/opt/my tools/bin/cat' file.txt"), ['cat']);
+    assert.deepEqual(rawSearchCommands('C:\\Git\\usr\\bin\\tail.exe -5 f'), ['tail']);
+  });
+
   await t.test('unwatched commands are not reported', () => {
     assert.deepEqual(rawSearchCommands('npm run build'), []);
   });

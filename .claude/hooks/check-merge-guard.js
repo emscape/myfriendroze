@@ -40,7 +40,7 @@
 
 const { execSync } = require('child_process');
 const { loadHookConfig } = require('./lib/hook-config.cjs');
-const { commandSegments, stripSurroundingQuotes } = require('./lib/git-command.cjs');
+const { commandSegments, pushArgs, splitRefspec, stripSurroundingQuotes } = require('./lib/git-command.cjs');
 
 const PROTECTED_BRANCHES = ['master', 'main'];
 
@@ -94,73 +94,38 @@ function checkoutTarget(segment) {
     // chain.
     return raw ? stripSurroundingQuotes(raw) : null;
   }
+  // `git checkout [<branch>] -- <paths>` and `git checkout .` restore files
+  // and leave HEAD where it was, so they aren't a move to another branch.
+  if (tokens.includes('--')) return null;
   const raw = tokens.find((t) => !t.startsWith('-'));
-  return raw ? stripSurroundingQuotes(raw) : null;
+  const target = raw ? stripSurroundingQuotes(raw) : null;
+  return target === '.' ? null : target;
 }
 
-// A refspec token is `<src>:<dest>` with no spaces, and a bare branch-name
-// token (no colon) pushes a local branch of that name to a remote branch
-// of the same name. Once flags are filtered out, every remaining non-flag
-// token is checked as a candidate — not just tokens assumed to follow a
-// remote — for two reasons found in review:
-//   1. A rigid `git push <remote> <refspec>` shape (nothing else) missed
-//      `git push --force origin feature:main` and `git push origin
-//      --force feature:main` entirely, since a flag anywhere breaks a
-//      fixed-position match. Tokenizing and filtering flags, the same
-//      approach check-branch-delete-guard.js uses for --delete, closes
-//      that gap regardless of flag position.
-//   2. Requiring at least a remote + one more token missed both
-//      `git push feature:main` (remote omitted — git still resolves this
-//      via config in some setups) and, more importantly, a *plain*
-//      `git push origin master` with no colon at all, which lands commits
-//      on master just as directly as any refspec does. Checking every
-//      non-flag token — including a lone one — for either a colon-refspec
-//      or an exact match against a protected branch name closes both,
-//      erring toward blocking rather than trying to perfectly replicate
-//      git's own remote-vs-refspec argument resolution.
+// The push's arguments come from the shared pushArgs() (lib/git-command.cjs):
+// flags in any position and the values of flags such as `-o` are skipped,
+// quotes are removed, and a `#` comment or a redirection (`>/dev/null`,
+// `2>&1`) is not an argument. Every refspec is checked, not just one in a
+// fixed position. splitRefspec() drops a leading `+` (a per-refspec force)
+// and gives an empty dest (`branch:`) the src's name, as git does. A bare
+// branch name (`git push origin master`) pushes to the remote branch of the
+// same name, and `refs/heads/main` is the same branch as `main`. No
+// `src !== dest` requirement: `main:main` lands on main like any other.
+//
+// A lone colon refspec in the remote position (`git push feature:main`)
+// is checked too, erring toward blocking rather than replicating git's
+// own remote-vs-refspec resolution. A lone bare name (`git push master`)
+// is the repository argument, not a branch, so it isn't.
 function protectedRefspecPush(segment) {
   if (!/^git\s+push\b/.test(segment)) return null;
 
-  const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
-  const nonFlags = tokens.slice(2).filter((t) => !t.startsWith('-'));
-
-  for (const rawToken of nonFlags) {
-    // This hook sees the raw command string, quotes and all — the shell
-    // hasn't stripped them yet the way it would before argv reaches git
-    // itself. `git push origin "main"` or `git push origin "feature:main"`
-    // would otherwise leave a trailing quote character on the token
-    // (`main"`), which never matches PROTECTED_BRANCHES even though the
-    // quoting changes nothing about what actually gets pushed.
-    const token = stripSurroundingQuotes(rawToken);
-    const colonIdx = token.indexOf(':');
-    if (colonIdx !== -1) {
-      let src = token.slice(0, colonIdx);
-      // An empty dest (`git push origin branch:`) means "push to a remote
-      // ref with the same name as src" — git's own default-dest behavior
-      // for a trailing-colon refspec.
-      let dest = token.slice(colonIdx + 1) || src;
-      src = src.replace(/^refs\/heads\//, '');
-      dest = dest.replace(/^refs\/heads\//, '');
-      // No `src !== dest` requirement — `git push origin main:main` (or
-      // the trailing-colon form `main:`) lands commits on main exactly as
-      // directly as any other refspec targeting it, so there's no case
-      // where src and dest being equal makes this any less a direct push
-      // to a protected branch.
-      if (PROTECTED_BRANCHES.includes(dest)) {
-        return { src, dest };
-      }
-      continue;
-    }
-
-    // A bare protected-branch-name token only counts once at least a
-    // remote/repository has also been given (`git push origin master`) —
-    // a single lone token (`git push master`) is what git itself treats
-    // as the repository argument, not a branch, so there's no push of
-    // anything named master/main to react to yet. A fully-qualified
-    // `refs/heads/main` is the same branch.
-    const branch = token.replace(/^refs\/heads\//, '');
-    if (nonFlags.length >= 2 && PROTECTED_BRANCHES.includes(branch)) {
-      return { src: branch, dest: branch };
+  const { remote, refspecs } = pushArgs(segment);
+  const candidates = remote && remote.includes(':') ? [remote, ...refspecs] : refspecs;
+  for (const token of candidates) {
+    const { src, dest } = splitRefspec(token);
+    const target = dest.replace(/^refs\/heads\//, '');
+    if (PROTECTED_BRANCHES.includes(target)) {
+      return { src: src.replace(/^refs\/heads\//, ''), dest: target };
     }
   }
   return null;
@@ -180,19 +145,36 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
   const segments = parsed.map((s) => s.raw);
   const normalized = parsed.map((s) => s.normalized);
 
-  // Resolved once per command and reused by both the push and merge
-  // checks below: a branch this command chain explicitly checks out to
+  // Reused by both the push and merge checks below: the branch this command
+  // chain last checked out in a given directory before segment i
   // (textually — the actual HEAD hasn't moved yet when this hook runs),
-  // falling back to whatever branch is actually currently checked out.
-  // Lazy since a real `git rev-parse` call is only worth paying for when
-  // nothing in the command already answers the question textually.
-  const checkedOutTo = normalized
-    .map(checkoutTarget)
-    .find((target) => target && PROTECTED_BRANCHES.includes(target));
-  // Cached per directory: `git -C a push && git -C b merge x` asks two repos.
+  // falling back to whatever branch is actually checked out there. Keyed
+  // by directory, so `git -C a checkout main && git -C b push` judges b by
+  // its own branch, and in order, so `checkout main && checkout feature &&
+  // push` pushes feature. A protected checkout in a directory that can't
+  // be known (null) might be any repository, so it counts for every
+  // directory from then on.
+  const lastCheckout = new Map();
+  let unknownProtected = null;
+  const checkoutsBefore = parsed.map((s, i) => {
+    const before = { byDir: new Map(lastCheckout), unknownProtected };
+    const target = checkoutTarget(normalized[i]);
+    if (target && s.cwd !== null) lastCheckout.set(s.cwd, target);
+    if (target && s.cwd === null && PROTECTED_BRANCHES.includes(target)) unknownProtected = target;
+    return before;
+  });
+  function checkedOutTo(i, dir) {
+    const { byDir, unknownProtected: unknown } = checkoutsBefore[i];
+    const own = dir === null ? undefined : byDir.get(dir);
+    return own && PROTECTED_BRANCHES.includes(own) ? own : unknown ?? own;
+  }
+  // Lazy and cached per directory: a real `git rev-parse` call is only
+  // worth paying for when nothing in the command already answers the
+  // question textually, and `git -C a push && git -C b merge x` asks two repos.
   const branchByDir = new Map();
-  function effectiveBranch(dir) {
-    if (checkedOutTo) return checkedOutTo;
+  function effectiveBranch(i, dir) {
+    const target = checkedOutTo(i, dir);
+    if (target) return target;
     if (!branchByDir.has(dir)) branchByDir.set(dir, getCurrentBranch(dir));
     return branchByDir.get(dir);
   }
@@ -231,31 +213,30 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
     // `git switch main && git push origin`. protectedRefspecPush() only
     // catches an explicit mention of a protected branch, so this implicit
     // form landed commits on master/main completely undetected. Only
-    // applies when nothing explicit was given (nonFlags.length <= 1):
+    // applies when nothing explicit was given (no refspecs):
     // an explicit branch/refspec naming a *different* branch (e.g.
     // `git push origin some-other-branch` while sitting on master) is a
     // deliberate, legitimate push of something else and shouldn't be
     // swept in just because HEAD happens to be on a protected branch.
     if (/^git\s+push\b/.test(segment)) {
-      const tokens = segment.split(/\s+/);
-      const rest = tokens.slice(2);
-      // --all/--mirror push every local branch (or the whole repo,
-      // including local master/main if either exists) to the remote,
+      const { refspecs, sets } = pushArgs(segment);
+      // --all/--branches/--mirror push every local branch (or the whole
+      // repo, including local master/main if either exists) to the remote,
       // regardless of which branch is currently checked out — unlike an
       // ordinary implicit push, this isn't gated on the current branch
       // being protected at all, since it can land commits on master/main
       // even when run from an unrelated feature branch. Blocked
-      // unconditionally whenever either flag is present, matching this
+      // unconditionally whenever any of them is present, matching this
       // hook's stated "err toward blocking" direction.
-      if (rest.includes('--all') || rest.includes('--mirror')) {
-        return `push includes --all/--mirror, which can update protected branches regardless of the current branch — matched: ${segments[i]}`;
+      if (sets.some((flag) => flag !== '--tags')) {
+        return `push includes ${sets.filter((flag) => flag !== '--tags').join('/')}, which can update protected branches regardless of the current branch — matched: ${segments[i]}`;
       }
-      const nonFlags = rest.filter((t) => !t.startsWith('-'));
-      if (nonFlags.length <= 1) {
-        if (parsed[i].cwd === null && !checkedOutTo) {
+      // `--tags` with no refspec pushes only tags, not the current branch.
+      if (refspecs.length === 0 && sets.length === 0) {
+        if (parsed[i].cwd === null && !checkedOutTo(i, null)) {
           return `implicit push (no explicit branch/refspec given) in a repository this guard can't determine (e.g. \`cd "$VAR"\`), so its current branch can't be checked — name the branch or use a literal path — matched: ${segments[i]}`;
         }
-        const branch = effectiveBranch(parsed[i].cwd);
+        const branch = effectiveBranch(i, parsed[i].cwd);
         if (branch && PROTECTED_BRANCHES.includes(branch)) {
           return `implicit push (no explicit branch/refspec given) while on protected branch "${branch}" — matched: ${segments[i]}`;
         }
@@ -267,10 +248,10 @@ function findMergeReason(fullCmd, getCurrentBranch = currentBranch) {
   // protected branch.
   for (let i = 0; i < normalized.length; i++) {
     if (!/^git\s+merge\b/.test(normalized[i])) continue;
-    if (parsed[i].cwd === null && !checkedOutTo) {
+    if (parsed[i].cwd === null && !checkedOutTo(i, null)) {
       return `local \`git merge\` in a repository this guard can't determine (e.g. \`cd "$VAR"\`), so its current branch can't be checked — use a literal path`;
     }
-    const branch = effectiveBranch(parsed[i].cwd);
+    const branch = effectiveBranch(i, parsed[i].cwd);
     if (branch && PROTECTED_BRANCHES.includes(branch)) {
       return `local \`git merge\` on protected branch "${branch}"`;
     }

@@ -8,8 +8,12 @@
  * Inputs (via stdin JSON):
  *   { prompt: string }
  *
- * Exit 0 = allow silently
- * Exit 1 = allow + print reminder to stderr (informational, not blocking)
+ * Opt-in: not registered in hooks.json by default, since its generic
+ * keywords ('plan', 'error', 'build', ...) match most prompts until a project
+ * tailors them. See README.md to register it.
+ *
+ * Always exits 0 (never blocks). A matching prompt prints its reminder to
+ * stdout, which Claude Code adds to the conversation as context.
  *
  * Routing table (prompt keywords → recommended workflow):
  *   schema / data model / type / interface       → model-first, plan before code
@@ -28,8 +32,8 @@
 //   keywords  — lowercase phrases matched against the user's prompt (substring match).
 //               Add project-specific vocabulary here: domain nouns, file/package names,
 //               framework names, feature-area jargon, custom skill/agent names, etc.
-//   reminder  — lines printed to stderr when a keyword matches. These are informational
-//               only (exit 1, not blocking). Point to your project's actual skills,
+//   reminder  — lines printed to stdout (added to the conversation) when a keyword
+//               matches. Informational only (exit 0, never blocking). Point to your project's actual skills,
 //               agents, package paths, commands, and constraints.
 //
 // Tips:
@@ -173,23 +177,20 @@ process.stdin.on('end', () => {
   const prompt = (data?.prompt ?? '').toLowerCase();
   if (!prompt) process.exit(0);
 
-  const matched = [];
-  for (const route of ROUTES) {
-    if (route.keywords.some(kw => prompt.includes(kw))) {
-      matched.push(route);
-    }
-  }
+  const matched = ROUTES.filter(route => route.keywords.some(kw => prompt.includes(kw)));
 
   if (matched.length === 0) process.exit(0);
 
-  process.stderr.write('\n┌─ AGENT ROUTING REMINDER ────────────────────────────────────────\n');
+  // Stdout on exit 0 is what Claude Code adds to the conversation for a
+  // UserPromptSubmit hook; stderr or a non-zero exit only reaches the terminal.
+  process.stdout.write('\n┌─ AGENT ROUTING REMINDER ────────────────────────────────────────\n');
   for (const route of matched) {
-    route.reminder.forEach(line => process.stderr.write(`│  ${line}\n`));
+    route.reminder.forEach(line => process.stdout.write(`│  ${line}\n`));
     if (matched.indexOf(route) < matched.length - 1) {
-      process.stderr.write('│\n');
+      process.stdout.write('│\n');
     }
   }
-  process.stderr.write('└──────────────────────────────────────────────────────────────────\n\n');
+  process.stdout.write('└──────────────────────────────────────────────────────────────────\n\n');
 
-  process.exit(1);
+  process.exit(0);
 });

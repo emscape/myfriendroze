@@ -82,6 +82,21 @@ function substitutionEnd(str, i) {
   return str.length;
 }
 
+// Index just past the closing `'` of an ANSI-C quoted string (`$'...'`)
+// opening at `i`, or the end of `str` if unterminated. Unlike plain single
+// quotes, a backslash escapes the next character, so `\'` doesn't end it.
+function ansiCQuoteEnd(str, i) {
+  for (let j = i + 2; j < str.length; j++) {
+    if (str[j] === '\\') j++;
+    else if (str[j] === "'") return j + 1;
+  }
+  return str.length;
+}
+
+// `$'...'` escapes and what they stand for. Others (`\xHH`, octal) are kept
+// as written, which can only make a word harder to recognise, not easier.
+const ANSI_C_ESCAPES = { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', e: '\x1b', E: '\x1b', f: '\f', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
+
 // Index just past a quoted string, an escaped character, or a command
 // substitution opening at `i` — text that goes into a segment whole and is
 // never split — or -1 if `i` opens none of those. Single quotes are fully
@@ -89,6 +104,7 @@ function substitutionEnd(str, i) {
 function unsplittableEnd(str, i) {
   const ch = str[i];
   if (ch === '\\') return Math.min(i + 2, str.length);
+  if (ch === '$' && str[i + 1] === "'") return ansiCQuoteEnd(str, i);
   if (ch === "'") {
     const close = str.indexOf("'", i + 1);
     return close === -1 ? str.length : close + 1;
@@ -194,6 +210,111 @@ function unwrapShellDashC(segment) {
   return quoteChar === '"' ? content.replace(/\\(["\\$`])/g, '$1') : content;
 }
 
+// `str` split into shell words with quote removal applied, as the shell
+// does before running a command: `e"va"l` → `eval`, `\eval` → `eval`,
+// `"a \"b\""` → `a "b"`, `$'a\tb'` → `a<tab>b`, and a backslash-newline
+// line continuation is removed. `$(...)` and backtick substitutions are
+// copied through unchanged, to be parsed later. Null if a quote is
+// unterminated.
+function unquotedWords(str) {
+  const words = [];
+  let current = '';
+  let inWord = false;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '\\' && str[i + 1] === '\n') {
+      i++;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (inWord) words.push(current);
+      current = '';
+      inWord = false;
+      continue;
+    }
+    inWord = true;
+    if (ch === '\\') {
+      if (i + 1 < str.length) current += str[++i];
+    } else if (ch === '$' && str[i + 1] === "'") {
+      let j = i + 2;
+      for (; j < str.length && str[j] !== "'"; j++) {
+        if (str[j] === '\\' && j + 1 < str.length) {
+          const esc = str[++j];
+          current += esc in ANSI_C_ESCAPES ? ANSI_C_ESCAPES[esc] : `\\${esc}`;
+        } else {
+          current += str[j];
+        }
+      }
+      if (j >= str.length) return null;
+      i = j;
+    } else if (ch === "'") {
+      const close = str.indexOf("'", i + 1);
+      if (close === -1) return null;
+      current += str.slice(i + 1, close);
+      i = close;
+    } else if (ch === '"') {
+      let j = i + 1;
+      for (; j < str.length && str[j] !== '"'; j++) {
+        if (str[j] === '\\' && str[j + 1] === '\n') {
+          j++;
+        } else if (str[j] === '\\' && /["\\$`]/.test(str[j + 1] || '')) {
+          current += str[++j];
+        } else if (str[j] === '`' || (str[j] === '$' && str[j + 1] === '(')) {
+          const end = substitutionEnd(str, j);
+          current += str.slice(j, end);
+          j = end - 1;
+        } else {
+          current += str[j];
+        }
+      }
+      if (j >= str.length) return null;
+      i = j;
+    } else if (ch === '`' || (ch === '$' && str[i + 1] === '(')) {
+      const end = substitutionEnd(str, i);
+      current += str.slice(i, end);
+      i = end - 1;
+    } else {
+      current += ch;
+    }
+  }
+  if (inWord) words.push(current);
+  return words;
+}
+
+// `eval ARGS...` runs its arguments, after quote removal and joined by
+// spaces, as a command line. Returns that inner string, or null if
+// `segment` isn't an eval or a quote is unterminated. Leading `eval` words
+// (and `--`) are skipped in a loop, not by recursion, so a very long
+// `eval eval eval ...` chain can't overflow the stack.
+function unwrapEval(segment) {
+  const words = unquotedWords(segment);
+  if (words === null || words[0] !== 'eval') return null;
+  let i = 0;
+  while (words[i] === 'eval') {
+    i++;
+    if (words[i] === '--') i++;
+  }
+  return words.slice(i).join(' ');
+}
+
+// A quoted or backslash-escaped leading word (`"eval"`, `'sudo'`, `g\it`,
+// `'-r'`) → its unquoted spelling, since that's what the shell looks up or
+// passes on. A word that unquotes to something containing whitespace is left
+// alone: no wrapper or option is spelled that way, and a quoted path with
+// spaces is handled by stripCommandPathPrefix(). So is an unquoted Windows
+// path (`C:\Git\bin\git.exe`, `.\gh.exe`), whose backslashes are separators
+// as written, not escapes.
+const LEADING_WORD = new RegExp(`^${WORD}`);
+const UNQUOTED_WINDOWS_PATH = /^(?:[A-Za-z]:|\.{1,2})\\[^"']*$/;
+
+function unquoteLeadingWord(segment) {
+  const m = segment.match(LEADING_WORD);
+  if (!m || !/[\\"']/.test(m[0]) || UNQUOTED_WINDOWS_PATH.test(m[0])) return segment;
+  const words = unquotedWords(m[0]);
+  if (words === null || words.length !== 1 || /\s/.test(words[0])) return segment;
+  return words[0] + segment.slice(m[0].length);
+}
+
 // A leading `env` (bare or path-qualified, with its own flags) and any
 // number of `VAR=value` assignments — `GIT_SSH_COMMAND="ssh -vv" git push`
 // is the same push.
@@ -209,7 +330,7 @@ function stripLeadingEnvPrefix(segment) {
   let prev;
   do {
     prev = s;
-    s = s
+    s = unquoteLeadingWord(s)
       .replace(ENV_END_OPTIONS, '')
       .replace(ENV_ARG_FLAG_COMBINED, '')
       .replace(ENV_ARG_FLAG_SEPARATE, '')
@@ -235,10 +356,59 @@ function stripLeadingWrapperPrefix(segment) {
   do {
     prev = s;
     if (m[1] === 'sudo') {
-      s = s.replace(SUDO_ARG_FLAG, '').replace(SUDO_NO_ARG_FLAG, '');
+      s = unquoteLeadingWord(s).replace(SUDO_ARG_FLAG, '').replace(SUDO_NO_ARG_FLAG, '');
     } else if (m[1] === 'command') {
-      s = s.replace(COMMAND_NO_ARG_FLAG, '');
+      s = unquoteLeadingWord(s).replace(COMMAND_NO_ARG_FLAG, '');
     }
+  } while (s !== prev);
+  return s;
+}
+
+// `xargs [options] COMMAND ...` runs COMMAND, so the word and its own
+// options are dropped and COMMAND (placeholders and all) is what's checked.
+// Short options may be clustered getopt-style (`-rn1`, `-0I {}`): letters
+// are walked in turn, and a value-taking letter (n P L d E s a I, and R J S
+// from GNU/BSD) takes the rest of the token, or the next token if none
+// remains; i/e/l take only an attached rest. Only the common options are
+// handled.
+const XARGS_COMMAND = /^(?:\S*[\\/])?xargs(?:\.exe)?(?=\s|$)\s*/;
+const XARGS_SHORT_CLUSTER = /^-([^-\s]\S*)\s*/;
+const XARGS_LONG_ARG_FLAG_COMBINED = /^--[a-z][a-z-]*=\S*\s*/;
+const XARGS_LONG_ARG_FLAG_SEPARATE = new RegExp(`^--(?:max-args|max-procs|max-lines|max-chars|delimiter|eof|arg-file)\\s+${WORD}\\s*`);
+const XARGS_LONG_NO_ARG_FLAG = /^--[a-z][a-z-]*(?=\s|$)\s*/;
+const XARGS_SHORT_VALUE_LETTER = /[nPLdEsaIRJS]/;
+const XARGS_SHORT_OPTIONAL_LETTER = /[iel]/;
+const NEXT_WORD = new RegExp(`^${WORD}\\s*`);
+
+// `s` minus one leading short-option cluster (and the next word, if the
+// cluster ends in a value-taking letter), or unchanged if there is none.
+function stripXargsShortCluster(s) {
+  const m = s.match(XARGS_SHORT_CLUSTER);
+  if (!m) return s;
+  const rest = s.slice(m[0].length);
+  const letters = m[1];
+  for (let i = 0; i < letters.length; i++) {
+    if (XARGS_SHORT_OPTIONAL_LETTER.test(letters[i])) return rest;
+    if (XARGS_SHORT_VALUE_LETTER.test(letters[i])) {
+      return i < letters.length - 1 ? rest : rest.replace(NEXT_WORD, '');
+    }
+  }
+  return rest;
+}
+
+function stripLeadingXargs(segment) {
+  if (!XARGS_COMMAND.test(segment)) return segment;
+  let s = segment.replace(XARGS_COMMAND, '');
+  let prev;
+  do {
+    prev = s;
+    s = stripXargsShortCluster(
+      unquoteLeadingWord(s)
+        .replace(ENV_END_OPTIONS, '')
+        .replace(XARGS_LONG_ARG_FLAG_COMBINED, '')
+        .replace(XARGS_LONG_ARG_FLAG_SEPARATE, '')
+        .replace(XARGS_LONG_NO_ARG_FLAG, ''),
+    );
   } while (s !== prev);
   return s;
 }
@@ -254,13 +424,13 @@ function stripLeadingControlFlow(segment) {
 }
 
 // Env prefixes, sudo/command/exec wrappers, and control-flow words, in any
-// mix and order.
+// mix and order, each command word unquoted first.
 function stripPrefixes(segment) {
   let s = segment;
   let prev;
   do {
     prev = s;
-    s = stripLeadingWrapperPrefix(stripLeadingEnvPrefix(stripLeadingControlFlow(s)));
+    s = stripLeadingXargs(stripLeadingWrapperPrefix(stripLeadingEnvPrefix(stripLeadingControlFlow(unquoteLeadingWord(s)))));
   } while (s !== prev);
   return s;
 }
@@ -388,11 +558,25 @@ function gitDir(segment, base) {
 // A `cd` inside a shell wrapper doesn't carry out of it, as in a real shell.
 function commandSegments(fullCmd, startDir = process.cwd()) {
   const out = [];
+  walkSegments(fullCmd, startDir, out);
+  return out;
+}
+
+// Appends fullCmd's segments to `out`; returns the directory it ends in. A
+// `bash -c` runs in a subprocess, so its `cd` stays inside it; `eval` runs in
+// the current shell, so its `cd` carries on to what follows.
+function walkSegments(fullCmd, startDir, out) {
   let dir = startDir;
   for (const raw of segmentsOf(fullCmd)) {
-    const inner = unwrapShellDashC(stripPrefixes(raw));
-    if (inner !== null) {
-      out.push(...commandSegments(inner, dir));
+    const stripped = stripPrefixes(raw);
+    const dashC = unwrapShellDashC(stripped);
+    if (dashC !== null) {
+      walkSegments(dashC, dir, out);
+      continue;
+    }
+    const evalInner = unwrapEval(stripped);
+    if (evalInner !== null) {
+      dir = walkSegments(evalInner, dir, out);
       continue;
     }
     for (const body of substitutionsOf(raw)) {
@@ -407,21 +591,23 @@ function commandSegments(fullCmd, startDir = process.cwd()) {
     }
     out.push({ raw, normalized, cwd: gitDir(raw, dir) });
   }
-  return out;
+  return dir;
 }
 
-// The first `git push` in the command, as a commandSegments() entry, or
+// Every `git push` in the command, in order, as commandSegments() entries
+// plus `dir`: the directory that push runs in if it can be determined and
+// exists, otherwise null. A chain can push several repos, so a hook that
+// checks a push checks each one here, not only the first.
+function pushSegments(fullCmd, startDir = process.cwd()) {
+  return commandSegments(fullCmd, startDir)
+    .filter((s) => /^git\s+push(?:\s|$)/.test(s.normalized))
+    .map((s) => ({ ...s, dir: s.cwd !== null && fs.existsSync(s.cwd) ? s.cwd : null }));
+}
+
+// The first `git push` in the command, as a pushSegments() entry, or
 // undefined if there is none.
 function firstPushSegment(fullCmd, startDir = process.cwd()) {
-  return commandSegments(fullCmd, startDir).find((s) => /^git\s+push(?:\s|$)/.test(s.normalized));
-}
-
-// The directory the first `git push` in the command runs in, if it can be
-// determined and exists; otherwise null.
-function pushTargetDir(fullCmd, startDir = process.cwd()) {
-  const push = firstPushSegment(fullCmd, startDir);
-  if (!push || push.cwd === null) return null;
-  return fs.existsSync(push.cwd) ? push.cwd : null;
+  return pushSegments(fullCmd, startDir)[0];
 }
 
 // True if any command in the string is an actual `git push`.
@@ -442,13 +628,30 @@ function stripSurroundingQuotes(token) {
   return token;
 }
 
+// A redirection word: `>`, `>>`, `2>`, `&>`, `<`, with or without its
+// target attached (`>/dev/null`, `2>&1`). segmentsOf() splits `2>&1` at
+// the `&`, leaving `2>` at the end of the segment.
+const REDIRECTION = /^\d*(?:&>>?|>>?&?|>\||<&?)/;
+
 // A segment's shell words with their quotes removed: `"/tmp/remote repo"`
 // is one word, and `feat"ure"` is `feature`. Backslash escapes and
-// expansions are left as written.
+// expansions are left as written. A `#` comment ends the words, and
+// redirections (and a detached target, as in `> out.log`) are dropped, so
+// neither is mistaken for an argument.
 function shellWords(segment) {
-  return (segment.match(new RegExp(WORD, 'g')) || []).map((word) =>
-    word.replace(/"([^"]*)"|'([^']*)'/g, (_, dq, sq) => dq ?? sq)
-  );
+  const raw = segment.match(new RegExp(WORD, 'g')) || [];
+  const words = [];
+  for (let i = 0; i < raw.length; i++) {
+    const word = raw[i];
+    if (word.startsWith('#')) break;
+    const redirect = word.match(REDIRECTION);
+    if (redirect) {
+      if (redirect[0] === word) i++;
+      continue;
+    }
+    words.push(word.replace(/"([^"]*)"|'([^']*)'/g, (_, dq, sq) => dq ?? sq));
+  }
+  return words;
 }
 
 // `git push` options whose value is the next word, so it isn't mistaken
@@ -504,9 +707,10 @@ module.exports = {
   isGitPush,
   normalizeSegment,
   pushArgs,
-  pushTargetDir,
+  pushSegments,
   segmentsOf,
   splitRefspec,
   stripLeadingEnvPrefix,
   stripSurroundingQuotes,
+  unquotedWords,
 };

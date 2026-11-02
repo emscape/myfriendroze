@@ -39,7 +39,8 @@
 
 const { execSync, execFileSync } = require('child_process');
 const { loadHookConfig } = require('./lib/hook-config.cjs');
-const { commandSegments, pushTargetDir, stripLeadingEnvPrefix, stripSurroundingQuotes } = require('./lib/git-command.cjs');
+const fs = require('fs');
+const { commandSegments, pushArgs, splitRefspec, stripLeadingEnvPrefix, stripSurroundingQuotes } = require('./lib/git-command.cjs');
 
 function isEnabled() {
   try {
@@ -82,13 +83,9 @@ function tryRun(cmd, cwd) {
 //
 // Handles `--delete`/`-d` in any position relative to the remote (e.g.
 // both `git push origin --delete branch` and `git push --delete origin
-// branch` are valid git syntax and equally common) by tokenizing each
-// push segment and treating every non-flag token after the remote as a
-// branch to delete — rather than assuming a fixed "remote, then
-// --delete, then branches" shape, which silently matched zero branches
-// (and so silently allowed the delete) for the flag-before-remote form.
-// Also handles the older `:branch` refspec shorthand independently, since
-// that doesn't need a --delete/-d flag at all.
+// branch` are valid git syntax and equally common), and the older
+// `:branch` refspec shorthand, which doesn't need a --delete/-d flag at
+// all. See branchesDeletedBy().
 //
 // Segment splitting and normalization (env/sudo prefixes, `bash -c`
 // wrappers, a path-qualified git binary, `git -C <dir>` and other global
@@ -114,41 +111,49 @@ function normalizeBranchName(name) {
 }
 
 function extractDeletedBranches(fullCmd) {
-  const branches = new Set();
+  return [...new Set(deletesByRepo(fullCmd).flatMap((d) => d.branches))];
+}
 
-  for (const { normalized: segment } of commandSegments(fullCmd)) {
-    // Anchored at the start of the segment — "contains git push" isn't
-    // enough, since that also matches inside an unrelated quoted string
-    // that merely mentions it.
-    if (!/^git\s+push\b/.test(segment)) continue;
-
-    const tokens = segment.split(/\s+/); // tokens[0] === 'git', tokens[1] === 'push'
-    // Unquoted first: the shell strips the quotes from `"--delete"` before
-    // git sees it, so it's the same flag.
-    const rest = tokens.slice(2).map(stripSurroundingQuotes);
-    const hasDeleteFlag = rest.some((t) => t === '--delete' || t === '-d');
-    if (hasDeleteFlag) {
-      const nonFlags = rest.filter((t) => !t.startsWith('-'));
-      for (const b of nonFlags.slice(1)) branches.add(normalizeBranchName(b)); // [0] is the remote
-    }
-
-    // `git push origin :branch-name` — a leading bare colon means
-    // "delete", scoped to this same segment. Captures any run of
-    // non-whitespace after the colon rather than an allow-listed character
-    // class — git ref names permit a wide range of characters (`@`, `+`,
-    // etc.; see git-check-ref-format), and a narrower class here would
-    // silently fail to extract a real, valid branch name, defeating the
-    // guard for exactly the kind of ref it should be catching. The colon
-    // may also be immediately preceded by an opening quote (a quoted
-    // refspec token, e.g. `":branch"`) rather than only whitespace/start
-    // of segment — without allowing for that, the colon itself is never
-    // found and the whole delete goes undetected, not just misparsed.
-    for (const m of segment.matchAll(/(?:^|\s)["']?:(\S+?)["']?(?=\s|$)/g)) {
-      branches.add(normalizeBranchName(m[1]));
+// The branches each repository's pushes delete: `[{ dir, branches }]`, one
+// entry per repository, where `dir` is the directory those pushes run in
+// (null when it can't be determined or doesn't exist). A chain can delete
+// branches in several repositories, and each one's PRs are its own.
+function deletesByRepo(fullCmd) {
+  const byDir = new Map();
+  for (const { normalized: segment, cwd } of commandSegments(fullCmd)) {
+    const dir = cwd !== null && fs.existsSync(cwd) ? cwd : null;
+    for (const branch of branchesDeletedBy(segment)) {
+      if (!byDir.has(dir)) byDir.set(dir, new Set());
+      byDir.get(dir).add(branch);
     }
   }
+  return [...byDir].map(([dir, branches]) => ({ dir, branches: [...branches] }));
+}
 
-  return [...branches];
+// The branches one normalized segment deletes, if it's a `git push`.
+// Arguments come from the shared pushArgs(): quotes removed, flags in any
+// position, the remote from a positional or `--repo`/`--repo=`. With
+// --delete/-d every refspec names a branch to delete; without it, a
+// refspec with an empty source (`:branch`, or `+:branch` with the force
+// prefix) does. A colon refspec in the remote position (`git push :branch`)
+// counts too, erring toward checking.
+function branchesDeletedBy(segment) {
+  // Anchored at the start of the segment — "contains git push" isn't
+  // enough, since that also matches inside an unrelated quoted string
+  // that merely mentions it.
+  if (!/^git\s+push\b/.test(segment)) return [];
+
+  const { remote, refspecs, deletes } = pushArgs(segment);
+  // A remote URL (`git@host:owner/repo`, `ssh://...`) has a colon too, but
+  // isn't a refspec.
+  const remoteIsRefspec = remote && remote.includes(':') && !/@|:\/\//.test(remote);
+  const candidates = remoteIsRefspec ? [remote, ...refspecs] : refspecs;
+  const branches = new Set();
+  for (const refspec of candidates) {
+    const { src, dest } = splitRefspec(refspec);
+    if (deletes || !src) branches.add(normalizeBranchName(dest));
+  }
+  return [...branches].filter(Boolean);
 }
 
 // The open PRs basing off each branch: `{ affected, warnings }`, where
@@ -212,24 +217,31 @@ function runHook() {
     }
 
     const cmd = (input?.tool_input?.command || '').trim();
-    const branches = extractDeletedBranches(cmd);
-    if (branches.length === 0) process.exit(0); // not a delete push — allow
+    const deletes = deletesByRepo(cmd);
+    if (deletes.length === 0) process.exit(0); // not a delete push — allow
 
-    // Open PRs of the repo being pushed to (after any `cd`/`git -C`), not
-    // this hook's own working directory, whose PRs say nothing about it.
-    const repoDir = pushTargetDir(cmd);
-    if (!repoDir) {
-      console.error('[branch-delete-guard] Could not determine which repository this delete targets (e.g. `cd "$VAR"`) — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` in that repo first.');
-      process.exit(0);
+    // Each delete is checked against the open PRs of the repo it pushes to
+    // (after any `cd`/`git -C`), not this hook's own working directory or
+    // another push's repo, whose PRs say nothing about it. Every repo is
+    // checked before deciding, so an unchecked one can't hide a dependent
+    // found in another.
+    const affected = [];
+    const warnings = [];
+    for (const { dir, branches } of deletes) {
+      const named = branches.map((b) => `"${b}"`).join(', ');
+      if (!dir) {
+        warnings.push(`[branch-delete-guard] Could not determine which repository the delete of ${named} targets (e.g. \`cd "$VAR"\`) — cannot check for stacked PRs depending on it. Allowing, but verify manually with \`gh pr list --state open\` in that repo first.`);
+        continue;
+      }
+      const ghAuth = tryRun('gh auth status', dir);
+      if (!ghAuth.ok) {
+        warnings.push(`[branch-delete-guard] gh CLI not available/authenticated — cannot check for stacked PRs depending on ${named}. Allowing, but verify manually with \`gh pr list --state open\` in ${dir} first.`);
+        continue;
+      }
+      const found = findDependents(branches, dir);
+      affected.push(...found.affected);
+      warnings.push(...found.warnings);
     }
-
-    const ghAuth = tryRun('gh auth status', repoDir);
-    if (!ghAuth.ok) {
-      console.error('[branch-delete-guard] gh CLI not available/authenticated — cannot check for stacked PRs depending on this branch. Allowing, but verify manually with `gh pr list --state open` first.');
-      process.exit(0);
-    }
-
-    const { affected, warnings } = findDependents(branches, repoDir);
     if (affected.length === 0) {
       for (const warning of warnings) console.error(warning);
       process.exit(0);

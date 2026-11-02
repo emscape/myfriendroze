@@ -27,9 +27,11 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
-const { loadHookConfig } = createRequire(import.meta.url)('./lib/hook-config.cjs');
+const { loadHookConfig, resolveProjectDir } = createRequire(import.meta.url)('./lib/hook-config.cjs');
 const CONFIG_PATH = resolve(SCRIPT_DIR, 'config.json');
-const CWD = process.cwd();
+// package_json_paths are relative to the project (CLAUDE_PROJECT_DIR), not
+// to whatever directory the hook happens to be started in.
+const PROJECT_DIR = resolveProjectDir();
 
 function log(msg) {
   process.stderr.write(`[script-guard] ${msg}\n`);
@@ -56,7 +58,7 @@ const {
 // ── Load all package.json scripts from configured paths ───────────────────
 const availableScripts = new Set();
 for (const pkgPath of package_json_paths) {
-  const fullPath = resolve(CWD, pkgPath);
+  const fullPath = resolve(PROJECT_DIR, pkgPath);
   if (!existsSync(fullPath)) continue;
   try {
     const pkg = JSON.parse(readFileSync(fullPath, 'utf8'));
@@ -132,8 +134,9 @@ process.stdin.on('end', () => {
     process.stderr.write(`   Available: ${[...availableScripts].sort().join(', ') || '(none found)'}\n`);
     process.stderr.write(`   Check for a typo or add the script to package.json before running.\n\n`);
 
+    // Exit 2 is what blocks a PreToolUse call; exit 1 only reports.
     if (on_missing === 'block') {
-      process.exit(1);
+      process.exit(2);
     }
   }
 

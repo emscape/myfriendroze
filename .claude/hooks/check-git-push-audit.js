@@ -28,7 +28,7 @@
 'use strict';
 
 const { execSync, execFileSync } = require('child_process');
-const { firstPushSegment, isGitPush, pushArgs, pushTargetDir, splitRefspec } = require('./lib/git-command.cjs');
+const { isGitPush, pushArgs, pushSegments, splitRefspec } = require('./lib/git-command.cjs');
 
 // ── Secret patterns ────────────────────────────────────────────────────────────
 // Generic (non-vendor-specific) patterns keep a low length floor (8 chars
@@ -255,13 +255,16 @@ function runHook() {
     // rooted elsewhere would otherwise audit the wrong repository. An
     // unknown or missing target blocks rather than auditing this hook's
     // directory, which would pass secrets in the real target unseen.
-    const repoDir = pushTargetDir(cmd);
-    if (!repoDir) {
+    // Every push in the command is audited, each in its own repository: a
+    // chain like `git -C a push && git -C b push` sends both.
+    const pushes = pushSegments(cmd);
+    if (pushes.some((p) => !p.dir)) {
       const report = 'PRE-PUSH AUDIT: Could not determine which repository this push targets (e.g. `cd "$VAR"`, or a `git -C` path that does not exist), so its changes cannot be audited. Push with a literal path instead.';
       process.stderr.write(report + '\n');
       process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
       process.exit(2);
     }
+    const repoDirs = [...new Set(pushes.map((p) => p.dir))];
     // Staged changes and the committed range are combined, not either/or:
     // the commits are what the push sends, so a benign staged file must not
     // stop them from being audited.
@@ -269,7 +272,7 @@ function runHook() {
     // A failed git read (an error, or output past maxBuffer) leaves only
     // partial stdout; auditing that as complete would pass whatever was
     // cut off, so it blocks instead.
-    function readGit(args, what) {
+    function readGit(args, what, repoDir) {
       const r = git(args, repoDir);
       if (r.ok) return r.out;
       const report = `PRE-PUSH AUDIT: Could not read ${what} (\`git ${args.join(' ')}\` failed in ${repoDir}), so they cannot be audited.`;
@@ -277,36 +280,41 @@ function runHook() {
       process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
       process.exit(2);
     }
-    function addDiff(label, range) {
-      const files = readGit(['diff', ...range, '--name-only'], `the ${label} changes`).trim();
-      if (files) parts.push({ label, files, text: readGit(['diff', ...range], `the ${label} changes`) });
+    // Labels name the repository only when the command pushes more than one.
+    const labelIn = (label, repoDir) => (repoDirs.length > 1 ? `${label} in ${repoDir}` : label);
+    function addDiff(label, range, repoDir) {
+      const files = readGit(['diff', ...range, '--name-only'], `the ${label} changes`, repoDir).trim();
+      if (files) parts.push({ label: labelIn(label, repoDir), files, text: readGit(['diff', ...range], `the ${label} changes`, repoDir) });
     }
 
-    addDiff('staged', ['--staged']);
-    // Every commit the push would send, each audited by its own patch rather
-    // than one net diff: a secret added in one commit and deleted in a later
-    // one is still sent in history. See outgoingRange() for which commits
-    // those are. Merges show their changes against the first parent, so a
-    // conflict resolution can't add a line unseen.
-    const range = outgoingRange(firstPushSegment(cmd).normalized, repoDir);
-    if (range.error) {
-      const report = `PRE-PUSH AUDIT: Could not resolve ${range.error} to a commit in ${repoDir}, so the commits this push sends cannot be audited. Push a literal, existing branch or ref instead.`;
-      process.stderr.write(report + '\n');
-      process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
-      process.exit(2);
-    }
-    const logArgs = ['log', '--root', '--diff-merges=first-parent', '--format=', ...range.revs, ...(range.exclude.length > 0 ? ['--not', ...range.exclude] : [])];
-    const readLog = (flag) => readGit(['log', flag, ...logArgs.slice(1)], 'the commits this push sends');
-    const outgoingFiles = range.revs.length > 0 ? readLog('--name-only').trim() : '';
-    if (outgoingFiles) {
-      parts.push({ label: `unpushed commits (${range.label})`, files: outgoingFiles, text: readLog('-p') });
-    } else {
-      // Nothing outgoing (e.g. pushing an already-pushed commit to a new
-      // branch name): the last commit, as a best effort. HEAD~1 doesn't
-      // exist for a root commit, so diff that against git's empty tree.
-      const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-      const hasParent = refExists('HEAD~1', repoDir);
-      addDiff(hasParent ? 'HEAD~1..HEAD' : 'root commit (vs. empty tree)', [hasParent ? 'HEAD~1' : EMPTY_TREE, 'HEAD']);
+    for (const repoDir of repoDirs) addDiff('staged', ['--staged'], repoDir);
+    for (const push of pushes) {
+      const repoDir = push.dir;
+      // Every commit the push would send, each audited by its own patch
+      // rather than one net diff: a secret added in one commit and deleted
+      // in a later one is still sent in history. See outgoingRange() for
+      // which commits those are. Merges show their changes against the
+      // first parent, so a conflict resolution can't add a line unseen.
+      const range = outgoingRange(push.normalized, repoDir);
+      if (range.error) {
+        const report = `PRE-PUSH AUDIT: Could not resolve ${range.error} to a commit in ${repoDir}, so the commits this push sends cannot be audited. Push a literal, existing branch or ref instead.`;
+        process.stderr.write(report + '\n');
+        process.stdout.write(JSON.stringify({ continue: false, stopReason: report }));
+        process.exit(2);
+      }
+      const logArgs = ['--root', '--diff-merges=first-parent', '--format=', ...range.revs, ...(range.exclude.length > 0 ? ['--not', ...range.exclude] : [])];
+      const readLog = (flag) => readGit(['log', flag, ...logArgs], 'the commits this push sends', repoDir);
+      const outgoingFiles = range.revs.length > 0 ? readLog('--name-only').trim() : '';
+      if (outgoingFiles) {
+        parts.push({ label: labelIn(`unpushed commits (${range.label})`, repoDir), files: outgoingFiles, text: readLog('-p') });
+      } else {
+        // Nothing outgoing (e.g. pushing an already-pushed commit to a new
+        // branch name): the last commit, as a best effort. HEAD~1 doesn't
+        // exist for a root commit, so diff that against git's empty tree.
+        const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+        const hasParent = refExists('HEAD~1', repoDir);
+        addDiff(hasParent ? 'HEAD~1..HEAD' : 'root commit (vs. empty tree)', [hasParent ? 'HEAD~1' : EMPTY_TREE, 'HEAD'], repoDir);
+      }
     }
 
     const diffText = parts.map((p) => p.text).join('\n');
@@ -406,7 +414,7 @@ function runHook() {
 
     const report = [
       `PRE-PUSH AUDIT — ${verdict}`,
-      `Audited: ${diffSource} in ${repoDir} (${fileList.length} file(s) changed)`,
+      `Audited: ${diffSource} in ${repoDirs.join(', ')} (${fileList.length} file(s) changed)`,
       '',
       findings.length > 0 ? rows : '  No findings.',
       '',

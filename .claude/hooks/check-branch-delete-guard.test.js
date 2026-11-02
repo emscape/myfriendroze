@@ -38,6 +38,20 @@ test('extractDeletedBranches', async (t) => {
     assert.deepEqual(branches('git push origin :branch4'), ['branch4']);
   });
 
+  await t.test('--repo=<remote> instead of a positional remote', () => {
+    assert.deepEqual(branches('git push --repo=origin --delete main'), ['main']);
+    assert.deepEqual(branches('git push --repo origin --delete topic other'), ['other', 'topic']);
+  });
+
+  await t.test('an SSH remote is not read as a delete refspec', () => {
+    assert.deepEqual(branches('git push git@github.com:owner/repo --delete topic'), ['topic']);
+    assert.deepEqual(branches('git push ssh://git@github.com:22/owner/repo :topic'), ['topic']);
+  });
+
+  await t.test('a force-prefixed delete refspec: +:branch', () => {
+    assert.deepEqual(branches('git push origin +:feature-base'), ['feature-base']);
+  });
+
   await t.test('fully-qualified :refs/heads/branch shorthand is normalized to the bare name', () => {
     assert.deepEqual(branches('git push origin :refs/heads/branch5'), ['branch5']);
   });
@@ -209,6 +223,18 @@ test('hook lifecycle', async (t) => {
     const r = runHookWithoutGh('"C:\\Program Files\\Git\\bin\\git.exe" push origin --delete topic');
     assert.equal(r.status, 0);
     assert.match(r.stderr, /gh CLI not available/);
+  });
+
+  await t.test('each delete is checked in its own repo, not the first push\'s', () => {
+    const workTree = fs.mkdtempSync(path.join(os.tmpdir(), 'work-tree-'));
+    try {
+      const r = runHookWithoutGh(`git -C "${workTree}" push origin --delete b; cd "$REPO" && git push origin --delete a`);
+      assert.equal(r.status, 0);
+      assert.match(r.stderr, /Could not determine which repository/);
+      assert.match(r.stderr, /gh CLI not available/);
+    } finally {
+      fs.rmSync(workTree, { recursive: true, force: true });
+    }
   });
 
   await t.test('a non-delete push exits without reaching the PR check', () => {

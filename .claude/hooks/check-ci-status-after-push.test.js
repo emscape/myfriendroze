@@ -130,4 +130,11 @@ test('hook lifecycle', async (t) => {
     assert.equal(r.status, 0);
     assert.match(r.stderr, /Skipping CI verification: the push deletes a remote branch/);
   });
+
+  await t.test('every push in a chain is checked, not just the first', () => {
+    const r = runHook(`git -C "${__dirname}" push origin --delete some-branch; cd "$REPO" && git push`);
+    assert.equal(r.status, 0);
+    assert.match(r.stderr, /Could not determine which repository/);
+    assert.match(r.stderr, /Skipping CI verification: the push deletes a remote branch/);
+  });
 });

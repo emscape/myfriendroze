@@ -121,7 +121,7 @@
     "package_json_paths": ["package.json"],
     "_package_json_paths_note": "List of package.json files to check for script existence. Extend for monorepos.",
     "on_missing": "warn",
-    "_on_missing_note": "'warn' prints to stderr (exit 0) | 'block' exits 1 and prevents the command"
+    "_on_missing_note": "'warn' prints to stderr (exit 0) | 'block' exits 2 and prevents the command"
   },
 
   "commit_guard": {

@@ -23,7 +23,7 @@
  */
 
 const { loadHookConfig } = require('./lib/hook-config.cjs');
-const { commandSegments, stripSurroundingQuotes } = require('./lib/git-command.cjs');
+const { commandSegments, unquotedWords } = require('./lib/git-command.cjs');
 const { resolve } = require('path');
 
 const CONFIG_PATH = resolve(__dirname, 'config.json');
@@ -56,7 +56,11 @@ function rawSearchCommands(command, commands = DEFAULT_COMMANDS) {
   const hits = [];
 
   for (const { normalized } of commandSegments(command)) {
-    const head = stripSurroundingQuotes(normalized.split(/\s+/)[0]);
+    // A quoted executable path may contain spaces, so it's split as the
+    // shell would; an unquoted one keeps its backslashes (a Windows path).
+    const head = /^["']/.test(normalized)
+      ? (unquotedWords(normalized) || [])[0]
+      : normalized.split(/\s+/)[0];
     if (!head) continue;
 
     const basename = head.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
