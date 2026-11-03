@@ -20,7 +20,7 @@ All behavior is controlled by **`config.json`** — no project logic is hardcode
 | `check-bash-description.js` | PreToolUse: block Bash calls without a description |
 | `check-commit-message.js` | PreToolUse: block `git commit` commands that do not include WHY/EXPECTED |
 | `check-merge-guard.js` | PreToolUse: unconditionally block `gh pr merge`, a merge-REST `PUT`, a local `git merge` on master/main, or a push that lands commits directly on master/main |
-| `check-git-push-audit.js` | PreToolUse: audit a `git push` diff for secrets (blocks), debug statements, commented-out code, lockfile drift, missing tests |
+| `check-git-push-audit.js` | PreToolUse: audit a `git push` diff for secrets (blocks), debug statements, commented-out code, lockfile drift, missing tests. A push that only deletes remote branches sends no commits and is skipped |
 | `check-branch-delete-guard.js` | PreToolUse: block `git push --delete`/`:branch` when an open PR still bases off that branch |
 | `check-search-command.js` | PreToolUse: nudge (or block) raw shell `grep`/`find`/`cat`/`head`/`tail` in favor of dedicated search/read tools |
 | `validate-content.js` | PostToolUse: run validation after watched files change |

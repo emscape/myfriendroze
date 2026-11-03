@@ -106,7 +106,12 @@ function outgoingRange(segment, repoDir, run = (args) => git(args, repoDir)) {
     else if (sets.includes('--all') || sets.includes('--branches')) revs.push('--branches');
     if (sets.includes('--tags')) revs.push('--tags');
     for (const refspec of refspecs) {
-      const { src } = splitRefspec(refspec);
+      const { src, dest } = splitRefspec(refspec);
+      // A bare `:`/`+:` pushes every branch the remote also has.
+      if (!src && !dest) {
+        revs.push('--branches');
+        continue;
+      }
       if (!src) continue; // `:branch` deletes
       if (!run(['rev-parse', '--verify', '--quiet', `${src}^{commit}`]).ok) return { error: `\`${src}\`` };
       revs.push(src);
@@ -131,6 +136,19 @@ function outgoingRange(segment, repoDir, run = (args) => git(args, repoDir)) {
   }
   const exclude = named ? [`--remotes=${name}`] : [];
   return { revs, exclude, label: [...revs, ...(named ? ['--not', ...exclude] : [])].join(' ') };
+}
+
+// Whether a normalized `git push` segment only deletes remote branches
+// (`--delete`/`-d`, or every refspec a `:branch`/`+:branch`) and so sends
+// no commits to audit. A bare `:` or `+:` is git's matching-branches
+// refspec, not a delete.
+function isDeleteOnly(segment) {
+  const { refspecs, sets, deletes } = pushArgs(segment);
+  if (deletes) return true;
+  return sets.length === 0 && refspecs.length > 0 && refspecs.every((r) => {
+    const { src, dest } = splitRefspec(r);
+    return !src && dest;
+  });
 }
 
 // Existence check by exit code only — git's "ambiguous argument" error for a
@@ -257,7 +275,9 @@ function runHook() {
     // directory, which would pass secrets in the real target unseen.
     // Every push in the command is audited, each in its own repository: a
     // chain like `git -C a push && git -C b push` sends both.
-    const pushes = pushSegments(cmd);
+    // A delete-only push sends no commits, so there's nothing of it to audit.
+    const pushes = pushSegments(cmd).filter((p) => !isDeleteOnly(p.normalized));
+    if (pushes.length === 0) process.exit(0);
     if (pushes.some((p) => !p.dir)) {
       const report = 'PRE-PUSH AUDIT: Could not determine which repository this push targets (e.g. `cd "$VAR"`, or a `git -C` path that does not exist), so its changes cannot be audited. Push with a literal path instead.';
       process.stderr.write(report + '\n');
