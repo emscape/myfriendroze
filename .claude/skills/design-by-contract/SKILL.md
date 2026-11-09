@@ -11,10 +11,8 @@ allowed-tools:
   - Read
   - Write
   - Edit
-  - mcp__serena__find_symbol
-  - mcp__serena__get_symbols_overview
-  - mcp__serena__replace_symbol_body
-  - mcp__ai-panel__critique_code
+  - Glob
+  - Grep
 ---
 
 # Design by Contract (CL12)
@@ -267,7 +265,7 @@ When a low-level detail is discovered during implementation, write a test that *
 func testEmailVerifiedOptional_MCPJWTCompatibility() {
     // GIVEN: MCP JWT without email_verified field (server uses different claims)
     let mcpJWT = """
-    {"iss":"ai-panel.ketema.net","sub":"123","aud":"ios","exp":999,"iat":100,"email":"test@example.com"}
+    {"iss":"auth.example.com","sub":"123","aud":"ios","exp":999,"iat":100,"email":"test@example.com"}
     """
 
     // WHEN: Parsing claims

@@ -1,6 +1,6 @@
 // check-merge-guard.test.js
 // Behavioral tests for the pure detection logic in check-merge-guard.js —
-// run with `node --test .claude/hooks/`.
+// run with `node --test *.test.js *.test.cjs lib/*.test.cjs` from the hooks directory.
 //
 // check-merge-guard.js only runs its stdin-driven hook lifecycle when
 // executed directly (`require.main === module`), so it's safe to
@@ -241,6 +241,23 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('git push origin', onMaster), true);
   });
 
+  // Stand-in where only the repo at <cwd>/other is on master.
+  const onlyOtherOnMaster = (dir) => (dir && dir.endsWith(`${require('node:path').sep}other`) ? 'master' : 'fix/unrelated-feature');
+
+  await t.test('the current branch is read from the repo the command targets', () => {
+    assert.equal(blocked('git -C other push origin', onlyOtherOnMaster), true);
+    assert.equal(blocked('cd other && git push', onlyOtherOnMaster), true);
+    assert.equal(blocked('git -C other merge feature', onlyOtherOnMaster), true);
+    assert.equal(blocked('git push origin', onlyOtherOnMaster), false);
+    assert.equal(blocked('cd other && git checkout feature && cd .. && git merge feature', onlyOtherOnMaster), false);
+  });
+
+  await t.test('an implicit push or merge in a repo that cannot be determined is blocked', () => {
+    assert.equal(blocked('cd "$REPO" && git push origin', onFeatureBranch), true);
+    assert.equal(blocked('cd "$REPO" && git merge feature', onFeatureBranch), true);
+    assert.equal(blocked('cd "$REPO" && git push origin feature', onFeatureBranch), false);
+  });
+
   await t.test('an explicit different-branch push is not swept in just because HEAD is on a protected branch', () => {
     assert.equal(blocked('git push origin some-other-branch', onMaster), false);
   });
@@ -330,6 +347,12 @@ test('findMergeReason', async (t) => {
     assert.equal(blocked('GH_TOKEN=abc123 gh pr view 27'), false);
   });
 
+  await t.test('a bare fully-qualified refs/heads/main push is flagged', () => {
+    assert.equal(blocked('git push origin refs/heads/main', onFeatureBranch), true);
+    assert.equal(blocked('git push origin "refs/heads/master"', onFeatureBranch), true);
+    assert.equal(blocked('git push origin refs/heads/feature', onFeatureBranch), false);
+  });
+
   await t.test('a refspec pushing an unrelated branch to itself is not flagged', () => {
     assert.equal(blocked('git push origin feature:feature'), false);
   });
@@ -359,5 +382,113 @@ test('findMergeReason', async (t) => {
 
   await t.test('npm test is not flagged', () => {
     assert.equal(blocked('npm test'), false);
+  });
+
+  await t.test('git -C with a double-quoted path containing spaces, pushing to main', () => {
+    assert.equal(blocked('git -C "C:\\Work Tree" push origin main', onFeatureBranch), true);
+  });
+
+  await t.test('git -C with a single-quoted path containing spaces, pushing to master', () => {
+    assert.equal(blocked("git -C '/work tree' push origin feature:master", onFeatureBranch), true);
+  });
+
+  await t.test('git -c with a quoted value containing spaces, pushing to main', () => {
+    assert.equal(blocked('git -c core.sshCommand="ssh -v" push origin main', onFeatureBranch), true);
+  });
+
+  await t.test('git -C with a quoted path, pushing a feature branch, is not flagged', () => {
+    assert.equal(blocked('git -C "C:\\Work Tree" push origin feature', onFeatureBranch), false);
+  });
+
+  await t.test('env-prefixed shell wrapper around gh pr merge', () => {
+    assert.equal(blocked('env bash -c "gh pr merge 27"'), true);
+  });
+
+  await t.test('sudo- or assignment-prefixed shell wrapper around gh pr merge', () => {
+    assert.equal(blocked("sudo sh -c 'gh pr merge 27'"), true);
+    assert.equal(blocked('GH_TOKEN=x bash -c "gh pr merge 27"'), true);
+  });
+
+  await t.test('nested wrappers with prefixes at each level', () => {
+    assert.equal(blocked('env bash -c "sudo sh -c \\"gh pr merge 27\\""'), true);
+  });
+
+  await t.test('gh pr merge or a push to main inside a command substitution', () => {
+    assert.equal(blocked('$(gh pr merge 27)'), true);
+    assert.equal(blocked('`gh pr merge 27`'), true);
+    assert.equal(blocked('echo "merged: $(gh pr merge 27)"'), true);
+    assert.equal(blocked('echo $(git push origin main)', onFeatureBranch), true);
+  });
+
+  await t.test('a substitution that is only quoted text is not flagged', () => {
+    assert.equal(blocked("echo '$(gh pr merge 27)'"), false);
+  });
+
+  await t.test('a push to main inside a subshell after a cd', () => {
+    assert.equal(blocked('(cd repo && git push origin main)', onFeatureBranch), true);
+  });
+});
+
+test('PR #72 review findings', async (t) => {
+  await t.test('a force-prefixed refspec to a protected branch is blocked', () => {
+    for (const cmd of [
+      'git push origin +master',
+      'git push origin +refs/heads/master',
+      'git push origin +feature:main',
+      'git push origin +feature:refs/heads/main',
+    ]) {
+      assert.equal(blocked(cmd, onFeatureBranch), true,
+        `${cmd} force-pushes to a protected branch; the leading + only adds --force for that refspec.`);
+    }
+  });
+
+  await t.test('a comment or redirection is not a refspec', () => {
+    for (const cmd of [
+      'git push origin # pushes the current branch',
+      'git push origin >/dev/null',
+      'git push origin > out.log',
+      'git push origin 2>&1',
+      'git push origin 2>/dev/null',
+    ]) {
+      assert.equal(blocked(cmd, onMaster), true,
+        `${cmd} is an implicit push of the current branch (master); the comment/redirection is not a branch name.`);
+    }
+    assert.equal(blocked('git push origin feature # not main', onMaster), false,
+      'an explicit non-protected branch is still allowed when the comment mentions main.');
+  });
+
+  await t.test('a checkout in one repo does not decide the branch in another', () => {
+    const branchIn = (dir) => (dir && dir.endsWith('b') ? 'fix/unrelated-feature' : 'master');
+    assert.equal(blocked('git -C a checkout main && git -C b push', branchIn), false,
+      'repo b is on a feature branch; the checkout of main happened in repo a.');
+    assert.equal(blocked('git -C a checkout main && git -C a push', onFeatureBranch), true,
+      'repo a is checked out to main before its implicit push.');
+    assert.equal(blocked('git -C a checkout main && git -C b merge x', branchIn), false,
+      'the merge runs in repo b, which is on a feature branch.');
+  });
+});
+
+test('PR #17 review findings', async (t) => {
+  await t.test('the latest checkout in a repo decides its branch, not the first', () => {
+    assert.equal(blocked('git -C a checkout main && git -C a checkout feature && git -C a push', onFeatureBranch), false,
+      'repo a ends on feature before its implicit push.');
+    assert.equal(blocked('git -C a checkout feature && git -C a checkout main && git -C a push', onFeatureBranch), true,
+      'repo a ends on main before its implicit push.');
+    assert.equal(blocked('git checkout main && git push && git checkout feature', onFeatureBranch), true,
+      'the push runs while on main; a later checkout does not change that.');
+  });
+
+  await t.test('a tag-only push from a protected branch is allowed', () => {
+    assert.equal(blocked('git push origin --tags', onMaster), false,
+      '--tags with no refspec pushes only tags, not the current branch.');
+    assert.equal(blocked('git push origin --tags main', onFeatureBranch), true,
+      'an explicit protected refspec alongside --tags is still blocked.');
+  });
+
+  await t.test('a file checkout does not move off a protected branch', () => {
+    assert.equal(blocked('git checkout main && git checkout -- app.js && git push', onFeatureBranch), true,
+      '`git checkout -- <file>` restores a file and stays on main.');
+    assert.equal(blocked('git checkout main && git checkout . && git push', onFeatureBranch), true,
+      '`git checkout .` restores files and stays on main.');
   });
 });

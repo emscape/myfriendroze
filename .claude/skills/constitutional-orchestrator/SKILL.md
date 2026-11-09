@@ -7,7 +7,7 @@ description: |
   Triggers: "implement feature", "start TDD", "constitutional workflow",
   "CCABDD", "new feature development"
 allowed-tools:
-  - Task
+  - Agent
   - TodoWrite
   - Read
   - Write
@@ -15,9 +15,6 @@ allowed-tools:
   - Bash
   - Glob
   - Grep
-  - mcp__serena__*
-  - mcp__ai-panel__*
-  - mcp__semantic_search__semantic_search
   - mcp__SequentialThinking__sequentialthinking
 ---
 
@@ -31,14 +28,14 @@ Master coordinator for Constitutional Contract Adversarial Behavior-Driven Devel
 M1-M2: DISCOVERY
   ├── /req-elicit ON SELF → "What am I missing?"
   │   └── Phase 2.5: Dependency graph, sequencing specs, integration points
-  ├── /semantic-search → Find relevant code
-  └── Serena think_about_collected_information
+  ├── Grep/Glob/Read (Explore sub-agent for broad discovery) → Find relevant code
+  └── Written checkpoint: "What am I missing?" answered with evidence
 
 M3: PLAN
   ├── /design-by-contract → Generate CL12 contracts (PRE/POST/INV/SEQ/ERRORS)
   ├── Pre-test gate: every Integration Point has SEQ clause
   ├── TodoWrite plan with contract references
-  ├── AI Panel critique_implementation_plan
+  ├── Independent review of the plan (fresh-context reviewer sub-agent)
   └── WAIT for user approval (CL5)
 
 M4.2: RED PHASE
@@ -58,7 +55,7 @@ M4.6+: ITERATION (if violations)
 
 M5: FINAL
   ├── /constitutional-audit (final)
-  ├── Serena write_memory → Document decisions
+  ├── Claude Code project memory / repo docs → Document decisions
   └── Notify orchestrator if delegated task
 ```
 
@@ -96,11 +93,14 @@ If violations: /constitutional-fix
 | NO | False | False | Escalate to user |
 | YES | - | - | Proceed to M5 |
 
-## AI Panel Integration
+## Independent Review Integration
 
-- **M3**: `critique_implementation_plan` with `enable_conversation=true`
-- **M4**: `check_plan_adherence` + `critique_code`
-- **M5**: `critique_code` (final validation)
+Each review spawns a fresh-context reviewer sub-agent (e.g. qa-reviewer, architect, failure-mode-analyzer, or the built-in /code-review skill).
+
+- **M3**: Independent review of the plan
+- **M4**: Independent review of plan adherence and the code diff
+- **M5**: Independent review (final validation)
+- **When stuck**: fresh-context second-opinion sub-agent given the failing output; after 3 failed attempts ask the user
 
 Always pass actual code via git diff, never summaries.
 
@@ -142,9 +142,6 @@ If ANY integration point lacks a SEQ clause → BLOCK → return to /design-by-c
 
 ## MCP Tools Available
 
-- **AI Panel**: critique_*, debug_assistance, check_plan_adherence
-- **Serena**: think_about_*, find_symbol, write_memory
-- **Semantic Search**: semantic_search with use_copilot=true
 - **Sequential Thinking**: For complex reasoning
 
 <!-- © 2024-2026 Ketema Harris. All rights reserved. SPDX-License-Identifier: LicenseRef-CCABDD-Proprietary -->

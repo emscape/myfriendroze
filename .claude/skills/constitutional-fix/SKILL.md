@@ -12,8 +12,6 @@ allowed-tools:
   - Edit
   - Bash
   - TodoWrite
-  - mcp__serena__*
-  - mcp__ai-panel__*
 ---
 
 # Constitutional Fix

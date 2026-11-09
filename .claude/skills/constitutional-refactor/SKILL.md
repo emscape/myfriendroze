@@ -146,7 +146,7 @@ def new_method(self, args):
 
 - Run existing tests — they should still pass (old behavior preserved)
 - Manually test new behavior paths
-- Use AI Panel `critique_code` for feedback
+- Request an independent review (fresh-context reviewer sub-agent given the actual bridge diff)
 
 **Bridges are disposable.** Their purpose is learning, not permanence.
 
@@ -367,7 +367,7 @@ Loop:
     ┌────────────────────┼────────────────────┐
     ↓                    ↓                    ↓
 ┌─────────┐      ┌──────────────┐      ┌─────────────┐
-│req-elicit│      │ AI Panel     │      │constitutional│
+│req-elicit│      │ Indep. review│      │constitutional│
 │(Phase 1) │      │ (Phase 2)    │      │   -audit     │
 │NO FORK   │      │ NO FORK      │      │ FORK         │
 └─────────┘      └──────────────┘      └─────────────┘
@@ -392,7 +392,7 @@ Loop:
 
 **Fork Isolation**:
 - req-elicit: NO FORK (needs full user dialogue context)
-- AI Panel: NO FORK (needs code context for critique)
+- Independent review: fresh-context reviewer sub-agent (given the actual diff, not a summary)
 - adversarial-test-writer: FORK (blind to implementation)
 - adversarial-coder: FORK (blind to test source)
 - constitutional-audit: FORK (external auditor identity)

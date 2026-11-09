@@ -13,12 +13,13 @@
  *   .claude/hooks/config.json → arch_rules.enabled, arch_rules.rules[]
  */
 
-import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 // ── Locate config relative to this script ────────────────────────────────
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const { loadHookConfig } = createRequire(import.meta.url)('./lib/hook-config.cjs');
 const CONFIG_PATH = resolve(SCRIPT_DIR, 'config.json');
 
 function warn(msg) {
@@ -39,7 +40,7 @@ function escapeRegex(str) {
 // ── Load config ───────────────────────────────────────────────────────────
 let config;
 try {
-  config = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  config = loadHookConfig({ hooksDir: SCRIPT_DIR });
 } catch {
   warn(`config.json not found or invalid at ${CONFIG_PATH} — skipping arch checks`);
   process.exit(0);

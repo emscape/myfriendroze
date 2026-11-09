@@ -1,0 +1,39 @@
+{
+  "_readme": "myfriendroze overrides, deep-merged over .claude/hooks/config.json (kept identical to agents-master). See .claude/hooks/README.md, Project-local overrides.",
+
+  "project_name": "myfriendroze",
+
+  "session_start": {
+    "custom_notes": [
+      "Astro project root is astro/ — run build/dev/test commands from there",
+      "Firebase Functions live in firebase/functions/ — Node 22, CommonJS",
+      "Server-rendered: Astro SSR runs in the ssrAstro Cloud Function behind a Hosting rewrite",
+      "Merging to master auto-deploys Hosting + Functions; Firestore/Storage rules are always a manual deploy",
+      "Products and events are read live from Firestore per request; astro/src/data/events.js holds only hardcoded/recurring events"
+    ]
+  },
+
+  "content_watch": {
+    "path_pattern": "astro/src",
+    "file_extensions": [".astro", ".ts", ".js"]
+  },
+
+  "dep_guard": {
+    "custom_message": "Remember to commit package-lock.json changes alongside any dependency additions."
+  },
+
+  "script_guard": {
+    "enabled": true,
+    "package_json_paths": ["astro/package.json", "firebase/functions/package.json"]
+  },
+
+  "commit_guard": {
+    "enabled": true
+  },
+
+  "commands": {
+    "test": "cd astro && npm test",
+    "build": "cd astro && npm run build",
+    "dev": "cd astro && npm run dev"
+  }
+}
