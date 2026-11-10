@@ -1,0 +1,121 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import { fetchReservedProducts } from '../../lib/reservations-live.js';
+import { getFirestoreDb } from '../../lib/firestore-admin.js';
+
+// A customer's private link to the pieces Roze reserved for them
+// (src/lib/reservations-live.js). Rendered on demand so it reflects the
+// reservation as it is now.
+export const prerender = false;
+
+const { code } = Astro.params;
+
+let products: Awaited<ReturnType<typeof fetchReservedProducts>> = null;
+let failed = false;
+try {
+  products = await fetchReservedProducts(getFirestoreDb(), code);
+} catch (error) {
+  failed = true;
+  console.error('[reserved] Failed to fetch the reservation from Firestore.', error);
+}
+
+if (!products && !failed) {
+  Astro.response.status = 404;
+}
+const forSaleCount = (products ?? []).filter((p) => p.inStock).length;
+---
+
+<Layout
+  title="Reserved for You | myfriendroze"
+  description="Pieces Roze has set aside for you."
+  noindex
+>
+  <Header slot="header" currentPath="/shop" />
+
+  <section class="page-hero section-padding">
+    <div class="page-width">
+      <h1 class="page-hero__title">reserved for you</h1>
+    </div>
+  </section>
+
+  <section class="reserved section-padding">
+    <div class="page-width">
+      {failed ? (
+        <p class="reserved__message">Couldn't load your reserved pieces just now. Please try again in a moment.</p>
+      ) : !products ? (
+        <div class="reserved__message">
+          <p>This reservation link isn't active. If you think it should be, get in touch and we'll sort it out.</p>
+          <a href="/shop" class="button button--primary">Back to Shop</a>
+        </div>
+      ) : products.length === 0 ? (
+        <div class="reserved__message">
+          <p>There's nothing left in this reservation.</p>
+          <a href="/shop" class="button button--primary">Back to Shop</a>
+        </div>
+      ) : (
+        <>
+          <p class="reserved__intro">
+            {forSaleCount > 0
+              ? 'Roze has set these pieces aside for you. Add them to your cart or order them here; no one else can buy them.'
+              : 'Everything in this reservation has been bought. Thank you!'}
+          </p>
+          <div class="reserved__grid">
+            {products.map((product) => (
+              <ProductCard product={product} reservedForViewer />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  </section>
+
+  {products && products.length > 0 && <div data-reservation-code={code} hidden></div>}
+
+  <script>
+    import { rememberReservationCode } from '../../lib/reservation-code.js';
+    import { wireQuickOrder } from '../../lib/quick-order.js';
+
+    // Checkout sends this code, which is what lets these pieces be bought
+    // from the cart as well as by quick order here.
+    const code = document.querySelector<HTMLElement>('[data-reservation-code]')?.dataset.reservationCode;
+    if (code) rememberReservationCode(code);
+    wireQuickOrder();
+  </script>
+</Layout>
+
+<style>
+  .reserved__message,
+  .reserved__intro {
+    max-width: 640px;
+    margin: 0 auto 3rem;
+    text-align: center;
+  }
+
+  .reserved__message p {
+    margin-bottom: 1.5rem;
+  }
+
+  .reserved__grid {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: repeat(1, 1fr);
+    max-width: 40rem;
+    margin: 0 auto;
+  }
+
+  @media screen and (min-width: 550px) {
+    .reserved__grid {
+      grid-template-columns: repeat(2, 1fr);
+      max-width: none;
+    }
+  }
+
+  @media screen and (min-width: 750px) {
+    .reserved__grid {
+      gap: 3rem;
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+</style>

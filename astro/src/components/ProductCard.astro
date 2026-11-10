@@ -17,11 +17,17 @@ export interface Props {
     category: string;
     // Plants only; docToProduct sets null when the product has no count.
     stockQuantity: number | null;
+    // Reserved for one customer; only their /reserved/<code> page sells it.
+    reserved: boolean;
   };
   showQuickOrder?: boolean;
+  // Set by the /reserved/<code> page, where the reserved pieces are for sale.
+  reservedForViewer?: boolean;
 }
 
-const { product, showQuickOrder = true } = Astro.props;
+const { product, showQuickOrder = true, reservedForViewer = false } = Astro.props;
+const showReserved = product.inStock && product.reserved && !reservedForViewer;
+const forSale = product.inStock && !showReserved;
 ---
 
 <article class="product-card" data-product-id={product.id}>
@@ -44,6 +50,11 @@ const { product, showQuickOrder = true } = Astro.props;
       {!product.inStock && (
         <div class="product-card__badge product-card__badge--sold-out">
           Sold Out
+        </div>
+      )}
+      {showReserved && (
+        <div class="product-card__badge product-card__badge--reserved">
+          Reserved
         </div>
       )}
     </div>
@@ -80,11 +91,11 @@ const { product, showQuickOrder = true } = Astro.props;
           data-product-id={product.id}
           data-product-title={product.title}
           data-product-price={product.price}
-          disabled={!product.inStock}
+          disabled={!forSale}
         >
-          {product.inStock ? 'quick order' : 'sold out'}
+          {forSale ? 'quick order' : showReserved ? 'reserved' : 'sold out'}
         </button>
-        {product.inStock && (
+        {forSale && (
           <button
             type="button"
             class="product-card__cart-add"
@@ -170,6 +181,11 @@ const { product, showQuickOrder = true } = Astro.props;
   .product-card__badge--sold-out {
     background: rgba(220, 53, 69, 0.9);
     color: white;
+  }
+
+  .product-card__badge--reserved {
+    background: var(--color-foreground);
+    color: var(--color-background);
   }
 
   .product-card__content {

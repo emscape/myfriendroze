@@ -7,6 +7,11 @@
 // a replaceToken with each checkout. The latest one is remembered and sent
 // back, so a shopper who backs out of Stripe and checks out again replaces
 // their own checkout instead of being blocked by it.
+//
+// The reservation code a /reserved/<code> page remembered is sent too, so
+// the pieces reserved for this shopper can be bought (reservation-code.js).
+
+import { readReservationCode } from './reservation-code.js';
 
 const GENERAL_ERROR = "Couldn't start checkout. Please try again.";
 export const CHECKOUT_TOKEN_KEY = 'myfriendroze-checkout-token';
@@ -49,6 +54,8 @@ export async function requestCheckout(items, fetchImpl = fetch, storage = defaul
   const body = { items };
   if (replaceToken) body.replaceToken = replaceToken;
   if (localZip) body.localZip = localZip;
+  const reservationCode = readReservationCode(storage);
+  if (reservationCode) body.reservationCode = reservationCode;
   let response;
   try {
     response = await fetchImpl('/api/checkout', {

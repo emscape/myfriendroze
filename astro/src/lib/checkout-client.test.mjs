@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { requestCheckout, CHECKOUT_TOKEN_KEY } from './checkout-client.js';
+import { RESERVATION_CODE_KEY } from './reservation-code.js';
 
 function jsonResponse(status, body) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -29,6 +30,20 @@ describe('requestCheckout', () => {
     await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, null, '90065');
 
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ items: [{ sku: 'bowl', qty: 1 }], localZip: '90065' });
+  });
+
+  it('sends the reservation code this browser was given, so reserved pieces can be bought', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { url: 'https://checkout.stripe.com/c/pay/cs_1', id: 'cs_1' }));
+    const storage = { getItem: (key) => (key === RESERVATION_CODE_KEY ? 'Ab3_-xYz0123456789' : null), setItem: vi.fn() };
+
+    await requestCheckout([{ sku: 'bowl', qty: 1 }], fetchImpl, storage);
+
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+      items: [{ sku: 'bowl', qty: 1 }],
+      reservationCode: 'Ab3_-xYz0123456789',
+    });
   });
 
   it("throws the server's error message when checkout can't start", async () => {

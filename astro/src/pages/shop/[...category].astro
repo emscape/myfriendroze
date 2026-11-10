@@ -39,8 +39,10 @@ try {
 // Was hardcoded text ("in stock (3)"/"out of stock (0)") that silently
 // went stale the moment a product's stock status changed — computed from
 // the same live data the grid itself renders instead.
-const inStockCount = products.filter((p) => p.inStock).length;
-const outOfStockCount = products.filter((p) => !p.inStock).length;
+// A reserved piece can't be bought here, so it counts as out of stock, as
+// the client-side filter (which reads the disabled quick-order button) does.
+const inStockCount = products.filter((p) => p.inStock && !p.reserved).length;
+const outOfStockCount = products.length - inStockCount;
 // Same staleness bug as above, for the price-bucket checkboxes below —
 // bucket bounds match the client-side filter script further down (0-50,
 // 50-100 inclusive of the upper bound).
@@ -757,37 +759,9 @@ const price50to100Count = products.filter((p) => p.price > 50 && p.price <= 100)
 </style>
 
 <script>
-  import { requestCheckout } from '../../lib/checkout-client.js';
-  import { clearCartCheckoutMark } from '../../lib/cart-store.js';
+  import { wireQuickOrder } from '../../lib/quick-order.js';
 
-  // Quick order: straight to Stripe for this one piece. Stripe's checkout
-  // page collects the shopper's details. The button keeps its historical
-  // .product-card__add-to-cart class because the sort/filter code below
-  // reads price and stock from it.
-  document.querySelectorAll<HTMLButtonElement>('.product-card__add-to-cart').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const sku = button.dataset.productId;
-      if (!sku || button.disabled) return;
-      const label = button.textContent;
-      const error = button.closest('.product-card__actions')?.querySelector<HTMLElement>('[data-quick-order-error]');
-      button.disabled = true;
-      button.textContent = 'opening checkout…';
-      if (error) error.hidden = true;
-      try {
-        const { url } = await requestCheckout([{ sku, qty: 1 }]);
-        // A quick order must never empty the cart on the success page.
-        clearCartCheckoutMark();
-        window.location.href = url;
-      } catch (err) {
-        if (error) {
-          error.textContent = err instanceof Error ? err.message : String(err);
-          error.hidden = false;
-        }
-        button.disabled = false;
-        button.textContent = label;
-      }
-    });
-  });
+  wireQuickOrder();
 
   // Filtering and Sorting functionality
   const sortSelect = document.getElementById('sort-by');
