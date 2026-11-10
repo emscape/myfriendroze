@@ -638,6 +638,23 @@ describe('handleStripeWebhook', () => {
         expect(db.dump(`reservations/${CODE}`)).toEqual({ note: 'Sam', productIds: ['vase'] });
       });
 
+      // Plants aren't held during checkout, so the hold code never sees
+      // them; the reservation itself must clear the flag.
+      it('clears the reserved flag on a bought piece that had no checkout hold, such as a stocked plant', async () => {
+        const FERN = { title: 'Fern', price: 12, isActive: true, category: 'plant', stockQuantity: 3, reserved: true };
+        const db = fakeDb({
+          docs: {
+            'products/bowl': FERN,
+            [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl'] },
+          },
+        });
+
+        await deliverPaid(db, { metadata: { reservationCode: CODE } });
+
+        expect(db.dump('products/bowl')).toEqual({ ...FERN, stockQuantity: 2, reserved: false });
+        expect(db.has(`reservations/${CODE}`)).toBe(false);
+      });
+
       it('deletes the reservation once its last piece is bought', async () => {
         const db = fakeDb({
           docs: {

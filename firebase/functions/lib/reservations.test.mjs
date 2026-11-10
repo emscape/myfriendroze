@@ -87,10 +87,31 @@ describe('checkReservedPieces', () => {
 describe('readReservation / writeReservationSold', () => {
   async function sell(db, code, soldSkus) {
     await db.runTransaction(async (tx) => {
-      const read = await readReservation(tx, db, code);
-      writeReservationSold(tx, read, soldSkus);
+      const read = await readReservation(tx, db, code, soldSkus);
+      writeReservationSold(tx, read);
     });
   }
+
+  it("clears reserved on the bought pieces it lists, and leaves other products alone", async () => {
+    const db = memoryFirestore({
+      [`reservations/${CODE}`]: { productIds: ['bowl', 'vase'] },
+      'products/bowl': { title: 'Blue Bowl', reserved: true },
+      'products/vase': { title: 'Tall Vase', reserved: true },
+      'products/mug': { title: 'Mug', reserved: true },
+    });
+    await sell(db, CODE, ['bowl', 'mug']);
+    expect(db.dump('products/bowl')).toEqual({ title: 'Blue Bowl', reserved: false });
+    expect(db.dump('products/vase')).toEqual({ title: 'Tall Vase', reserved: true });
+    expect(db.dump('products/mug')).toEqual({ title: 'Mug', reserved: true });
+  });
+
+  // tx.update on a missing document would fail the whole order transaction.
+  it('skips a bought piece whose product has since been deleted', async () => {
+    const db = memoryFirestore({ [`reservations/${CODE}`]: { productIds: ['bowl', 'vase'] } });
+    await sell(db, CODE, ['bowl']);
+    expect(db.has('products/bowl')).toBe(false);
+    expect(db.dump(`reservations/${CODE}`)).toEqual({ productIds: ['vase'] });
+  });
 
   it('removes the bought pieces and keeps the rest of the reservation', async () => {
     const db = memoryFirestore({ [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl', 'vase', 'cup'] } });

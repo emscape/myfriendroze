@@ -45,6 +45,10 @@
         "headers": [{ "key": "Cache-Control", "value": "no-store" }]
       },
       {
+        "source": "/reserved/**",
+        "headers": [{ "key": "Cache-Control", "value": "private, no-store" }]
+      },
+      {
         "source": "/cart",
         "headers": [{ "key": "Cache-Control", "value": "no-store" }]
       },

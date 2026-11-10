@@ -179,17 +179,15 @@ async function readSessionHolds(tx, db, sessionId) {
 }
 
 /**
- * The write half: marks each held piece sold, and no longer reserved
- * (lib/reservations.js), and deletes the holds. A product deleted in the
- * meantime is skipped rather than recreated.
+ * The write half: marks each held piece sold and deletes the holds. A
+ * product deleted in the meantime is skipped rather than recreated.
  *
  * @param {FirebaseFirestore.Transaction} tx
  * @param {Awaited<ReturnType<typeof readSessionHolds>>} read
  */
 function writePiecesSold(tx, { holds, products }) {
   products.forEach((product) => {
-    if (!product.exists) return;
-    tx.update(product.ref, product.data().reserved ? { inStock: false, reserved: false } : { inStock: false });
+    if (product.exists) tx.update(product.ref, { inStock: false });
   });
   holds.forEach((hold) => tx.delete(hold.ref));
 }

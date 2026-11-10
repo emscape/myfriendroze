@@ -153,7 +153,7 @@ async function handleStripeWebhook(
     const purchased = purchasedQuantities(lineItemsResponse.data);
     const stock = await readStock(tx, db, purchased);
     // Set by createCheckoutSession when the checkout bought reserved pieces.
-    const reservation = await readReservation(tx, db, session.metadata?.reservationCode);
+    const reservation = await readReservation(tx, db, session.metadata?.reservationCode, purchased.keys());
     // Short, customer-facing order number, taken in the same transaction
     // so concurrent orders never share one and a duplicate delivery
     // (returned above) never uses one up. Read before any write, as
@@ -162,7 +162,7 @@ async function handleStripeWebhook(
     const orderNumber = counter.exists ? counter.data().next : FIRST_ORDER_NUMBER;
     writePiecesSold(tx, held);
     writeStockSold(tx, stock);
-    writeReservationSold(tx, reservation, purchased.keys());
+    writeReservationSold(tx, reservation);
     tx.set(counterRef, { next: orderNumber + 1 });
     tx.set(orderRef, {
       ...orderData,

@@ -56,38 +56,44 @@ async function checkReservedPieces(db, skus, catalog, code) {
 
 /**
  * The read half of updating a paid checkout's reservation, for use inside
- * the caller's transaction before any of its writes.
+ * the caller's transaction before any of its writes: the reservation, and
+ * the bought products it lists.
  *
  * @param {FirebaseFirestore.Transaction} tx
  * @param {FirebaseFirestore.Firestore} db
  * @param {unknown} code from the Stripe session's metadata
- * @returns {Promise<FirebaseFirestore.DocumentSnapshot | null>}
+ * @param {Iterable<string>} soldSkus
  */
-async function readReservation(tx, db, code) {
+async function readReservation(tx, db, code, soldSkus) {
   if (!isReservationCode(code)) return null;
   const reservation = await tx.get(reservationRef(db, code));
-  return reservation.exists ? reservation : null;
+  if (!reservation.exists) return null;
+
+  const { productIds: stored } = reservation.data();
+  const productIds = Array.isArray(stored) ? stored : [];
+  const sold = new Set(soldSkus);
+  const soldIds = productIds.filter((sku) => sold.has(sku));
+  const products = await Promise.all(soldIds.map((sku) => tx.get(db.collection('products').doc(sku))));
+  return { reservation, remaining: productIds.filter((sku) => !sold.has(sku)), products };
 }
 
 /**
- * The write half: takes the bought pieces out of the reservation, deleting
- * it once none are left.
+ * The write half: clears reserved on the bought pieces and takes them out
+ * of the reservation, deleting it once none are left. A product deleted in
+ * the meantime is skipped rather than recreated.
  *
  * @param {FirebaseFirestore.Transaction} tx
- * @param {Awaited<ReturnType<typeof readReservation>>} reservation
- * @param {Iterable<string>} soldSkus
+ * @param {Awaited<ReturnType<typeof readReservation>>} read
  */
-function writeReservationSold(tx, reservation, soldSkus) {
-  if (!reservation) return;
-  const sold = new Set(soldSkus);
-  const { productIds: stored } = reservation.data();
-  const productIds = Array.isArray(stored) ? stored : [];
-  const remaining = productIds.filter((sku) => !sold.has(sku));
-  if (remaining.length === productIds.length) return;
-  if (remaining.length === 0) {
-    tx.delete(reservation.ref);
+function writeReservationSold(tx, read) {
+  if (!read || read.products.length === 0) return;
+  read.products.forEach((product) => {
+    if (product.exists) tx.update(product.ref, { reserved: false });
+  });
+  if (read.remaining.length === 0) {
+    tx.delete(read.reservation.ref);
   } else {
-    tx.update(reservation.ref, { productIds: remaining });
+    tx.update(read.reservation.ref, { productIds: read.remaining });
   }
 }
 
