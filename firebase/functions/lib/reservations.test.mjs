@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import {
-  isReservationCode,
-  checkReservedPieces,
-  readReservation,
-  writeReservationSold,
-} from './reservations.js';
+import { createRequire } from 'node:module';
 import { memoryFirestore } from '../test-support/memoryFirestore.mjs';
+
+// createRequire, not a static import — see vitest.config.js.
+const require = createRequire(import.meta.url);
+const { isReservationCode, checkReservedPieces, readReservation, writeReservationSold } = require('./reservations.js');
+const { CatalogValidationError } = require('./pricing.js');
 
 const CODE = 'Ab3_-xYz0123456789';
 const BOWL = { title: 'Blue Bowl', reserved: true };
@@ -54,7 +54,9 @@ describe('checkReservedPieces', () => {
 
   it('refuses a reserved piece with no code', async () => {
     const db = withReservation(['bowl']);
-    await expect(checkReservedPieces(db, ['bowl'], catalog, undefined)).rejects.toMatchObject({
+    const check = checkReservedPieces(db, ['bowl'], catalog, undefined);
+    await expect(check).rejects.toBeInstanceOf(CatalogValidationError);
+    await expect(check).rejects.toMatchObject({
       code: 'RESERVED_PIECE',
       message: 'Blue Bowl is reserved for another customer.',
     });
