@@ -37,6 +37,8 @@ if (!product) {
 const shop = shopCategoryForValue(product.category);
 // One-of-a-kind pieces (limit 1) get no quantity picker.
 const maxQty = maxQtyForProduct(product.category, product.stockQuantity);
+// A reserved piece is sold only on its customer's /reserved/<code> page.
+const forSale = product.inStock && !product.reserved;
 
 // Featured image is the first one
 const featuredImage = product.images[0];
@@ -114,9 +116,13 @@ const additionalImages = product.images.slice(1);
 
           <!-- In Stock Status -->
           <div class="product-detail__availability">
-            {product.inStock ? (
+            {forSale ? (
               <span class="product-detail__status in-stock">
                 ✓ In Stock
+              </span>
+            ) : product.inStock ? (
+              <span class="product-detail__status out-of-stock">
+                Reserved for a customer
               </span>
             ) : (
               <span class="product-detail__status out-of-stock">
@@ -189,9 +195,9 @@ const additionalImages = product.images.slice(1);
               type="submit"
               class="button button--primary product-detail__add-to-cart"
               id="add-to-cart-btn"
-              disabled={!product.inStock}
+              disabled={!forSale}
             >
-              {product.inStock ? 'Add to Cart' : 'Sold Out'}
+              {forSale ? 'Add to Cart' : product.inStock ? 'Reserved' : 'Sold Out'}
             </button>
 
             <p class="product-detail__cart-status" id="cart-status" role="status" hidden>
@@ -213,7 +219,7 @@ const additionalImages = product.images.slice(1);
     </div>
   </section>
 
-  {product.inStock && (
+  {forSale && (
     <section class="shipping-section color-background-1 gradient section-padding">
       <div class="page-width">
         <h2 class="section-title">Shipping</h2>

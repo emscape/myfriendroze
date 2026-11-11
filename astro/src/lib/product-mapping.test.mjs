@@ -184,6 +184,15 @@ describe('docToProduct', () => {
     });
   });
 
+  // Set in the admin app when Roze reserves a piece for one customer
+  // (firebase/functions/lib/reservations.js); only a literal true counts.
+  it('marks a product reserved only when its reserved field is true', () => {
+    expect(docToProduct(fakeDoc('a', { title: 'A', reserved: true })).reserved).toBe(true);
+    for (const value of [undefined, false, 'true', 1, null]) {
+      expect(docToProduct(fakeDoc('a', { title: 'A', reserved: value })).reserved).toBe(false);
+    }
+  });
+
   it('defaults inStock to true when the field is absent', () => {
     const doc = fakeDoc('abc', { title: 'No Stock Field Product', price: 10, isActive: true });
 

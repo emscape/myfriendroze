@@ -25,6 +25,7 @@ const {
   CHECKOUT_LIFETIME_SECONDS,
   HOLD_GRACE_MS,
 } = require('./lib/checkoutHolds');
+const { checkReservedPieces } = require('./lib/reservations');
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -39,6 +40,9 @@ const SITE_ORIGIN = process.env.SITE_ORIGIN || 'https://myfriendroze.com';
 
 // Shape of the tokens newReplaceToken issues; anything else is ignored.
 const REPLACE_TOKEN = /^[0-9a-f]{64}$/;
+
+// Refusals about a piece someone else has a claim on, rather than a bad request.
+const CONFLICT_CODES = new Set(['RESERVED', 'PAYMENT_PENDING', 'RESERVED_PIECE']);
 
 function newReplaceToken() {
   return randomBytes(32).toString('hex');
@@ -98,7 +102,9 @@ async function handleCreateCheckoutSession(
   // customer details an older client still sends are ignored.
   // localZip is the optional ZIP the cart asks for; only a Los Angeles one
   // unlocks local pickup, and anything else is ignored.
-  const { items, replaceToken, localZip } = req.body || {};
+  // reservationCode is the code from a /reserved/<code> link, needed to buy
+  // pieces Roze has reserved for that customer (lib/reservations.js).
+  const { items, replaceToken, localZip, reservationCode } = req.body || {};
   // Only a hint: anything that isn't a token this function issued is ignored.
   const replaceTokenHash =
     typeof replaceToken === 'string' && REPLACE_TOKEN.test(replaceToken) ? hashToken(replaceToken) : null;
@@ -124,6 +130,12 @@ async function handleCreateCheckoutSession(
     });
 
     const lineItems = buildLineItemsFromCatalog(items, catalog);
+    const usedReservationCode = await checkReservedPieces(
+      db,
+      items.map((item) => item.sku),
+      catalog,
+      reservationCode
+    );
 
     // Checked before calling Stripe so a held piece costs no Stripe session;
     // reservePieces below re-checks inside a transaction.
@@ -173,6 +185,8 @@ async function handleCreateCheckoutSession(
       ],
       success_url: `${siteOrigin}/order/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteOrigin}/order/cancelled`,
+      // stripeWebhook takes the bought pieces out of this reservation.
+      ...(usedReservationCode ? { metadata: { reservationCode: usedReservationCode } } : {}),
     });
 
     const token = newToken();
@@ -199,7 +213,7 @@ async function handleCreateCheckoutSession(
     return res.status(200).json({ url: session.url, id: session.id, replaceToken: token });
   } catch (error) {
     if (error instanceof CatalogValidationError) {
-      const status = error.code === 'RESERVED' || error.code === 'PAYMENT_PENDING' ? 409 : 400;
+      const status = CONFLICT_CODES.has(error.code) ? 409 : 400;
       return res.status(status).json({ error: error.message, code: error.code });
     }
     logger.error('createCheckoutSession error:', error);

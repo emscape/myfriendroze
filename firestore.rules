@@ -65,5 +65,13 @@ service cloud.firestore {
     match /savedLocations/{locationId} {
       allow read, write: if isAdmin();
     }
+
+    // Pieces reserved for one customer, keyed by the code in their
+    // /reserved/<code> link (see firebase/functions/lib/reservations.js).
+    // The note is private, and listing would expose every code, so there
+    // is no public read: the site reads a reservation via the Admin SDK.
+    match /reservations/{code} {
+      allow read, write: if isAdmin();
+    }
   }
 }

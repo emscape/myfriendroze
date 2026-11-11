@@ -602,5 +602,83 @@ describe('handleStripeWebhook', () => {
       expect(db.dump('products/bowl')).toEqual(BOWL);
       expect(db.state.written).toBeNull();
     });
+
+    describe('reserved pieces', () => {
+      const CODE = 'Ab3_-xYz0123456789';
+      const bowlLineItems = {
+        data: [{ description: 'Blue Bowl', quantity: 1, amount_total: 4000, price: { product: { metadata: { sku: 'bowl' } } } }],
+      };
+
+      async function deliverPaid(db, sessionOverrides) {
+        const res = fakeRes();
+        await handleStripeWebhook(signedRequest(checkoutCompletedEvent(sessionOverrides)), res, {
+          stripeClient: fakeStripeClient({ listLineItemsResult: bowlLineItems }),
+          webhookSecret: WEBHOOK_SECRET,
+          db,
+          sendConfirmationEmail: vi.fn().mockResolvedValue(undefined),
+          serverTimestamp: () => 'SERVER_TIMESTAMP',
+          now: () => NOW,
+        });
+        return res;
+      }
+
+      it('takes the bought piece out of the reservation and clears its reserved flag', async () => {
+        const db = fakeDb({
+          docs: {
+            'products/bowl': { ...BOWL, reserved: true },
+            'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: 1 },
+            [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl', 'vase'] },
+          },
+        });
+
+        const res = await deliverPaid(db, { metadata: { reservationCode: CODE } });
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(db.dump('products/bowl')).toEqual({ ...BOWL, reserved: false, inStock: false });
+        expect(db.dump(`reservations/${CODE}`)).toEqual({ note: 'Sam', productIds: ['vase'] });
+      });
+
+      // Plants aren't held during checkout, so the hold code never sees
+      // them; the reservation itself must clear the flag.
+      it('clears the reserved flag on a bought piece that had no checkout hold, such as a stocked plant', async () => {
+        const FERN = { title: 'Fern', price: 12, isActive: true, category: 'plant', stockQuantity: 3, reserved: true };
+        const db = fakeDb({
+          docs: {
+            'products/bowl': FERN,
+            [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl'] },
+          },
+        });
+
+        await deliverPaid(db, { metadata: { reservationCode: CODE } });
+
+        expect(db.dump('products/bowl')).toEqual({ ...FERN, stockQuantity: 2, reserved: false });
+        expect(db.has(`reservations/${CODE}`)).toBe(false);
+      });
+
+      it('deletes the reservation once its last piece is bought', async () => {
+        const db = fakeDb({
+          docs: {
+            'products/bowl': { ...BOWL, reserved: true },
+            'checkoutHolds/bowl': { sessionId: 'cs_test_abc123', heldUntil: 1 },
+            [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl'] },
+          },
+        });
+
+        await deliverPaid(db, { metadata: { reservationCode: CODE } });
+
+        expect(db.has(`reservations/${CODE}`)).toBe(false);
+      });
+
+      it('leaves the reservation alone on a duplicate delivery', async () => {
+        const db = fakeDb({
+          existingOrder: { status: 'paid', stripeSessionId: 'cs_test_abc123' },
+          docs: { [`reservations/${CODE}`]: { note: 'Sam', productIds: ['bowl'] } },
+        });
+
+        await deliverPaid(db, { metadata: { reservationCode: CODE } });
+
+        expect(db.dump(`reservations/${CODE}`)).toEqual({ note: 'Sam', productIds: ['bowl'] });
+      });
+    });
   });
 });

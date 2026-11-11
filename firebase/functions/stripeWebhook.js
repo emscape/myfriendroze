@@ -24,6 +24,7 @@ const {
   PENDING_PAYMENT_HOLD_MS,
 } = require('./lib/checkoutHolds');
 const { purchasedQuantities, readStock, writeStockSold } = require('./lib/stockCounts');
+const { readReservation, writeReservationSold } = require('./lib/reservations');
 // sendOrderConfirmationEmail/orderDataToConfirmationEmailParams are only
 // used inside the v8-ignored wrapper below, never by the testable core
 // (which receives sendConfirmationEmail as an injected parameter) —
@@ -149,7 +150,10 @@ async function handleStripeWebhook(
     // pieces are sold exactly when its order exists.
     const held = await readSessionHolds(tx, db, session.id);
     // Likewise, stock is counted down exactly when the order exists.
-    const stock = await readStock(tx, db, purchasedQuantities(lineItemsResponse.data));
+    const purchased = purchasedQuantities(lineItemsResponse.data);
+    const stock = await readStock(tx, db, purchased);
+    // Set by createCheckoutSession when the checkout bought reserved pieces.
+    const reservation = await readReservation(tx, db, session.metadata?.reservationCode, purchased.keys());
     // Short, customer-facing order number, taken in the same transaction
     // so concurrent orders never share one and a duplicate delivery
     // (returned above) never uses one up. Read before any write, as
@@ -158,6 +162,7 @@ async function handleStripeWebhook(
     const orderNumber = counter.exists ? counter.data().next : FIRST_ORDER_NUMBER;
     writePiecesSold(tx, held);
     writeStockSold(tx, stock);
+    writeReservationSold(tx, reservation);
     tx.set(counterRef, { next: orderNumber + 1 });
     tx.set(orderRef, {
       ...orderData,

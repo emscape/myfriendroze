@@ -96,6 +96,9 @@ export function docToProduct(doc) {
     inStock: (data.inStock === undefined ? true : data.inStock === true) && stockAllowsSale,
     // Optional, for plants (set in the admin app); null means untracked.
     stockQuantity: hasStockCount ? data.stockQuantity : null,
+    // Reserved for one customer (set in the admin app); the shop shows it
+    // as reserved, and only the /reserved/<code> page offers it for sale.
+    reserved: data.reserved === true,
     category: normalizeCategory(data.category),
     dimensions: formatDimensions({ widthIn, heightIn, depthIn }),
     features: [],

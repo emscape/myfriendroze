@@ -585,4 +585,89 @@ describe('handleCreateCheckoutSession', () => {
       expect(res.status).toHaveBeenCalledWith(409);
     });
   });
+
+  // Roze reserves pieces for one customer under a code (reservations/{code},
+  // admin-only); only a checkout carrying that code can buy them.
+  describe('reserved pieces', () => {
+    const CODE = 'Ab3_-xYz0123456789';
+    const BOWL = { title: 'Blue Bowl', price: 40, isActive: true, category: 'pottery', reserved: true };
+    const MUG = { title: 'Mug', price: 20, isActive: true, category: 'pottery' };
+    const RESERVATION = { note: 'Sam from the market', productIds: ['bowl'] };
+
+    function stripeFake() {
+      return {
+        checkout: {
+          sessions: {
+            create: vi.fn().mockResolvedValue({ id: 'cs_new', url: 'https://checkout.stripe.com/c/pay/cs_new' }),
+          },
+        },
+      };
+    }
+
+    async function checkout(db, stripeClient, body) {
+      const res = fakeRes();
+      await handleCreateCheckoutSession({ method: 'POST', body }, res, { db, stripeClient, siteOrigin: SITE_ORIGIN });
+      return res;
+    }
+
+    it('refuses a reserved piece without its code, with 409 and before calling Stripe', async () => {
+      const db = fakeDb({ bowl: fakeDoc(true, BOWL) }, { [`reservations/${CODE}`]: RESERVATION });
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'bowl', qty: 1 }] });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Blue Bowl is reserved for another customer.',
+        code: 'RESERVED_PIECE',
+      });
+      expect(stripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+      expect(db.has('checkoutHolds/bowl')).toBe(false);
+    });
+
+    it("refuses a reserved piece with a different reservation's code", async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL) },
+        { 'reservations/someone-else-0123456': { productIds: ['vase'] } }
+      );
+
+      const res = await checkout(db, stripeFake(), {
+        items: [{ sku: 'bowl', qty: 1 }],
+        reservationCode: 'someone-else-0123456',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(409);
+    });
+
+    it('checks out reserved pieces with their code, holds them and records the code on the session', async () => {
+      const db = fakeDb(
+        { bowl: fakeDoc(true, BOWL), mug: fakeDoc(true, MUG) },
+        { [`reservations/${CODE}`]: RESERVATION }
+      );
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, {
+        items: [
+          { sku: 'bowl', qty: 1 },
+          { sku: 'mug', qty: 1 },
+        ],
+        reservationCode: CODE,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      // stripeWebhook reads it back to update the reservation once paid.
+      expect(stripeClient.checkout.sessions.create.mock.calls[0][0].metadata).toEqual({ reservationCode: CODE });
+      expect(db.dump('checkoutHolds/bowl')).toMatchObject({ sessionId: 'cs_new' });
+    });
+
+    it('sends no reservation metadata when the cart has no reserved piece, even with a code', async () => {
+      const db = fakeDb({ mug: fakeDoc(true, MUG) }, { [`reservations/${CODE}`]: RESERVATION });
+      const stripeClient = stripeFake();
+
+      const res = await checkout(db, stripeClient, { items: [{ sku: 'mug', qty: 1 }], reservationCode: CODE });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(stripeClient.checkout.sessions.create.mock.calls[0][0]).not.toHaveProperty('metadata');
+    });
+  });
 });
